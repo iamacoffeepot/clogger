@@ -6,6 +6,22 @@ from clogger.enums import Skill
 _skill_values = ", ".join(f"'{s.value}'" for s in Skill)
 
 SCHEMAS: list[str] = [
+    """
+    CREATE TABLE IF NOT EXISTS quests (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS quest_requirements (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        task_id INTEGER NOT NULL,
+        quest_id INTEGER NOT NULL,
+        partial INTEGER NOT NULL DEFAULT 0,
+        FOREIGN KEY (task_id) REFERENCES tasks(id),
+        FOREIGN KEY (quest_id) REFERENCES quests(id)
+    )
+    """,
     f"""
     CREATE TABLE IF NOT EXISTS skill_requirements (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
