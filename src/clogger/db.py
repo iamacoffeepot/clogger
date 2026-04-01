@@ -123,6 +123,24 @@ SCHEMAS: list[str] = [
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS diary_task_skill_requirements (
+        diary_task_id INTEGER NOT NULL,
+        skill_requirement_id INTEGER NOT NULL,
+        PRIMARY KEY (diary_task_id, skill_requirement_id),
+        FOREIGN KEY (diary_task_id) REFERENCES diary_tasks(id),
+        FOREIGN KEY (skill_requirement_id) REFERENCES skill_requirements(id)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS diary_task_quest_requirements (
+        diary_task_id INTEGER NOT NULL,
+        quest_requirement_id INTEGER NOT NULL,
+        PRIMARY KEY (diary_task_id, quest_requirement_id),
+        FOREIGN KEY (diary_task_id) REFERENCES diary_tasks(id),
+        FOREIGN KEY (quest_requirement_id) REFERENCES quest_requirements(id)
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS quest_quest_requirements (
         quest_id INTEGER NOT NULL,
         quest_requirement_id INTEGER NOT NULL,
