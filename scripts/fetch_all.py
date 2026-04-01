@@ -12,6 +12,7 @@ from pathlib import Path
 SCRIPTS = [
     "scripts/fetch_items.py",
     "scripts/fetch_quests.py",
+    "scripts/fetch_quest_regions.py",
     "scripts/fetch_diary_tasks.py",
     "scripts/fetch_diary_items.py",
 ]
