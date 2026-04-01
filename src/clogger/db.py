@@ -64,7 +64,7 @@ SCHEMAS: list[str] = [
     """,
     f"""
     CREATE TABLE IF NOT EXISTS league_tasks (
-        id INTEGER PRIMARY KEY,
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
         description TEXT NOT NULL,
         difficulty INTEGER NOT NULL CHECK(difficulty IN ({_difficulty_ids})),
@@ -96,6 +96,15 @@ SCHEMAS: list[str] = [
         PRIMARY KEY (league_task_id, item_requirement_id),
         FOREIGN KEY (league_task_id) REFERENCES league_tasks(id),
         FOREIGN KEY (item_requirement_id) REFERENCES item_requirements(id)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS league_task_diary_requirements (
+        league_task_id INTEGER NOT NULL,
+        diary_requirement_id INTEGER NOT NULL,
+        PRIMARY KEY (league_task_id, diary_requirement_id),
+        FOREIGN KEY (league_task_id) REFERENCES league_tasks(id),
+        FOREIGN KEY (diary_requirement_id) REFERENCES diary_requirements(id)
     )
     """,
     f"""

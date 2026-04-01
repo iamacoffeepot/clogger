@@ -13,7 +13,7 @@ from pathlib import Path
 import requests
 
 from clogger.db import create_tables, get_connection
-from clogger.enums import Region, Skill, TaskDifficulty
+from clogger.enums import DiaryLocation, DiaryTier, Region, Skill, TaskDifficulty
 
 API_URL = "https://oldschool.runescape.wiki/api.php"
 USER_AGENT = "clogger/0.1 - OSRS Leagues planner"
@@ -93,6 +93,36 @@ REGION_MAP = {
 }
 
 
+DIARY_LOCATION_MAP = {
+    "ardougne": DiaryLocation.ARDOUGNE,
+    "desert": DiaryLocation.DESERT,
+    "falador": DiaryLocation.FALADOR,
+    "fremennik": DiaryLocation.FREMENNIK,
+    "kandarin": DiaryLocation.KANDARIN,
+    "karamja": DiaryLocation.KARAMJA,
+    "kourend & kebos": DiaryLocation.KOUREND_KEBOS,
+    "kourend and kebos": DiaryLocation.KOUREND_KEBOS,
+    "lumbridge & draynor": DiaryLocation.LUMBRIDGE_DRAYNOR,
+    "morytania": DiaryLocation.MORYTANIA,
+    "varrock": DiaryLocation.VARROCK,
+    "western provinces": DiaryLocation.WESTERN_PROVINCES,
+    "wilderness": DiaryLocation.WILDERNESS,
+}
+
+DIARY_TIER_MAP = {
+    "easy": DiaryTier.EASY,
+    "medium": DiaryTier.MEDIUM,
+    "hard": DiaryTier.HARD,
+    "elite": DiaryTier.ELITE,
+}
+
+# Pattern: "Complete the Easy Falador Diary" or "Kourend and Kebos Easy Diary Tasks"
+DIARY_TASK_PATTERN = re.compile(
+    r"(?:Complete the (\w+) (.+?) Diary|(.+?) (\w+) Diary Tasks)",
+    re.IGNORECASE,
+)
+
+
 @dataclass
 class LeagueTaskData:
     id: int
@@ -103,6 +133,7 @@ class LeagueTaskData:
     skill_reqs: list[tuple[int, int]] = field(default_factory=list)
     quest_reqs: list[tuple[str, bool]] = field(default_factory=list)
     item_reqs: list[str] = field(default_factory=list)
+    diary_reqs: list[tuple[DiaryLocation, DiaryTier]] = field(default_factory=list)
 
 
 def strip_markup(text: str) -> str:
@@ -224,6 +255,23 @@ def parse_league_tasks(wikitext: str) -> list[LeagueTaskData]:
         skill_reqs = parse_skill_reqs(s_field)
         quest_reqs, item_reqs = parse_other_reqs(other_field)
 
+        # Detect diary requirements from task name
+        diary_reqs: list[tuple[DiaryLocation, DiaryTier]] = []
+        diary_match = DIARY_TASK_PATTERN.search(name)
+        if diary_match:
+            # "Complete the Easy Falador Diary" -> tier=Easy, location=Falador
+            # "Kourend and Kebos Easy Diary Tasks" -> location=Kourend and Kebos, tier=Easy
+            if diary_match.group(1):
+                tier_str = diary_match.group(1).lower()
+                loc_str = diary_match.group(2).lower()
+            else:
+                loc_str = diary_match.group(3).lower()
+                tier_str = diary_match.group(4).lower()
+            diary_loc = DIARY_LOCATION_MAP.get(loc_str)
+            diary_tier = DIARY_TIER_MAP.get(tier_str)
+            if diary_loc and diary_tier:
+                diary_reqs.append((diary_loc, diary_tier))
+
         tasks.append(LeagueTaskData(
             id=task_id,
             name=name,
@@ -233,6 +281,7 @@ def parse_league_tasks(wikitext: str) -> list[LeagueTaskData]:
             skill_reqs=skill_reqs,
             quest_reqs=quest_reqs,
             item_reqs=item_reqs,
+            diary_reqs=diary_reqs,
         ))
 
     return tasks
@@ -253,13 +302,15 @@ def ingest(db_path: Path, page: str = "Raging_Echoes_League/Tasks") -> None:
     skill_req_count = 0
     quest_req_count = 0
     item_req_count = 0
+    diary_req_count = 0
 
     for task in tasks:
         region_val = task.region.value if task.region is not None else None
         conn.execute(
-            "INSERT OR IGNORE INTO league_tasks (id, name, description, difficulty, region) VALUES (?, ?, ?, ?, ?)",
-            (task.id, task.name, task.description, task.difficulty.value, region_val),
+            "INSERT INTO league_tasks (name, description, difficulty, region) VALUES (?, ?, ?, ?)",
+            (task.name, task.description, task.difficulty.value, region_val),
         )
+        league_task_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
 
         # Skill requirements
         for skill_id, level in task.skill_reqs:
@@ -273,7 +324,7 @@ def ingest(db_path: Path, page: str = "Raging_Echoes_League/Tasks") -> None:
             ).fetchone()[0]
             conn.execute(
                 "INSERT OR IGNORE INTO league_task_skill_requirements (league_task_id, skill_requirement_id) VALUES (?, ?)",
-                (task.id, req_id),
+                (league_task_id, req_id),
             )
             skill_req_count += 1
 
@@ -293,7 +344,7 @@ def ingest(db_path: Path, page: str = "Raging_Echoes_League/Tasks") -> None:
             ).fetchone()[0]
             conn.execute(
                 "INSERT OR IGNORE INTO league_task_quest_requirements (league_task_id, quest_requirement_id) VALUES (?, ?)",
-                (task.id, req_id),
+                (league_task_id, req_id),
             )
             quest_req_count += 1
 
@@ -312,14 +363,31 @@ def ingest(db_path: Path, page: str = "Raging_Echoes_League/Tasks") -> None:
             ).fetchone()[0]
             conn.execute(
                 "INSERT OR IGNORE INTO league_task_item_requirements (league_task_id, item_requirement_id) VALUES (?, ?)",
-                (task.id, req_id),
+                (league_task_id, req_id),
             )
             item_req_count += 1
+
+        # Diary requirements
+        for diary_loc, diary_tier in task.diary_reqs:
+            conn.execute(
+                "INSERT OR IGNORE INTO diary_requirements (location, tier) VALUES (?, ?)",
+                (diary_loc.value, diary_tier.value),
+            )
+            req_id = conn.execute(
+                "SELECT id FROM diary_requirements WHERE location = ? AND tier = ?",
+                (diary_loc.value, diary_tier.value),
+            ).fetchone()[0]
+            conn.execute(
+                "INSERT OR IGNORE INTO league_task_diary_requirements (league_task_id, diary_requirement_id) VALUES (?, ?)",
+                (league_task_id, req_id),
+            )
+            diary_req_count += 1
 
     conn.commit()
     print(
         f"Inserted {len(tasks)} tasks, {skill_req_count} skill requirements, "
-        f"{quest_req_count} quest requirements, {item_req_count} item requirements into {db_path}"
+        f"{quest_req_count} quest requirements, {item_req_count} item requirements, "
+        f"{diary_req_count} diary requirements into {db_path}"
     )
     conn.close()
 
