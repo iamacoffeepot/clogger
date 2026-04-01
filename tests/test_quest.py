@@ -2,11 +2,8 @@ import sqlite3
 
 from clogger.enums import Skill
 from clogger.quest import Quest
-from clogger.requirements.quest import QuestRequirement
-from clogger.requirements.quest_point import QuestPointRequirement
-from clogger.requirements.skill import SkillRequirement
-from clogger.rewards.experience import ExperienceReward
-from clogger.rewards.item import ItemReward
+from clogger.requirements import QuestPointRequirement, QuestRequirement, SkillRequirement
+from clogger.rewards import ExperienceReward, ItemReward
 
 
 def _seed_quests(conn: sqlite3.Connection) -> None:

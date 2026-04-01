@@ -4,12 +4,8 @@ import sqlite3
 from dataclasses import dataclass
 
 from clogger.enums import Region
-from clogger.requirements.quest import QuestRequirement
-from clogger.requirements.quest_point import QuestPointRequirement
-from clogger.requirements.region import RegionRequirement
-from clogger.requirements.skill import SkillRequirement
-from clogger.rewards.experience import ExperienceReward
-from clogger.rewards.item import ItemReward
+from clogger.requirements import QuestPointRequirement, QuestRequirement, RegionRequirement, SkillRequirement
+from clogger.rewards import ExperienceReward, ItemReward
 
 
 @dataclass

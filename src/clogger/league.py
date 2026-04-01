@@ -9,11 +9,7 @@ import yaml
 from clogger.enums import Region, Skill, TaskDifficulty
 from clogger.experience import level_for_xp, xp_for_level
 from clogger.quest import Quest
-from clogger.requirements.diary import DiaryRequirement
-from clogger.requirements.region import RegionRequirement
-from clogger.requirements.item import ItemRequirement
-from clogger.requirements.quest import QuestRequirement
-from clogger.requirements.skill import SkillRequirement
+from clogger.requirements import DiaryRequirement, ItemRequirement, QuestRequirement, RegionRequirement, SkillRequirement
 
 
 @dataclass
