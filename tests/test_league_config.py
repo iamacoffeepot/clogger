@@ -7,14 +7,24 @@ from clogger.league import LeagueConfig
 
 def _seed_quests(conn: sqlite3.Connection) -> None:
     conn.executemany(
-        "INSERT INTO quests (name, points, autocompleted) VALUES (?, ?, ?)",
+        "INSERT INTO quests (name, points) VALUES (?, ?)",
         [
-            ("Dragon Slayer I", 2, 1),
-            ("Lost City", 3, 1),
-            ("Priest in Peril", 1, 1),
-            ("Monkey Madness I", 3, 0),
-            ("Desert Treasure I", 3, 0),
+            ("Quest A", 2),
+            ("Quest B", 3),
+            ("Quest C", 1),
         ],
+    )
+    # A requires B
+    b_id = conn.execute("SELECT id FROM quests WHERE name = 'Quest B'").fetchone()[0]
+    conn.execute(
+        "INSERT INTO quest_requirements (required_quest_id, partial) VALUES (?, 0)",
+        (b_id,),
+    )
+    req_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+    a_id = conn.execute("SELECT id FROM quests WHERE name = 'Quest A'").fetchone()[0]
+    conn.execute(
+        "INSERT INTO quest_quest_requirements (quest_id, quest_requirement_id) VALUES (?, ?)",
+        (a_id, req_id),
     )
     conn.commit()
 
@@ -32,8 +42,7 @@ unlockable_regions:
   - Kandarin
 max_region_unlocks: 3
 autocompleted_quests:
-  - Dragon Slayer I
-  - Lost City
+  - Quest A
 """
     )
     config = LeagueConfig.from_yaml(config_path)
@@ -41,21 +50,22 @@ autocompleted_quests:
     assert config.always_accessible == [Region.VARLAMORE, Region.KARAMJA]
     assert Region.ASGARNIA in config.unlockable_regions
     assert config.max_region_unlocks == 3
-    assert len(config.autocompleted_quests) == 2
 
 
-def test_completed_quests(conn: sqlite3.Connection) -> None:
+def test_completed_quests_with_chain(conn: sqlite3.Connection) -> None:
     _seed_quests(conn)
     config = LeagueConfig(
         starting_region=Region.VARLAMORE,
-        always_accessible=[Region.VARLAMORE, Region.KARAMJA],
+        always_accessible=[],
         unlockable_regions=[],
-        max_region_unlocks=3,
-        autocompleted_quests=[],
+        max_region_unlocks=0,
+        autocompleted_quests=["Quest A"],
     )
     completed = config.completed_quests(conn)
-    assert len(completed) == 3
-    assert all(q.autocompleted for q in completed)
+    names = [q.name for q in completed]
+    assert "Quest A" in names
+    assert "Quest B" in names  # chain dependency
+    assert "Quest C" not in names
 
 
 def test_starting_quest_points(conn: sqlite3.Connection) -> None:
@@ -65,9 +75,10 @@ def test_starting_quest_points(conn: sqlite3.Connection) -> None:
         always_accessible=[],
         unlockable_regions=[],
         max_region_unlocks=0,
-        autocompleted_quests=[],
+        autocompleted_quests=["Quest A"],
     )
-    assert config.starting_quest_points(conn) == 6  # 2 + 3 + 1
+    # Quest A (2) + Quest B (3) from chain
+    assert config.starting_quest_points(conn) == 5
 
 
 def test_available_regions() -> None:
@@ -80,5 +91,4 @@ def test_available_regions() -> None:
     )
     assert config.available_regions() == [Region.VARLAMORE, Region.KARAMJA]
     assert config.available_regions([Region.ASGARNIA]) == [Region.VARLAMORE, Region.KARAMJA, Region.ASGARNIA]
-    # Can't unlock a region not in unlockable list
     assert config.available_regions([Region.WILDERNESS]) == [Region.VARLAMORE, Region.KARAMJA]

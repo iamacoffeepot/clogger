@@ -140,8 +140,23 @@ class LeagueConfig:
             autocompleted_quests=data["autocompleted_quests"],
         )
 
-    def completed_quests(self, conn: sqlite3.Connection) -> list[Quest]:
-        return [q for q in Quest.all(conn) if q.autocompleted]
+    def completed_quests(self, conn: sqlite3.Connection, resolve_chains: bool = True) -> list[Quest]:
+        completed: list[Quest] = []
+        for name in self.autocompleted_quests:
+            quest = Quest.by_name(conn, name)
+            if quest is None:
+                continue
+            completed.append(quest)
+            if resolve_chains:
+                completed.extend(quest.requirement_chain(conn))
+        # Deduplicate preserving order
+        seen: set[int] = set()
+        unique: list[Quest] = []
+        for q in completed:
+            if q.id not in seen:
+                seen.add(q.id)
+                unique.append(q)
+        return unique
 
     def starting_quest_points(self, conn: sqlite3.Connection) -> int:
         return sum(q.points for q in self.completed_quests(conn))
