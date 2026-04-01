@@ -67,6 +67,7 @@ def parse_template_fields(text: str) -> dict[str, str] | None:
 
 SKILL_REQ_PATTERN = re.compile(r"\{\{SCP\|(\w+)\|(\d+)")
 QUEST_REQ_PATTERN = re.compile(r"\[\[([^]|]+?)(?:\|[^]]+)?\]\]")
+REGION_REQ_PATTERN = re.compile(r"\{\{RE\|(\w+)\}\}")
 
 SKILL_NAME_MAP = {s.label.lower(): s for s in Skill}
 
@@ -121,6 +122,7 @@ class LeagueTaskData:
     quest_reqs: list[tuple[str, bool]] = field(default_factory=list)
     item_reqs: list[str] = field(default_factory=list)
     diary_reqs: list[tuple[DiaryLocation, DiaryTier]] = field(default_factory=list)
+    region_reqs: list[tuple[int, bool]] = field(default_factory=list)  # (bitmask, any_region)
 
 
 def strip_markup(text: str) -> str:
@@ -143,9 +145,10 @@ def parse_skill_reqs(s_field: str) -> list[tuple[int, int]]:
 
 def parse_other_reqs(
     other_field: str,
-) -> tuple[list[tuple[str, bool]], list[str]]:
+) -> tuple[list[tuple[str, bool]], list[str], list[tuple[int, bool]]]:
     quest_reqs: list[tuple[str, bool]] = []
     item_reqs: list[str] = []
+    region_reqs: list[tuple[int, bool]] = []
 
     # Quest requirements
     if "Completion of" in other_field or "SCP|Quest" in other_field:
@@ -181,7 +184,24 @@ def parse_other_reqs(
             continue
         item_reqs.append(name)
 
-    return quest_reqs, item_reqs
+    # Region requirements: {{RE|Region}}
+    regions: list[Region] = []
+    for match in REGION_REQ_PATTERN.finditer(other_field):
+        try:
+            region = Region.from_label(match.group(1))
+            if region not in regions:
+                regions.append(region)
+        except KeyError:
+            pass
+
+    if regions:
+        mask = 0
+        for r in regions:
+            mask |= r.mask
+        is_any = "Either" in other_field or "either" in other_field or " or " in other_field or "one of" in other_field
+        region_reqs.append((mask, is_any))
+
+    return quest_reqs, item_reqs, region_reqs
 
 
 def fetch_tasks_wikitext(page: str) -> str:
@@ -243,7 +263,7 @@ def parse_league_tasks(wikitext: str) -> list[LeagueTaskData]:
             raise ValueError(f"Unknown region '{region_str}' for task '{name}' (id={task_id})")
 
         skill_reqs = parse_skill_reqs(s_field)
-        quest_reqs, item_reqs = parse_other_reqs(other_field)
+        quest_reqs, item_reqs, region_reqs = parse_other_reqs(other_field)
 
         # Detect diary requirements from task name
         diary_reqs: list[tuple[DiaryLocation, DiaryTier]] = []
@@ -272,6 +292,7 @@ def parse_league_tasks(wikitext: str) -> list[LeagueTaskData]:
             quest_reqs=quest_reqs,
             item_reqs=item_reqs,
             diary_reqs=diary_reqs,
+            region_reqs=region_reqs,
         ))
 
     return tasks
@@ -293,6 +314,7 @@ def ingest(db_path: Path, page: str = "Raging_Echoes_League/Tasks") -> None:
     quest_req_count = 0
     item_req_count = 0
     diary_req_count = 0
+    region_req_count = 0
 
     for task in tasks:
         conn.execute(
@@ -372,11 +394,28 @@ def ingest(db_path: Path, page: str = "Raging_Echoes_League/Tasks") -> None:
             )
             diary_req_count += 1
 
+        # Region requirements
+        for mask, is_any in task.region_reqs:
+            any_int = 1 if is_any else 0
+            conn.execute(
+                "INSERT OR IGNORE INTO region_requirements (regions, any_region) VALUES (?, ?)",
+                (mask, any_int),
+            )
+            req_id = conn.execute(
+                "SELECT id FROM region_requirements WHERE regions = ? AND any_region = ?",
+                (mask, any_int),
+            ).fetchone()[0]
+            conn.execute(
+                "INSERT OR IGNORE INTO league_task_region_requirements (league_task_id, region_requirement_id) VALUES (?, ?)",
+                (league_task_id, req_id),
+            )
+            region_req_count += 1
+
     conn.commit()
     print(
         f"Inserted {len(tasks)} tasks, {skill_req_count} skill requirements, "
         f"{quest_req_count} quest requirements, {item_req_count} item requirements, "
-        f"{diary_req_count} diary requirements into {db_path}"
+        f"{diary_req_count} diary requirements, {region_req_count} region requirements into {db_path}"
     )
     conn.close()
 

@@ -1,7 +1,7 @@
 import sqlite3
 from pathlib import Path
 
-from clogger.enums import ALL_SKILLS_MASK, DiaryLocation, DiaryTier, Region, Skill, TaskDifficulty
+from clogger.enums import ALL_REGIONS_MASK, ALL_SKILLS_MASK, DiaryLocation, DiaryTier, Region, Skill, TaskDifficulty
 
 _skill_ids = ", ".join(str(s.value) for s in Skill)
 _region_ids = ", ".join(str(r.value) for r in Region)
@@ -105,6 +105,23 @@ SCHEMAS: list[str] = [
         PRIMARY KEY (league_task_id, diary_requirement_id),
         FOREIGN KEY (league_task_id) REFERENCES league_tasks(id),
         FOREIGN KEY (diary_requirement_id) REFERENCES diary_requirements(id)
+    )
+    """,
+    f"""
+    CREATE TABLE IF NOT EXISTS region_requirements (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        regions INTEGER NOT NULL CHECK(regions > 0 AND regions <= {ALL_REGIONS_MASK}),
+        any_region INTEGER NOT NULL DEFAULT 0,
+        UNIQUE(regions, any_region)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS league_task_region_requirements (
+        league_task_id INTEGER NOT NULL,
+        region_requirement_id INTEGER NOT NULL,
+        PRIMARY KEY (league_task_id, region_requirement_id),
+        FOREIGN KEY (league_task_id) REFERENCES league_tasks(id),
+        FOREIGN KEY (region_requirement_id) REFERENCES region_requirements(id)
     )
     """,
     f"""

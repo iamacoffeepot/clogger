@@ -9,6 +9,7 @@ import yaml
 from clogger.enums import Region, TaskDifficulty
 from clogger.quest import Quest
 from clogger.requirements.diary import DiaryRequirement
+from clogger.requirements.region import RegionRequirement
 from clogger.requirements.item import ItemRequirement
 from clogger.requirements.quest import QuestRequirement
 from clogger.requirements.skill import SkillRequirement
@@ -117,6 +118,18 @@ class LeagueTask:
             (self.id,),
         ).fetchall()
         return [DiaryRequirement(row[0], row[1], row[2]) for row in rows]
+
+    def region_requirements(self, conn: sqlite3.Connection) -> list[RegionRequirement]:
+        rows = conn.execute(
+            """
+            SELECT rr.id, rr.regions, rr.any_region
+            FROM region_requirements rr
+            JOIN league_task_region_requirements ltrr ON ltrr.region_requirement_id = rr.id
+            WHERE ltrr.league_task_id = ?
+            """,
+            (self.id,),
+        ).fetchall()
+        return [RegionRequirement(row[0], row[1], bool(row[2])) for row in rows]
 
 
 @dataclass
