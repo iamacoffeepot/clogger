@@ -34,6 +34,10 @@ class Skill(int, Enum):
     def mask(self) -> int:
         return 1 << self.value
 
+    @classmethod
+    def from_label(cls, label: str) -> "Skill":
+        return _SKILL_LABEL_LOOKUP[label.lower()]
+
 
 SKILL_LABELS: dict["Skill", str] = {
     Skill.ATTACK: "Attack",
@@ -61,6 +65,8 @@ SKILL_LABELS: dict["Skill", str] = {
     Skill.FARMING: "Farming",
 }
 
+_SKILL_LABEL_LOOKUP: dict[str, Skill] = {v.lower(): k for k, v in SKILL_LABELS.items()}
+
 ALL_SKILLS_MASK = (1 << len(Skill)) - 1
 
 
@@ -85,6 +91,10 @@ class Region(int, Enum):
     def mask(self) -> int:
         return 1 << self.value
 
+    @classmethod
+    def from_label(cls, label: str) -> "Region":
+        return _REGION_LABEL_LOOKUP[label.lower()]
+
 
 REGION_LABELS: dict["Region", str] = {
     Region.ASGARNIA: "Asgarnia",
@@ -99,6 +109,8 @@ REGION_LABELS: dict["Region", str] = {
     Region.VARLAMORE: "Varlamore",
     Region.WILDERNESS: "Wilderness",
 }
+
+_REGION_LABEL_LOOKUP: dict[str, Region] = {v.lower(): k for k, v in REGION_LABELS.items()}
 
 ALL_REGIONS_MASK = (1 << len(Region)) - 1
 

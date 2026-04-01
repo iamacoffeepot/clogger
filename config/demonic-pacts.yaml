@@ -1,0 +1,35 @@
+starting_region: Varlamore
+
+always_accessible:
+  - Varlamore
+  - Karamja
+
+unlockable_regions:
+  - Asgarnia
+  - Fremennik
+  - Kandarin
+  - Desert
+  - Morytania
+  - Tirannwn
+  - Wilderness
+  - Kourend
+
+max_region_unlocks: 3
+
+autocompleted_quests:
+  - Dragon Slayer I
+  - Learning the Ropes
+  - The Restless Ghost
+  - Rune Mysteries
+  - Children of the Sun
+  - Desert Treasure II - The Fallen Empire
+  - Druidic Ritual
+  - Eagles' Peak
+  - Elemental Workshop I
+  - Fairytale I - Growing Pains
+  - Fairytale II - Cure a Queen
+  - Lost City
+  - Nature Spirit
+  - Perilous Moons
+  - Priest in Peril
+  - Twilight's Promise
