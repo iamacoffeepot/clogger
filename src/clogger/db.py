@@ -22,6 +22,12 @@ SCHEMAS: list[str] = [
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS quest_point_requirements (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        points INTEGER NOT NULL UNIQUE
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS quest_requirements (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         required_quest_id INTEGER NOT NULL,
