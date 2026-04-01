@@ -103,6 +103,39 @@ REGION_LABELS: dict["Region", str] = {
 ALL_REGIONS_MASK = (1 << len(Region)) - 1
 
 
+class TaskDifficulty(int, Enum):
+    EASY = 0
+    MEDIUM = 1
+    HARD = 2
+    ELITE = 3
+    MASTER = 4
+
+    @property
+    def label(self) -> str:
+        return TASK_DIFFICULTY_LABELS[self]
+
+    @property
+    def points(self) -> int:
+        return TASK_DIFFICULTY_POINTS[self]
+
+
+TASK_DIFFICULTY_LABELS: dict["TaskDifficulty", str] = {
+    TaskDifficulty.EASY: "Easy",
+    TaskDifficulty.MEDIUM: "Medium",
+    TaskDifficulty.HARD: "Hard",
+    TaskDifficulty.ELITE: "Elite",
+    TaskDifficulty.MASTER: "Master",
+}
+
+TASK_DIFFICULTY_POINTS: dict["TaskDifficulty", int] = {
+    TaskDifficulty.EASY: 10,
+    TaskDifficulty.MEDIUM: 30,
+    TaskDifficulty.HARD: 80,
+    TaskDifficulty.ELITE: 200,
+    TaskDifficulty.MASTER: 400,
+}
+
+
 class DiaryLocation(str, Enum):
     ARDOUGNE = "Ardougne"
     DESERT = "Desert"

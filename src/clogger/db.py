@@ -1,9 +1,11 @@
 import sqlite3
 from pathlib import Path
 
-from clogger.enums import ALL_SKILLS_MASK, DiaryLocation, DiaryTier, Skill
+from clogger.enums import ALL_SKILLS_MASK, DiaryLocation, DiaryTier, Region, Skill, TaskDifficulty
 
 _skill_ids = ", ".join(str(s.value) for s in Skill)
+_region_ids = ", ".join(str(r.value) for r in Region)
+_difficulty_ids = ", ".join(str(d.value) for d in TaskDifficulty)
 _diary_location_values = ", ".join(f"'{l.value}'" for l in DiaryLocation)
 _diary_tier_values = ", ".join(f"'{t.value}'" for t in DiaryTier)
 
@@ -58,6 +60,42 @@ SCHEMAS: list[str] = [
         location TEXT NOT NULL CHECK(location IN ({_diary_location_values})),
         tier TEXT NOT NULL CHECK(tier IN ({_diary_tier_values})),
         UNIQUE(location, tier)
+    )
+    """,
+    f"""
+    CREATE TABLE IF NOT EXISTS league_tasks (
+        id INTEGER PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL,
+        difficulty INTEGER NOT NULL CHECK(difficulty IN ({_difficulty_ids})),
+        region INTEGER CHECK(region IN ({_region_ids}))
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS league_task_skill_requirements (
+        league_task_id INTEGER NOT NULL,
+        skill_requirement_id INTEGER NOT NULL,
+        PRIMARY KEY (league_task_id, skill_requirement_id),
+        FOREIGN KEY (league_task_id) REFERENCES league_tasks(id),
+        FOREIGN KEY (skill_requirement_id) REFERENCES skill_requirements(id)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS league_task_quest_requirements (
+        league_task_id INTEGER NOT NULL,
+        quest_requirement_id INTEGER NOT NULL,
+        PRIMARY KEY (league_task_id, quest_requirement_id),
+        FOREIGN KEY (league_task_id) REFERENCES league_tasks(id),
+        FOREIGN KEY (quest_requirement_id) REFERENCES quest_requirements(id)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS league_task_item_requirements (
+        league_task_id INTEGER NOT NULL,
+        item_requirement_id INTEGER NOT NULL,
+        PRIMARY KEY (league_task_id, item_requirement_id),
+        FOREIGN KEY (league_task_id) REFERENCES league_tasks(id),
+        FOREIGN KEY (item_requirement_id) REFERENCES item_requirements(id)
     )
     """,
     f"""
