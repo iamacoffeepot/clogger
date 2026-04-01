@@ -50,6 +50,7 @@ QUEST_REQ_PATTERN = re.compile(r"^\*\*\[\[([^]|]+?)(?:\|[^]]+)?\]\]", re.MULTILI
 STARTED_QUEST_PATTERN = re.compile(r"[Ss]tarted\s+\[\[([^]|]+?)(?:\|[^]]+)?\]\]")
 # Matches {{SCP|Skill|Level}} in requirements section
 SKILL_REQ_PATTERN = re.compile(r"\{\{SCP\|(\w+)\|(\d+)")
+QP_REQ_PATTERN = re.compile(r"\{\{SCP\|Quest\|(\d+)")
 
 
 @dataclass
@@ -61,6 +62,7 @@ class QuestData:
     item_rewards: list[tuple[str, int]] = field(default_factory=list)  # (item_name, quantity)
     quest_reqs: list[tuple[str, bool]] = field(default_factory=list)  # (quest_name, partial)
     skill_reqs: list[tuple[int, int]] = field(default_factory=list)  # (skill_id, level)
+    quest_point_req: int | None = None
 
 
 # Items that are not real item rewards (descriptions, abilities, etc.)
@@ -238,6 +240,11 @@ def parse_quest_wikitext(name: str, wikitext: str) -> QuestData:
                 if skill is not None and 1 <= level <= 99:
                     quest.skill_reqs.append((skill.value, level))
 
+        # Quest point requirement
+        qp_req_match = QP_REQ_PATTERN.search(req_section)
+        if qp_req_match:
+            quest.quest_point_req = int(qp_req_match.group(1))
+
     rewards_section = extract_rewards_section(wikitext)
     if not rewards_section:
         return quest
@@ -378,6 +385,25 @@ def ingest(db_path: Path) -> None:
             )
             item_count += 1
 
+    # Insert quest point requirements and link to quests
+    qp_req_count = 0
+    for q in quest_data:
+        if q.quest_point_req is not None:
+            quest_id = quest_ids[q.name]
+            conn.execute(
+                "INSERT OR IGNORE INTO quest_point_requirements (points) VALUES (?)",
+                (q.quest_point_req,),
+            )
+            req_id = conn.execute(
+                "SELECT id FROM quest_point_requirements WHERE points = ?",
+                (q.quest_point_req,),
+            ).fetchone()[0]
+            conn.execute(
+                "INSERT OR IGNORE INTO quest_quest_point_requirements (quest_id, quest_point_requirement_id) VALUES (?, ?)",
+                (quest_id, req_id),
+            )
+            qp_req_count += 1
+
     # Insert skill requirements and link to quests
     skill_req_count = 0
     for q in quest_data:
@@ -423,7 +449,8 @@ def ingest(db_path: Path) -> None:
     conn.commit()
     print(
         f"Inserted {len(quest_data)} quests, {xp_count} XP rewards, "
-        f"{item_count} item rewards, {skill_req_count} skill requirements, "
+        f"{item_count} item rewards, {qp_req_count} QP requirements, "
+        f"{skill_req_count} skill requirements, "
         f"{req_count} quest requirements into {db_path}"
     )
     conn.close()

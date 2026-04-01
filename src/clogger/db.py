@@ -105,6 +105,15 @@ SCHEMAS: list[str] = [
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS quest_quest_point_requirements (
+        quest_id INTEGER NOT NULL,
+        quest_point_requirement_id INTEGER NOT NULL,
+        PRIMARY KEY (quest_id, quest_point_requirement_id),
+        FOREIGN KEY (quest_id) REFERENCES quests(id),
+        FOREIGN KEY (quest_point_requirement_id) REFERENCES quest_point_requirements(id)
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS quest_skill_requirements (
         quest_id INTEGER NOT NULL,
         skill_requirement_id INTEGER NOT NULL,
