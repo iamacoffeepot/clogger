@@ -160,6 +160,15 @@ SCHEMAS: list[str] = [
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS quest_region_requirements (
+        quest_id INTEGER NOT NULL,
+        region_requirement_id INTEGER NOT NULL,
+        PRIMARY KEY (quest_id, region_requirement_id),
+        FOREIGN KEY (quest_id) REFERENCES quests(id),
+        FOREIGN KEY (region_requirement_id) REFERENCES region_requirements(id)
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS quest_requirements (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         required_quest_id INTEGER NOT NULL,

@@ -3,8 +3,10 @@ from __future__ import annotations
 import sqlite3
 from dataclasses import dataclass
 
+from clogger.enums import Region
 from clogger.requirements.quest import QuestRequirement
 from clogger.requirements.quest_point import QuestPointRequirement
+from clogger.requirements.region import RegionRequirement
 from clogger.requirements.skill import SkillRequirement
 from clogger.rewards.experience import ExperienceReward
 from clogger.rewards.item import ItemReward
@@ -88,6 +90,18 @@ class Quest:
             (self.id,),
         ).fetchone()
         return QuestPointRequirement(*row) if row else None
+
+    def region_requirements(self, conn: sqlite3.Connection) -> list[RegionRequirement]:
+        rows = conn.execute(
+            """
+            SELECT rr.id, rr.regions, rr.any_region
+            FROM region_requirements rr
+            JOIN quest_region_requirements qrr ON qrr.region_requirement_id = rr.id
+            WHERE qrr.quest_id = ?
+            """,
+            (self.id,),
+        ).fetchall()
+        return [RegionRequirement(row[0], row[1], bool(row[2])) for row in rows]
 
     def requirement_chain(self, conn: sqlite3.Connection) -> list[Quest]:
         """Recursively resolve all quests required to complete this quest."""
