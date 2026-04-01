@@ -78,9 +78,48 @@ class DiaryLocation(str, Enum):
     WESTERN_PROVINCES = "Western Provinces"
     WILDERNESS = "Wilderness"
 
+    def xp_reward(self, tier: "DiaryTier") -> int:
+        if self == DiaryLocation.KARAMJA:
+            return _KARAMJA_DIARY_XP[tier]
+        return _STANDARD_DIARY_XP[tier]
+
+    def min_level(self, tier: "DiaryTier") -> int:
+        if self == DiaryLocation.KARAMJA:
+            return _KARAMJA_DIARY_MIN_LEVEL[tier]
+        return _STANDARD_DIARY_MIN_LEVEL[tier]
+
 
 class DiaryTier(str, Enum):
     EASY = "Easy"
     MEDIUM = "Medium"
     HARD = "Hard"
     ELITE = "Elite"
+
+
+_STANDARD_DIARY_XP: dict[DiaryTier, int] = {
+    DiaryTier.EASY: 2_500,
+    DiaryTier.MEDIUM: 7_500,
+    DiaryTier.HARD: 15_000,
+    DiaryTier.ELITE: 50_000,
+}
+
+_KARAMJA_DIARY_XP: dict[DiaryTier, int] = {
+    DiaryTier.EASY: 1_000,
+    DiaryTier.MEDIUM: 5_000,
+    DiaryTier.HARD: 10_000,
+    DiaryTier.ELITE: 50_000,
+}
+
+_STANDARD_DIARY_MIN_LEVEL: dict[DiaryTier, int] = {
+    DiaryTier.EASY: 30,
+    DiaryTier.MEDIUM: 40,
+    DiaryTier.HARD: 50,
+    DiaryTier.ELITE: 70,
+}
+
+_KARAMJA_DIARY_MIN_LEVEL: dict[DiaryTier, int] = {
+    DiaryTier.EASY: 1,
+    DiaryTier.MEDIUM: 30,
+    DiaryTier.HARD: 40,
+    DiaryTier.ELITE: 70,
+}
