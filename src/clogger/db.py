@@ -104,6 +104,15 @@ SCHEMAS: list[str] = [
         UNIQUE(required_quest_id, partial)
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS quest_quest_requirements (
+        quest_id INTEGER NOT NULL,
+        quest_requirement_id INTEGER NOT NULL,
+        PRIMARY KEY (quest_id, quest_requirement_id),
+        FOREIGN KEY (quest_id) REFERENCES quests(id),
+        FOREIGN KEY (quest_requirement_id) REFERENCES quest_requirements(id)
+    )
+    """,
 ]
 
 

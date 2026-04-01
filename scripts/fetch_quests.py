@@ -44,6 +44,12 @@ LAMP_PATTERN = re.compile(
 SKILL_NAME_MAP = {s.label.lower(): s for s in Skill}
 
 
+# Matches immediate quest requirements: **[[Quest Name]] at depth 2 only
+QUEST_REQ_PATTERN = re.compile(r"^\*\*\[\[([^]|]+?)(?:\|[^]]+)?\]\]", re.MULTILINE)
+# Matches "Started [[Quest Name]]" for partial requirements
+STARTED_QUEST_PATTERN = re.compile(r"[Ss]tarted\s+\[\[([^]|]+?)(?:\|[^]]+)?\]\]")
+
+
 @dataclass
 class QuestData:
     name: str
@@ -51,6 +57,7 @@ class QuestData:
     xp_rewards: list[tuple[int, int]] = field(default_factory=list)  # (skill_id, amount)
     lamp_rewards: list[tuple[int, int]] = field(default_factory=list)  # (eligible_mask, amount)
     item_rewards: list[tuple[str, int]] = field(default_factory=list)  # (item_name, quantity)
+    quest_reqs: list[tuple[str, bool]] = field(default_factory=list)  # (quest_name, partial)
 
 
 # Items that are not real item rewards (descriptions, abilities, etc.)
@@ -135,12 +142,72 @@ def extract_rewards_section(wikitext: str) -> str:
     return "".join(result)
 
 
+def extract_requirements_section(wikitext: str) -> str:
+    """Extract the |requirements= section from the quest infobox."""
+    start = re.search(r"\|requirements\s*=\s*", wikitext)
+    if not start:
+        return ""
+    pos = start.end()
+    depth = 0
+    result = []
+    while pos < len(wikitext):
+        if wikitext[pos : pos + 2] == "{{":
+            depth += 1
+            result.append("{{")
+            pos += 2
+        elif wikitext[pos : pos + 2] == "}}":
+            if depth == 0:
+                break
+            depth -= 1
+            result.append("}}")
+            pos += 2
+        elif wikitext[pos] == "|" and depth == 0:
+            # Hit next field in the infobox
+            break
+        else:
+            result.append(wikitext[pos])
+            pos += 1
+    return "".join(result)
+
+
+def parse_quest_requirements(requirements_section: str) -> list[tuple[str, bool]]:
+    """Parse immediate quest requirements from the requirements section.
+
+    Returns list of (quest_name, partial) tuples.
+    Only picks up **[[Quest]] (depth 2) — not deeper chain entries.
+    """
+    reqs: list[tuple[str, bool]] = []
+
+    # "Started [[Quest]]" patterns at any depth
+    for match in STARTED_QUEST_PATTERN.finditer(requirements_section):
+        reqs.append((match.group(1), True))
+
+    # Direct completion requirements at ** depth
+    # We need to find lines starting with exactly ** (not ***)
+    for line in requirements_section.split("\n"):
+        stripped = line.strip()
+        if stripped.startswith("**") and not stripped.startswith("***"):
+            link_match = re.search(r"\[\[([^]|]+?)(?:\|[^]]+)?\]\]", stripped)
+            if link_match:
+                quest_name = link_match.group(1)
+                # Skip if already captured as a "Started" requirement
+                if not any(q == quest_name for q, _ in reqs):
+                    reqs.append((quest_name, False))
+
+    return reqs
+
+
 def parse_quest_wikitext(name: str, wikitext: str) -> QuestData:
     quest = QuestData(name=name)
 
     # Quest points
     qp_match = QP_PATTERN.search(wikitext)
     quest.points = int(qp_match.group(1)) if qp_match else 0
+
+    # Quest requirements
+    req_section = extract_requirements_section(wikitext)
+    if req_section:
+        quest.quest_reqs = parse_quest_requirements(req_section)
 
     rewards_section = extract_rewards_section(wikitext)
     if not rewards_section:
@@ -282,8 +349,34 @@ def ingest(db_path: Path) -> None:
             )
             item_count += 1
 
+    # Insert quest requirements and link to quests
+    req_count = 0
+    for q in quest_data:
+        quest_id = quest_ids[q.name]
+        for req_name, partial in q.quest_reqs:
+            req_quest_id = quest_ids.get(req_name)
+            if req_quest_id is None:
+                continue  # Required quest not in our DB (filtered out or miniquest)
+            partial_int = 1 if partial else 0
+            conn.execute(
+                "INSERT OR IGNORE INTO quest_requirements (required_quest_id, partial) VALUES (?, ?)",
+                (req_quest_id, partial_int),
+            )
+            req_id = conn.execute(
+                "SELECT id FROM quest_requirements WHERE required_quest_id = ? AND partial = ?",
+                (req_quest_id, partial_int),
+            ).fetchone()[0]
+            conn.execute(
+                "INSERT OR IGNORE INTO quest_quest_requirements (quest_id, quest_requirement_id) VALUES (?, ?)",
+                (quest_id, req_id),
+            )
+            req_count += 1
+
     conn.commit()
-    print(f"Inserted {len(quest_data)} quests, {xp_count} XP rewards, {item_count} item rewards into {db_path}")
+    print(
+        f"Inserted {len(quest_data)} quests, {xp_count} XP rewards, "
+        f"{item_count} item rewards, {req_count} quest requirements into {db_path}"
+    )
     conn.close()
 
 
