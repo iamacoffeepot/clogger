@@ -64,6 +64,45 @@ SKILL_LABELS: dict["Skill", str] = {
 ALL_SKILLS_MASK = (1 << len(Skill)) - 1
 
 
+class Region(int, Enum):
+    ASGARNIA = 0
+    DESERT = 1
+    FREMENNIK = 2
+    KANDARIN = 3
+    KARAMJA = 4
+    KOUREND = 5
+    MISTHALIN = 6
+    MORYTANIA = 7
+    TIRANNWN = 8
+    VARLAMORE = 9
+    WILDERNESS = 10
+
+    @property
+    def label(self) -> str:
+        return REGION_LABELS[self]
+
+    @property
+    def mask(self) -> int:
+        return 1 << self.value
+
+
+REGION_LABELS: dict["Region", str] = {
+    Region.ASGARNIA: "Asgarnia",
+    Region.DESERT: "Desert",
+    Region.FREMENNIK: "Fremennik",
+    Region.KANDARIN: "Kandarin",
+    Region.KARAMJA: "Karamja",
+    Region.KOUREND: "Kourend",
+    Region.MISTHALIN: "Misthalin",
+    Region.MORYTANIA: "Morytania",
+    Region.TIRANNWN: "Tirannwn",
+    Region.VARLAMORE: "Varlamore",
+    Region.WILDERNESS: "Wilderness",
+}
+
+ALL_REGIONS_MASK = (1 << len(Region)) - 1
+
+
 class DiaryLocation(str, Enum):
     ARDOUGNE = "Ardougne"
     DESERT = "Desert"
