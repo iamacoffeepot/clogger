@@ -1,0 +1,27 @@
+from enum import Enum
+
+
+class Skill(str, Enum):
+    ATTACK = "Attack"
+    STRENGTH = "Strength"
+    DEFENCE = "Defence"
+    RANGED = "Ranged"
+    PRAYER = "Prayer"
+    MAGIC = "Magic"
+    RUNECRAFT = "Runecraft"
+    CONSTRUCTION = "Construction"
+    HITPOINTS = "Hitpoints"
+    AGILITY = "Agility"
+    HERBLORE = "Herblore"
+    THIEVING = "Thieving"
+    CRAFTING = "Crafting"
+    FLETCHING = "Fletching"
+    SLAYER = "Slayer"
+    HUNTER = "Hunter"
+    MINING = "Mining"
+    SMITHING = "Smithing"
+    FISHING = "Fishing"
+    COOKING = "Cooking"
+    FIREMAKING = "Firemaking"
+    WOODCUTTING = "Woodcutting"
+    FARMING = "Farming"
