@@ -14,7 +14,7 @@ def _seed_tasks(conn: sqlite3.Connection) -> None:
         [
             ("Kill a Goblin", "Kill a goblin", TaskDifficulty.EASY.value, Region.MISTHALIN.value),
             ("50 Wintertodt Kills", "Kill Wintertodt 50 times", TaskDifficulty.HARD.value, Region.KOUREND.value),
-            ("Achieve Level 99", "Get 99 in any skill", TaskDifficulty.ELITE.value, None),
+            ("Achieve Level 99", "Get 99 in any skill", TaskDifficulty.ELITE.value, Region.GENERAL.value),
         ],
     )
     conn.commit()
@@ -64,10 +64,10 @@ def test_points(conn: sqlite3.Connection) -> None:
     assert points["Achieve Level 99"] == 200
 
 
-def test_null_region(conn: sqlite3.Connection) -> None:
+def test_general_region(conn: sqlite3.Connection) -> None:
     _seed_tasks(conn)
     task = LeagueTask.by_name(conn, "Achieve Level 99")
-    assert task.region is None
+    assert task.region == Region.GENERAL
 
 
 def test_skill_requirements(conn: sqlite3.Connection) -> None:

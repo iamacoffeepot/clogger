@@ -20,7 +20,7 @@ class LeagueTask:
     name: str
     description: str
     difficulty: TaskDifficulty
-    region: Region | None
+    region: Region
 
     @property
     def points(self) -> int:
@@ -31,7 +31,7 @@ class LeagueTask:
         cls,
         conn: sqlite3.Connection,
         difficulty: TaskDifficulty | None = None,
-        region: Region | None = None,
+        region: Region = None,
     ) -> list[LeagueTask]:
         query = "SELECT id, name, description, difficulty, region FROM league_tasks"
         params: list[int] = []
@@ -66,7 +66,7 @@ class LeagueTask:
             name=row[1],
             description=row[2],
             difficulty=TaskDifficulty(row[3]),
-            region=Region(row[4]) if row[4] is not None else None,
+            region=Region(row[4]),
         )
 
     def skill_requirements(self, conn: sqlite3.Connection) -> list[SkillRequirement]:

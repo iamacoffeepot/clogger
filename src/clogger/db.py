@@ -68,7 +68,7 @@ SCHEMAS: list[str] = [
         name TEXT NOT NULL,
         description TEXT NOT NULL,
         difficulty INTEGER NOT NULL CHECK(difficulty IN ({_difficulty_ids})),
-        region INTEGER CHECK(region IN ({_region_ids}))
+        region INTEGER NOT NULL CHECK(region IN ({_region_ids}))
     )
     """,
     """

@@ -78,19 +78,6 @@ DIFFICULTY_MAP = {
     "master": TaskDifficulty.MASTER,
 }
 
-REGION_MAP = {
-    "asgarnia": Region.ASGARNIA,
-    "desert": Region.DESERT,
-    "fremennik": Region.FREMENNIK,
-    "kandarin": Region.KANDARIN,
-    "karamja": Region.KARAMJA,
-    "kourend": Region.KOUREND,
-    "misthalin": Region.MISTHALIN,
-    "morytania": Region.MORYTANIA,
-    "tirannwn": Region.TIRANNWN,
-    "wilderness": Region.WILDERNESS,
-    "general": None,
-}
 
 
 DIARY_LOCATION_MAP = {
@@ -129,7 +116,7 @@ class LeagueTaskData:
     name: str
     description: str
     difficulty: TaskDifficulty
-    region: Region | None
+    region: Region
     skill_reqs: list[tuple[int, int]] = field(default_factory=list)
     quest_reqs: list[tuple[str, bool]] = field(default_factory=list)
     item_reqs: list[str] = field(default_factory=list)
@@ -250,7 +237,10 @@ def parse_league_tasks(wikitext: str) -> list[LeagueTaskData]:
         difficulty = DIFFICULTY_MAP.get(tier)
         if difficulty is None:
             continue
-        region = REGION_MAP.get(region_str)
+        try:
+            region = Region.from_label(region_str)
+        except KeyError:
+            raise ValueError(f"Unknown region '{region_str}' for task '{name}' (id={task_id})")
 
         skill_reqs = parse_skill_reqs(s_field)
         quest_reqs, item_reqs = parse_other_reqs(other_field)
@@ -305,10 +295,9 @@ def ingest(db_path: Path, page: str = "Raging_Echoes_League/Tasks") -> None:
     diary_req_count = 0
 
     for task in tasks:
-        region_val = task.region.value if task.region is not None else None
         conn.execute(
             "INSERT INTO league_tasks (name, description, difficulty, region) VALUES (?, ?, ?, ?)",
-            (task.name, task.description, task.difficulty.value, region_val),
+            (task.name, task.description, task.difficulty.value, task.region.value),
         )
         league_task_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
 

@@ -71,17 +71,18 @@ ALL_SKILLS_MASK = (1 << len(Skill)) - 1
 
 
 class Region(int, Enum):
-    ASGARNIA = 0
-    DESERT = 1
-    FREMENNIK = 2
-    KANDARIN = 3
-    KARAMJA = 4
-    KOUREND = 5
-    MISTHALIN = 6
-    MORYTANIA = 7
-    TIRANNWN = 8
-    VARLAMORE = 9
-    WILDERNESS = 10
+    GENERAL = 0
+    ASGARNIA = 1
+    DESERT = 2
+    FREMENNIK = 3
+    KANDARIN = 4
+    KARAMJA = 5
+    KOUREND = 6
+    MISTHALIN = 7
+    MORYTANIA = 8
+    TIRANNWN = 9
+    VARLAMORE = 10
+    WILDERNESS = 11
 
     @property
     def label(self) -> str:
@@ -97,6 +98,7 @@ class Region(int, Enum):
 
 
 REGION_LABELS: dict["Region", str] = {
+    Region.GENERAL: "General",
     Region.ASGARNIA: "Asgarnia",
     Region.DESERT: "Desert",
     Region.FREMENNIK: "Fremennik",
