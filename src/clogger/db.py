@@ -34,6 +34,15 @@ SCHEMAS: list[str] = [
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS item_requirements (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        item_id INTEGER NOT NULL,
+        quantity INTEGER NOT NULL DEFAULT 1,
+        FOREIGN KEY (item_id) REFERENCES items(id),
+        UNIQUE(item_id, quantity)
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS quest_requirements (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         required_quest_id INTEGER NOT NULL,
