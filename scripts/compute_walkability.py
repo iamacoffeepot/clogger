@@ -10,8 +10,7 @@ Requires: fetch_locations.py to have been run and data/map-squares.zip to exist.
 
 import argparse
 import os
-import re
-import zipfile
+import io
 from pathlib import Path
 
 import numpy as np
@@ -20,49 +19,48 @@ from scipy.spatial import Voronoi
 
 from clogger.db import create_tables, get_connection
 from clogger.enums import MapLinkType
+from clogger.map import GAME_TILES_PER_REGION, PIXELS_PER_REGION
 
 
 DEFAULT_THRESHOLD = 0.975
 DEFAULT_SAMPLES = 200
 
 
-def load_canvas(zip_path: Path) -> tuple[np.ndarray, int, int, int, int]:
-    """Load ground plane tiles from zip and stitch into a canvas.
+def load_canvas(conn) -> tuple[np.ndarray, int, int, int, int]:
+    """Load ground plane tiles from database and stitch into a canvas.
 
     Returns (canvas, x_min_game, x_max_game, y_min_game, y_max_game).
     """
-    px_per_region = 256
-    game_per_region = 64
+    rows = conn.execute(
+        "SELECT region_x, region_y, image FROM map_squares WHERE plane = 0"
+    ).fetchall()
 
-    tiles: dict[tuple[int, int], bytes] = {}
-    with zipfile.ZipFile(zip_path) as zf:
-        for name in zf.namelist():
-            m = re.match(r"0_(\d+)_(\d+)\.png", name)
-            if m:
-                tiles[(int(m.group(1)), int(m.group(2)))] = zf.read(name)
+    if not rows:
+        raise ValueError("No map squares in database. Run import_map_squares.py first.")
 
+    tiles = {(r[0], r[1]): r[2] for r in rows}
     rxs = [t[0] for t in tiles]
     rys = [t[1] for t in tiles]
     min_rx, max_rx = min(rxs), max(rxs)
     min_ry, max_ry = min(rys), max(rys)
 
-    width = (max_rx - min_rx + 1) * px_per_region
-    height = (max_ry - min_ry + 1) * px_per_region
+    width = (max_rx - min_rx + 1) * PIXELS_PER_REGION
+    height = (max_ry - min_ry + 1) * PIXELS_PER_REGION
     canvas = np.zeros((height, width, 3), dtype=np.uint8)
 
     for (rx, ry), data in tiles.items():
         try:
-            tile = np.array(Image.open(__import__("io").BytesIO(data)).convert("RGB"))
-            px = (rx - min_rx) * px_per_region
-            py = (max_ry - ry) * px_per_region
-            canvas[py:py + px_per_region, px:px + px_per_region] = tile
+            tile = np.array(Image.open(io.BytesIO(data)).convert("RGB"))
+            px = (rx - min_rx) * PIXELS_PER_REGION
+            py = (max_ry - ry) * PIXELS_PER_REGION
+            canvas[py:py + PIXELS_PER_REGION, px:px + PIXELS_PER_REGION] = tile
         except Exception:
             pass
 
-    x_min = min_rx * game_per_region
+    x_min = min_rx * GAME_TILES_PER_REGION
     x_max = (max_rx + 1) * game_per_region
-    y_min = min_ry * game_per_region
-    y_max = (max_ry + 1) * game_per_region
+    y_min = min_ry * GAME_TILES_PER_REGION
+    y_max = (max_ry + 1) * GAME_TILES_PER_REGION
 
     return canvas, x_min, x_max, y_min, y_max
 
@@ -161,13 +159,8 @@ def ingest(db_path: Path, threshold: float, samples: int, debug: bool = False) -
     create_tables(db_path)
     conn = get_connection(db_path)
 
-    zip_path = Path("data/map-squares.zip")
-    if not zip_path.exists():
-        print(f"Error: {zip_path} not found.")
-        return
-
-    print("Loading map tiles...")
-    canvas, x_min, x_max, y_min, y_max = load_canvas(zip_path)
+    print("Loading map tiles from database...")
+    canvas, x_min, x_max, y_min, y_max = load_canvas(conn)
     is_blocked = make_blocked_checker(canvas, x_min, x_max, y_min, y_max)
     print(f"Canvas: {canvas.shape[1]}x{canvas.shape[0]} px, game coords {x_min}-{x_max} x {y_min}-{y_max}")
 

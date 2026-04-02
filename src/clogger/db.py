@@ -248,6 +248,16 @@ SCHEMAS: list[str] = [
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS map_squares (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        plane INTEGER NOT NULL,
+        region_x INTEGER NOT NULL,
+        region_y INTEGER NOT NULL,
+        image BLOB NOT NULL,
+        UNIQUE(plane, region_x, region_y)
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS map_links (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         src_location TEXT NOT NULL,

@@ -3,6 +3,52 @@ from dataclasses import dataclass
 
 from clogger.enums import MapLinkType
 
+GAME_TILES_PER_REGION = 64
+PIXELS_PER_REGION = 256
+
+
+@dataclass
+class MapSquare:
+    id: int
+    plane: int
+    region_x: int
+    region_y: int
+    image: bytes
+
+    @property
+    def game_x(self) -> int:
+        return self.region_x * GAME_TILES_PER_REGION
+
+    @property
+    def game_y(self) -> int:
+        return self.region_y * GAME_TILES_PER_REGION
+
+    @classmethod
+    def get(cls, conn: sqlite3.Connection, plane: int, region_x: int, region_y: int) -> "MapSquare | None":
+        row = conn.execute(
+            "SELECT id, plane, region_x, region_y, image FROM map_squares WHERE plane = ? AND region_x = ? AND region_y = ?",
+            (plane, region_x, region_y),
+        ).fetchone()
+        return cls(*row) if row else None
+
+    @classmethod
+    def all(cls, conn: sqlite3.Connection, plane: int = 0) -> "list[MapSquare]":
+        rows = conn.execute(
+            "SELECT id, plane, region_x, region_y, image FROM map_squares WHERE plane = ? ORDER BY region_x, region_y",
+            (plane,),
+        ).fetchall()
+        return [cls(*row) for row in rows]
+
+    @classmethod
+    def at_game_coord(cls, conn: sqlite3.Connection, x: int, y: int, plane: int = 0) -> "MapSquare | None":
+        rx = x // GAME_TILES_PER_REGION
+        ry = y // GAME_TILES_PER_REGION
+        return cls.get(conn, plane, rx, ry)
+
+    @classmethod
+    def count(cls, conn: sqlite3.Connection, plane: int = 0) -> int:
+        return conn.execute("SELECT COUNT(*) FROM map_squares WHERE plane = ?", (plane,)).fetchone()[0]
+
 
 @dataclass
 class MapLink:
