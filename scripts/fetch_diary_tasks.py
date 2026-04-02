@@ -5,18 +5,18 @@ Also extracts skill and quest requirements for each task.
 
 import argparse
 import re
-import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import requests
-
 from clogger.db import create_tables, get_connection
-from clogger.enums import DiaryLocation, Skill
-
-API_URL = "https://oldschool.runescape.wiki/api.php"
-USER_AGENT = "clogger/0.1 - OSRS Leagues planner"
-HEADERS = {"User-Agent": USER_AGENT}
+from clogger.enums import DiaryLocation
+from clogger.wiki import (
+    fetch_page_wikitext,
+    link_requirement,
+    parse_skill_requirements,
+    strip_markup,
+    throttle,
+)
 
 # Map enum values to wiki page titles
 DIARY_PAGES = {
@@ -36,51 +36,22 @@ DIARY_PAGES = {
 
 TIER_PATTERN = re.compile(r'data-diary-tier="(\w+)"')
 TASK_ROW_PATTERN = re.compile(r"^\|\s*(\d+)\.\s*(.+?)(?:\n|$)", re.MULTILINE)
-SKILL_REQ_PATTERN = re.compile(r"\{\{SCP\|(\w+)\|(\d+)")
 QUEST_REQ_PATTERN = re.compile(r"\[\[([^]|]+?)(?:\|[^]]+)?\]\]")
 STARTED_PATTERN = re.compile(r"[Ss]tarted\s+\[\[([^]|]+?)(?:\|[^]]+)?\]\]")
-
-SKILL_NAME_MAP = {s.label.lower(): s for s in Skill}
 
 
 @dataclass
 class DiaryTaskData:
     tier: str
     description: str
-    skill_reqs: list[tuple[int, int]] = field(default_factory=list)  # (skill_id, level)
-    quest_reqs: list[tuple[str, bool]] = field(default_factory=list)  # (quest_name, partial)
-
-
-def fetch_diary_wikitext(page: str) -> str:
-    resp = requests.get(
-        API_URL,
-        params={"action": "parse", "page": page, "prop": "wikitext", "format": "json"},
-        headers=HEADERS,
-    )
-    resp.raise_for_status()
-    return resp.json()["parse"]["wikitext"]["*"]
-
-
-def strip_markup(text: str) -> str:
-    """Remove wiki markup from task descriptions."""
-    text = re.sub(r"\[\[([^]|]*\|)?([^]]*)\]\]", r"\2", text)
-    text = re.sub(r"\{\{[^}]*\}\}", "", text)
-    text = re.sub(r"'{2,3}", "", text)
-    return text.strip()
+    skill_reqs: list[tuple[int, int]] = field(default_factory=list)
+    quest_reqs: list[tuple[str, bool]] = field(default_factory=list)
 
 
 def parse_requirements(req_text: str) -> tuple[list[tuple[int, int]], list[tuple[str, bool]]]:
     """Parse skill and quest requirements from a requirements cell."""
-    skill_reqs: list[tuple[int, int]] = []
+    skill_reqs = parse_skill_requirements(req_text)
     quest_reqs: list[tuple[str, bool]] = []
-
-    # Skill requirements: {{SCP|Skill|Level}}
-    for match in SKILL_REQ_PATTERN.finditer(req_text):
-        skill_name = match.group(1).lower()
-        level = int(match.group(2))
-        skill = SKILL_NAME_MAP.get(skill_name)
-        if skill is not None and 1 <= level <= 99:
-            skill_reqs.append((skill.value, level))
 
     # Quest requirements: "Started [[Quest]]" or "Completion of [[Quest]]"
     for match in STARTED_PATTERN.finditer(req_text):
@@ -90,16 +61,12 @@ def parse_requirements(req_text: str) -> tuple[list[tuple[int, int]], list[tuple
     if "{{SCP|Quest}}" in req_text or "Completion of" in req_text:
         for match in QUEST_REQ_PATTERN.finditer(req_text):
             quest_name = match.group(1)
-            # Skip non-quest links
             if quest_name.startswith("File:") or quest_name.startswith("Category:"):
                 continue
-            # Skip if already captured as started
             if any(q == quest_name for q, _ in quest_reqs):
                 continue
-            # Only include if it looks like it's in a quest context
-            # Check if preceded by "Completion of" or "{{SCP|Quest}}"
             pos = match.start()
-            context = req_text[max(0, pos - 80) : pos]
+            context = req_text[max(0, pos - 80):pos]
             if "Completion of" in context or "SCP|Quest" in context:
                 quest_reqs.append((quest_name, False))
 
@@ -127,8 +94,6 @@ def parse_diary_tasks(wikitext: str) -> list[DiaryTaskData]:
             description = strip_markup(task_match.group(2))
             description = re.sub(r"\s+", " ", description)
 
-            # The requirements cell is everything after the first | that follows the task cell
-            # Split row into cells by top-level |
             cells = row.split("\n|")
             req_text = cells[-1] if len(cells) > 1 else ""
 
@@ -142,7 +107,6 @@ def ingest(db_path: Path) -> None:
     create_tables(db_path)
     conn = get_connection(db_path)
 
-    # Build quest name → id map
     quest_ids = dict(conn.execute("SELECT name, id FROM quests").fetchall())
 
     total = 0
@@ -150,7 +114,7 @@ def ingest(db_path: Path) -> None:
     quest_req_count = 0
 
     for location, page in DIARY_PAGES.items():
-        wikitext = fetch_diary_wikitext(page)
+        wikitext = fetch_page_wikitext(page)
         tasks = parse_diary_tasks(wikitext)
 
         for task in tasks:
@@ -163,45 +127,36 @@ def ingest(db_path: Path) -> None:
                 (location.value, task.tier, task.description),
             ).fetchone()[0]
 
-            # Skill requirements
             for skill_id, level in task.skill_reqs:
-                conn.execute(
-                    "INSERT OR IGNORE INTO skill_requirements (skill, level) VALUES (?, ?)",
-                    (skill_id, level),
-                )
-                req_id = conn.execute(
-                    "SELECT id FROM skill_requirements WHERE skill = ? AND level = ?",
-                    (skill_id, level),
-                ).fetchone()[0]
-                conn.execute(
-                    "INSERT OR IGNORE INTO diary_task_skill_requirements (diary_task_id, skill_requirement_id) VALUES (?, ?)",
-                    (diary_task_id, req_id),
+                link_requirement(
+                    conn,
+                    table="skill_requirements",
+                    columns={"skill": skill_id, "level": level},
+                    junction_table="diary_task_skill_requirements",
+                    entity_column="diary_task_id",
+                    entity_id=diary_task_id,
+                    requirement_column="skill_requirement_id",
                 )
                 skill_req_count += 1
 
-            # Quest requirements
             for quest_name, partial in task.quest_reqs:
                 req_quest_id = quest_ids.get(quest_name)
                 if req_quest_id is None:
                     continue
-                partial_int = 1 if partial else 0
-                conn.execute(
-                    "INSERT OR IGNORE INTO quest_requirements (required_quest_id, partial) VALUES (?, ?)",
-                    (req_quest_id, partial_int),
-                )
-                req_id = conn.execute(
-                    "SELECT id FROM quest_requirements WHERE required_quest_id = ? AND partial = ?",
-                    (req_quest_id, partial_int),
-                ).fetchone()[0]
-                conn.execute(
-                    "INSERT OR IGNORE INTO diary_task_quest_requirements (diary_task_id, quest_requirement_id) VALUES (?, ?)",
-                    (diary_task_id, req_id),
+                link_requirement(
+                    conn,
+                    table="quest_requirements",
+                    columns={"required_quest_id": req_quest_id, "partial": 1 if partial else 0},
+                    junction_table="diary_task_quest_requirements",
+                    entity_column="diary_task_id",
+                    entity_id=diary_task_id,
+                    requirement_column="quest_requirement_id",
                 )
                 quest_req_count += 1
 
         total += len(tasks)
         print(f"  {location.value}: {len(tasks)} tasks")
-        time.sleep(0.1)
+        throttle()
 
     conn.commit()
     print(
