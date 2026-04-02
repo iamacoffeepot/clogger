@@ -17,6 +17,8 @@ import requests
 from clogger.db import create_tables, get_connection
 from clogger.enums import Region, ShopType
 
+WIKI_LINK_RE = re.compile(r"\[\[([^\]|]*?)(?:\|[^\]]*?)?\]\]")
+
 API_URL = "https://oldschool.runescape.wiki/api.php"
 USER_AGENT = "clogger/0.1 - OSRS Leagues planner"
 HEADERS = {"User-Agent": USER_AGENT}
@@ -85,7 +87,7 @@ def parse_infobox_shop(wikitext: str) -> dict | None:
         return None
     return {
         "name": parse_template_param(block, "name"),
-        "location": parse_template_param(block, "location") or "",
+        "location": WIKI_LINK_RE.sub(r"\1", parse_template_param(block, "location") or ""),
         "owner": parse_template_param(block, "owner"),
         "members": parse_template_param(block, "members"),
         "leagueRegion": parse_template_param(block, "leagueRegion"),
