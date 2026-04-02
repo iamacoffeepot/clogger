@@ -245,6 +245,25 @@ SCHEMAS: list[str] = [
         delta INTEGER NOT NULL DEFAULT 0
     )
     """,
+    f"""
+    CREATE TABLE IF NOT EXISTS locations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        region INTEGER CHECK(region IN ({_region_ids}) OR region IS NULL),
+        type TEXT,
+        members INTEGER NOT NULL DEFAULT 1
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS location_adjacencies (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        location_id INTEGER NOT NULL,
+        direction TEXT NOT NULL CHECK(direction IN ('north', 'south', 'east', 'west')),
+        neighbor TEXT NOT NULL,
+        FOREIGN KEY (location_id) REFERENCES locations(id),
+        UNIQUE(location_id, direction)
+    )
+    """,
     """
     CREATE TABLE IF NOT EXISTS shop_items (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
