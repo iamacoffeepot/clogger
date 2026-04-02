@@ -58,7 +58,7 @@ def load_canvas(conn) -> tuple[np.ndarray, int, int, int, int]:
             pass
 
     x_min = min_rx * GAME_TILES_PER_REGION
-    x_max = (max_rx + 1) * game_per_region
+    x_max = (max_rx + 1) * GAME_TILES_PER_REGION
     y_min = min_ry * GAME_TILES_PER_REGION
     y_max = (max_ry + 1) * GAME_TILES_PER_REGION
 
@@ -92,16 +92,33 @@ def make_blocked_checker(canvas: np.ndarray, x_min: int, x_max: int, y_min: int,
     return is_blocked
 
 
-def edge_blocked_ratio(v0, v1, is_blocked, num_samples: int) -> float:
-    """Sample along an edge and return the ratio of blocked points."""
+def line_blocked_ratio(p0, p1, is_blocked, num_samples: int) -> float:
+    """Sample along a line and return the ratio of blocked points."""
     blocked = 0
     for i in range(num_samples):
         t = i / (num_samples - 1)
-        gx = v0[0] + t * (v1[0] - v0[0])
-        gy = v0[1] + t * (v1[1] - v0[1])
+        gx = p0[0] + t * (p1[0] - p0[0])
+        gy = p0[1] + t * (p1[1] - p0[1])
         if is_blocked(gx, gy):
             blocked += 1
     return blocked / num_samples
+
+
+def is_edge_blocked(v0, v1, loc_a, loc_b, is_blocked, num_samples: int, threshold: float) -> bool:
+    """Check if a Voronoi edge is blocked using both edge and perpendicular sampling.
+
+    Samples along the Voronoi edge and along the line between the two location
+    centers. If either exceeds the blocked threshold, the edge is blocked.
+    """
+    edge_ratio = line_blocked_ratio(v0, v1, is_blocked, num_samples)
+    if edge_ratio >= threshold:
+        return True
+
+    center_ratio = line_blocked_ratio(loc_a, loc_b, is_blocked, num_samples)
+    if center_ratio >= threshold:
+        return True
+
+    return False
 
 
 def render_debug_image(
@@ -196,8 +213,9 @@ def ingest(db_path: Path, threshold: float, samples: int, debug: bool = False) -
             loc_a = names[pt_indices[0]]
             loc_b = names[pt_indices[1]]
 
-            ratio = edge_blocked_ratio(v0, v1, is_blocked, samples)
-            is_walkable = ratio < threshold
+            loc_a_coords = (points[pt_indices[0]][0], points[pt_indices[0]][1])
+            loc_b_coords = (points[pt_indices[1]][0], points[pt_indices[1]][1])
+            is_walkable = not is_edge_blocked(v0, v1, loc_a_coords, loc_b_coords, is_blocked, samples, threshold)
             edge_results.append((ridge_idx, is_walkable))
 
             if is_walkable:
