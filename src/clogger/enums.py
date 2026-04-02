@@ -265,6 +265,19 @@ IMMUNITY_LABELS: dict["Immunity", str] = {
 }
 
 
+class MapLinkType(str, Enum):
+    ENTRANCE = "entrance"
+    EXIT = "exit"
+    FAIRY_RING = "fairy_ring"
+    CHARTER_SHIP = "charter_ship"
+    SPIRIT_TREE = "spirit_tree"
+    GNOME_GLIDER = "gnome_glider"
+    CANOE = "canoe"
+    TELEPORT = "teleport"
+    MINECART = "minecart"
+    SHIP = "ship"
+
+
 class ShopType(str, Enum):
     GENERAL = "General store"
     ARCHERY = "Archery shop"

@@ -11,7 +11,7 @@ import re
 from pathlib import Path
 
 from clogger.db import create_tables, get_connection
-from clogger.enums import Region
+from clogger.enums import MapLinkType, Region
 from clogger.wiki import (
     fetch_page_wikitext_with_attribution,
     strip_wiki_links,
@@ -97,7 +97,7 @@ def ingest(db_path: Path) -> None:
                     from_ring["y"],
                     to_ring["x"],
                     to_ring["y"],
-                    "fairy_ring",
+                    MapLinkType.FAIRY_RING.value,
                     f"Fairy ring {from_ring['code']} -> {to_ring['code']}",
                 ),
             )

@@ -11,6 +11,7 @@ import re
 from pathlib import Path
 
 from clogger.db import create_tables, get_connection
+from clogger.enums import MapLinkType
 from clogger.wiki import fetch_pages_wikitext_batch, record_attributions_batch
 
 COORD_XY_PARAM = re.compile(r"\|x\s*=\s*(\d+)")
@@ -78,7 +79,7 @@ def classify_maps(maps: list[dict]) -> tuple[list[dict], list[dict]]:
 
     for m in maps:
         caption_lower = m["caption"].lower()
-        is_entrance = "entrance" in caption_lower
+        is_entrance = MapLinkType.ENTRANCE.value in caption_lower
 
         # Check if any coordinate is underground (y > 5000)
         has_underground = any(y > 5000 for _, y in m["coords"])
@@ -132,14 +133,14 @@ def ingest(db_path: Path) -> None:
                                 """INSERT INTO map_links
                                    (from_location, to_location, from_x, from_y, to_x, to_y, type, description)
                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                                (from_loc, page_name, sx, sy, ux, uy, "entrance", description),
+                                (from_loc, page_name, sx, sy, ux, uy, MapLinkType.ENTRANCE.value, description),
                             )
                             # Underground -> surface
                             conn.execute(
                                 """INSERT INTO map_links
                                    (from_location, to_location, from_x, from_y, to_x, to_y, type, description)
                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                                (page_name, from_loc, ux, uy, sx, sy, "exit", f"Exit from {page_name}"),
+                                (page_name, from_loc, ux, uy, sx, sy, MapLinkType.EXIT.value, f"Exit from {page_name}"),
                             )
                             link_count += 2
 
