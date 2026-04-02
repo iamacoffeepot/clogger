@@ -15,8 +15,10 @@ from clogger.enums import Immunity, Region
 from clogger.wiki import (
     extract_template,
     fetch_category_members,
+    fetch_contributors_batch,
     fetch_pages_wikitext_batch,
     parse_template_param,
+    record_attribution,
     record_attributions_batch,
     strip_wiki_links,
 )
@@ -305,7 +307,14 @@ def ingest(db_path: Path) -> None:
             monster_count += 1
 
     print("Recording attributions...")
-    record_attributions_batch(conn, "monsters", pages)
+    # Fetch contributors once, record for all three tables
+    tables = ("monsters", "monster_locations", "monster_drops")
+    for i in range(0, len(pages), 50):
+        batch = pages[i:i + 50]
+        contributors = fetch_contributors_batch(batch)
+        for page, authors in contributors.items():
+            for table in tables:
+                record_attribution(conn, table, page, authors)
 
     conn.commit()
     print(
