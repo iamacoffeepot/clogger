@@ -240,6 +240,31 @@ FACILITY_LABELS: dict["Facility", str] = {
 }
 
 
+class Immunity(int, Enum):
+    POISON = 0
+    VENOM = 1
+    CANNON = 2
+    THRALL = 3
+    BURN = 4
+
+    @property
+    def mask(self) -> int:
+        return 1 << self.value
+
+    @property
+    def label(self) -> str:
+        return IMMUNITY_LABELS[self]
+
+
+IMMUNITY_LABELS: dict["Immunity", str] = {
+    Immunity.POISON: "Poison",
+    Immunity.VENOM: "Venom",
+    Immunity.CANNON: "Cannon",
+    Immunity.THRALL: "Thrall",
+    Immunity.BURN: "Burn",
+}
+
+
 class ShopType(str, Enum):
     GENERAL = "General store"
     ARCHERY = "Archery shop"
