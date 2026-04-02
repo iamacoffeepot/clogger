@@ -74,6 +74,78 @@ def test_neighbors(conn: sqlite3.Connection) -> None:
     assert neighbors["east"] is None
 
 
+def test_within_returns_self_at_zero(conn: sqlite3.Connection) -> None:
+    _seed_locations(conn)
+    loc = Location.by_name(conn, "Lumbridge")
+    results = loc.within(conn, 0)
+    assert len(results) == 1
+    assert results[0][0].name == "Lumbridge"
+    assert results[0][1] == 0
+
+
+def test_within_one_hop(conn: sqlite3.Connection) -> None:
+    _seed_locations(conn)
+    loc = Location.by_name(conn, "Lumbridge")
+    results = loc.within(conn, 1)
+    names = {r[0].name: r[1] for r in results}
+    assert names["Lumbridge"] == 0
+    assert names["Varrock"] == 1
+    # Al Kharid is adjacent but not in DB, so not reachable
+    assert "Al Kharid" not in names
+
+
+def test_within_multi_hop(conn: sqlite3.Connection) -> None:
+    _seed_locations(conn)
+    # Add a chain: Varrock --north--> Wilderness
+    conn.execute(
+        "INSERT INTO locations (name, region, type, members, x, y) VALUES (?, ?, ?, ?, ?, ?)",
+        ("Wilderness", Region.WILDERNESS.value, "area", 1, 3200, 3800),
+    )
+    wilderness_id = conn.execute("SELECT id FROM locations WHERE name = 'Wilderness'").fetchone()[0]
+    varrock_id = conn.execute("SELECT id FROM locations WHERE name = 'Varrock'").fetchone()[0]
+    conn.execute(
+        "INSERT INTO location_adjacencies (location_id, direction, neighbor) VALUES (?, ?, ?)",
+        (varrock_id, "north", "Wilderness"),
+    )
+    conn.execute(
+        "INSERT INTO location_adjacencies (location_id, direction, neighbor) VALUES (?, ?, ?)",
+        (wilderness_id, "south", "Varrock"),
+    )
+    conn.commit()
+
+    loc = Location.by_name(conn, "Lumbridge")
+    # Wilderness is 2 hops from Lumbridge
+    results_1 = loc.within(conn, 1)
+    assert "Wilderness" not in [r[0].name for r in results_1]
+
+    results_2 = loc.within(conn, 2)
+    names = {r[0].name: r[1] for r in results_2}
+    assert names["Wilderness"] == 2
+    assert names["Varrock"] == 1
+    assert names["Lumbridge"] == 0
+
+
+def test_within_shortest_path(conn: sqlite3.Connection) -> None:
+    _seed_locations(conn)
+    # Add shortcut: Lumbridge --west--> Aldarin (normally far away)
+    conn.execute(
+        "INSERT INTO location_adjacencies (location_id, direction, neighbor) VALUES (?, ?, ?)",
+        (1, "west", "Aldarin"),
+    )
+    # Also: Varrock --east--> Aldarin (so Aldarin reachable via 2 hops too)
+    conn.execute(
+        "INSERT INTO location_adjacencies (location_id, direction, neighbor) VALUES (?, ?, ?)",
+        (2, "east", "Aldarin"),
+    )
+    conn.commit()
+
+    loc = Location.by_name(conn, "Lumbridge")
+    results = loc.within(conn, 2)
+    names = {r[0].name: r[1] for r in results}
+    # Aldarin should be 1 hop (direct), not 2 (via Varrock)
+    assert names["Aldarin"] == 1
+
+
 def test_nearby_chebyshev(conn: sqlite3.Connection) -> None:
     _seed_locations(conn)
     loc = Location.by_name(conn, "Lumbridge")
