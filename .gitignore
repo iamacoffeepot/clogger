@@ -12,5 +12,8 @@ wheels/
 # Data directory
 data/
 
+# Environment variables
+.env
+
 # Plans (personal routing notes)
 plans/
