@@ -1,16 +1,17 @@
+import math
 import sqlite3
 
 from clogger.enums import Region
-from clogger.location import Adjacency, Location
+from clogger.location import Adjacency, DistanceMetric, Location
 
 
 def _seed_locations(conn: sqlite3.Connection) -> None:
     conn.executemany(
-        "INSERT INTO locations (name, region, type, members) VALUES (?, ?, ?, ?)",
+        "INSERT INTO locations (name, region, type, members, x, y) VALUES (?, ?, ?, ?, ?, ?)",
         [
-            ("Lumbridge", Region.MISTHALIN.value, "settlement", 0),
-            ("Varrock", Region.MISTHALIN.value, "settlement", 0),
-            ("Aldarin", Region.VARLAMORE.value, "Island", 1),
+            ("Lumbridge", Region.MISTHALIN.value, "settlement", 0, 3188, 3220),
+            ("Varrock", Region.MISTHALIN.value, "settlement", 0, 3210, 3448),
+            ("Aldarin", Region.VARLAMORE.value, "Island", 1, 1391, 2935),
         ],
     )
     conn.executemany(
@@ -71,3 +72,64 @@ def test_neighbors(conn: sqlite3.Connection) -> None:
     assert neighbors["north"].name == "Varrock"
     # Al Kharid is not in the DB
     assert neighbors["east"] is None
+
+
+def test_nearby_chebyshev(conn: sqlite3.Connection) -> None:
+    _seed_locations(conn)
+    loc = Location.by_name(conn, "Lumbridge")
+    # Varrock is dx=22, dy=228 -> chebyshev = 228
+    results = loc.nearby(conn, 300, metric=DistanceMetric.CHEBYSHEV)
+    names = [r[0].name for r in results]
+    assert "Varrock" in names
+    # Aldarin is dx=1797, dy=285 -> chebyshev = 1797, too far
+    assert "Aldarin" not in names
+
+
+def test_nearby_manhattan(conn: sqlite3.Connection) -> None:
+    _seed_locations(conn)
+    loc = Location.by_name(conn, "Lumbridge")
+    # Varrock: dx=22, dy=228 -> manhattan = 250
+    results = loc.nearby(conn, 250, metric=DistanceMetric.MANHATTAN)
+    assert len(results) == 1
+    assert results[0][0].name == "Varrock"
+    assert results[0][1] == 250
+
+
+def test_nearby_euclidean(conn: sqlite3.Connection) -> None:
+    _seed_locations(conn)
+    loc = Location.by_name(conn, "Lumbridge")
+    # Varrock: sqrt(22^2 + 228^2) = sqrt(484 + 51984) = sqrt(52468) ~ 229.06
+    results = loc.nearby(conn, 230, metric=DistanceMetric.EUCLIDEAN)
+    assert len(results) == 1
+    assert results[0][0].name == "Varrock"
+    expected = math.sqrt(22**2 + 228**2)
+    assert abs(results[0][1] - expected) < 0.01
+
+
+def test_nearby_default_is_chebyshev(conn: sqlite3.Connection) -> None:
+    _seed_locations(conn)
+    loc = Location.by_name(conn, "Lumbridge")
+    results_default = loc.nearby(conn, 300)
+    results_chebyshev = loc.nearby(conn, 300, metric=DistanceMetric.CHEBYSHEV)
+    assert len(results_default) == len(results_chebyshev)
+    assert [r[0].name for r in results_default] == [r[0].name for r in results_chebyshev]
+
+
+def test_nearby_no_coordinates(conn: sqlite3.Connection) -> None:
+    _seed_locations(conn)
+    # Insert a location without coordinates
+    conn.execute(
+        "INSERT INTO locations (name, region, type, members) VALUES (?, ?, ?, ?)",
+        ("Mystery", Region.MISTHALIN.value, "dungeon", 1),
+    )
+    conn.commit()
+    loc = Location.by_name(conn, "Mystery")
+    assert loc.nearby(conn, 1000) == []
+
+
+def test_nearby_excludes_self(conn: sqlite3.Connection) -> None:
+    _seed_locations(conn)
+    loc = Location.by_name(conn, "Lumbridge")
+    results = loc.nearby(conn, 100000)
+    names = [r[0].name for r in results]
+    assert "Lumbridge" not in names
