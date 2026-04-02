@@ -50,6 +50,34 @@ class LeagueTask:
         return [cls._from_row(row) for row in rows]
 
     @classmethod
+    def by_skill(
+        cls,
+        conn: sqlite3.Connection,
+        skill: Skill,
+        difficulty: TaskDifficulty | None = None,
+        region: Region | None = None,
+    ) -> list[LeagueTask]:
+        query = """
+            SELECT DISTINCT lt.id, lt.name, lt.description, lt.difficulty, lt.region
+            FROM league_tasks lt
+            JOIN league_task_skill_requirements ltsr ON ltsr.league_task_id = lt.id
+            JOIN skill_requirements sr ON sr.id = ltsr.skill_requirement_id
+            WHERE sr.skill = ?
+        """
+        params: list[int] = [skill.value]
+
+        if difficulty is not None:
+            query += " AND lt.difficulty = ?"
+            params.append(difficulty.value)
+        if region is not None:
+            query += " AND lt.region = ?"
+            params.append(region.value)
+
+        query += " ORDER BY sr.level, lt.difficulty"
+        rows = conn.execute(query, params).fetchall()
+        return [cls._from_row(row) for row in rows]
+
+    @classmethod
     def by_name(cls, conn: sqlite3.Connection, name: str) -> LeagueTask | None:
         row = conn.execute(
             "SELECT id, name, description, difficulty, region FROM league_tasks WHERE name = ?",
