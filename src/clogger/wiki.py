@@ -1,10 +1,14 @@
 """Shared utilities for fetching and parsing OSRS wiki data."""
 
+import os
 import re
 import sqlite3
 import time
 
 import requests
+
+DEFAULT_THROTTLE = 1.0
+THROTTLE_DELAY = float(os.environ.get("CLOGGER_THROTTLE", DEFAULT_THROTTLE))
 
 from clogger.enums import Skill
 
@@ -192,6 +196,9 @@ def link_requirement(
     return req_id
 
 
-def throttle(delay: float = 0.1) -> None:
-    """Sleep briefly to avoid hammering the wiki API."""
-    time.sleep(delay)
+def throttle() -> None:
+    """Sleep to avoid hammering the wiki API.
+
+    Default 1 second. Override with CLOGGER_THROTTLE env var.
+    """
+    time.sleep(THROTTLE_DELAY)
