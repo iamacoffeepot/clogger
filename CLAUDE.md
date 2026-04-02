@@ -283,6 +283,26 @@ square.game_y -> int
 square.image -> bytes                                   # PNG image data
 ```
 
+### Pathfinding (`src/clogger/map.py`)
+
+```python
+from clogger.map import find_path, render_path
+from clogger.enums import MapLinkType
+
+# Find shortest path (considers ANYWHERE teleports as starting candidates)
+find_path(conn, src, dst) -> list[MapLink] | None
+find_path(conn, src, dst, allowed_types={...}) -> list[MapLink] | None
+
+# Filter examples:
+find_path(conn, src, dst, allowed_types={MapLinkType.WALKABLE, MapLinkType.ENTRANCE, MapLinkType.EXIT})  # walking only
+find_path(conn, src, dst, allowed_types=set(MapLinkType) - {MapLinkType.TELEPORT})  # no teleports
+
+# Render path as image (surface + underground stacked panels)
+render_path(conn, path, "output.png", padding=200, dpi=200)
+```
+
+Pathfinding uses A* with Chebyshev heuristic. Zero cost for instant transitions (teleports, fairy rings, entrances). Walkable edges cost Chebyshev distance. Path rendering chains arrows end-to-end, inserts implicit walk segments, and shows cross-panel labels for underground transitions.
+
 ### Monster (`src/clogger/monster.py`)
 
 ```python
