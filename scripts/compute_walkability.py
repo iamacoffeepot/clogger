@@ -80,8 +80,8 @@ def make_blocked_checker(canvas: np.ndarray, x_min: int, x_max: int, y_min: int,
         # Red = collision flag from map renderer
         if r > 200 and g < 50 and b < 50:
             return True
-        # Black void
-        if r < 10 and g < 10 and b < 10:
+        # Black/dark void (includes dark grey fill between regions)
+        if r < 40 and g < 40 and b < 40:
             return True
         # Ocean blue
         if b > 120 and b > r + 20 and b > g:
