@@ -103,7 +103,58 @@ def edge_blocked_ratio(v0, v1, is_blocked, num_samples: int) -> float:
     return blocked / num_samples
 
 
-def ingest(db_path: Path, threshold: float, samples: int) -> None:
+def render_debug_image(
+    canvas: np.ndarray,
+    x_min: int, x_max: int, y_min: int, y_max: int,
+    vor, points, rows, edge_results: list[tuple[int, bool]],
+    output_path: Path,
+) -> None:
+    """Render a debug image showing walkable (green) and blocked (red) Voronoi edges."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    region_colors = {
+        0: (0.5, 0.5, 0.5), 1: (0.27, 0.53, 1.0), 2: (1.0, 0.8, 0.27),
+        3: (0.27, 0.73, 1.0), 4: (0.27, 1.0, 0.53), 5: (1.0, 0.53, 0.27),
+        6: (0.67, 0.27, 1.0), 7: (1.0, 0.27, 0.27), 8: (1.0, 0.53, 1.0),
+        9: (0.27, 1.0, 0.8), 10: (1.0, 0.27, 0.67), 11: (0.4, 0.4, 0.4),
+    }
+
+    fig, ax = plt.subplots(1, 1, figsize=(40, 28))
+    ax.imshow(canvas, extent=[x_min, x_max, y_min, y_max], aspect="equal", zorder=0)
+
+    for ridge_idx, is_walkable in edge_results:
+        simplex = vor.ridge_vertices[ridge_idx]
+        if -1 in simplex:
+            continue
+        v0 = vor.vertices[simplex[0]]
+        v1 = vor.vertices[simplex[1]]
+        color = "lime" if is_walkable else "red"
+        ax.plot([v0[0], v1[0]], [v0[1], v1[1]], color=color, linewidth=0.6, alpha=0.8, zorder=5)
+
+    for name, x, y, region in rows:
+        color = region_colors.get(region, (0.5, 0.5, 0.5))
+        ax.plot(x, y, "o", color=color, markersize=3, markeredgecolor="white", markeredgewidth=0.3, zorder=10)
+        ax.text(x, y + 8, name, fontsize=2, color="white", ha="center", va="bottom", zorder=11, fontweight="bold")
+
+    ax.plot([], [], "-", color="lime", linewidth=2, label="Walkable")
+    ax.plot([], [], "-", color="red", linewidth=2, label="Blocked")
+    ax.legend(loc="upper left", fontsize=10, framealpha=0.8)
+
+    xs = [r[1] for r in rows]
+    ys = [r[2] for r in rows]
+    pad = 100
+    ax.set_xlim(min(xs) - pad, max(xs) + pad)
+    ax.set_ylim(min(ys) - pad, max(ys) + pad)
+    ax.set_title("OSRS Voronoi Walkability — Overworld", fontsize=20)
+    plt.tight_layout()
+    plt.savefig(str(output_path), dpi=300)
+    plt.close()
+    print(f"Debug image saved to {output_path}")
+
+
+def ingest(db_path: Path, threshold: float, samples: int, debug: bool = False) -> None:
     create_tables(db_path)
     conn = get_connection(db_path)
 
@@ -120,7 +171,7 @@ def ingest(db_path: Path, threshold: float, samples: int) -> None:
     # Process overworld and underworld separately
     for world_name, y_op, y_threshold in [("overworld", "<", 5000), ("underworld", ">=", 5000)]:
         rows = conn.execute(
-            f"SELECT name, x, y FROM locations WHERE x IS NOT NULL AND y IS NOT NULL AND y {y_op} ?",
+            f"SELECT name, x, y, region FROM locations WHERE x IS NOT NULL AND y IS NOT NULL AND y {y_op} ?",
             (y_threshold,),
         ).fetchall()
 
@@ -136,8 +187,8 @@ def ingest(db_path: Path, threshold: float, samples: int) -> None:
 
         walkable = 0
         blocked = 0
+        edge_results: list[tuple[int, bool]] = []
 
-        # ridge_points tells us which two input points each edge separates
         for ridge_idx, simplex in enumerate(vor.ridge_vertices):
             if -1 in simplex:
                 continue
@@ -145,15 +196,15 @@ def ingest(db_path: Path, threshold: float, samples: int) -> None:
             v0 = vor.vertices[simplex[0]]
             v1 = vor.vertices[simplex[1]]
 
-            # Get the two locations this edge separates
             pt_indices = vor.ridge_points[ridge_idx]
             loc_a = names[pt_indices[0]]
             loc_b = names[pt_indices[1]]
 
             ratio = edge_blocked_ratio(v0, v1, is_blocked, samples)
+            is_walkable = ratio < threshold
+            edge_results.append((ridge_idx, is_walkable))
 
-            if ratio < threshold:
-                # Walkable — store bidirectional map link
+            if is_walkable:
                 conn.execute(
                     """INSERT INTO map_links
                        (from_location, to_location, from_x, from_y, to_x, to_y, type, description)
@@ -161,7 +212,7 @@ def ingest(db_path: Path, threshold: float, samples: int) -> None:
                     (loc_a, loc_b,
                      int(points[pt_indices[0]][0]), int(points[pt_indices[0]][1]),
                      int(points[pt_indices[1]][0]), int(points[pt_indices[1]][1]),
-                     MapLinkType.WALKABLE.value if hasattr(MapLinkType, 'WALKABLE') else "walkable",
+                     MapLinkType.WALKABLE.value,
                      f"Voronoi walkable: {loc_a} <-> {loc_b}"),
                 )
                 conn.execute(
@@ -171,7 +222,7 @@ def ingest(db_path: Path, threshold: float, samples: int) -> None:
                     (loc_b, loc_a,
                      int(points[pt_indices[1]][0]), int(points[pt_indices[1]][1]),
                      int(points[pt_indices[0]][0]), int(points[pt_indices[0]][1]),
-                     MapLinkType.WALKABLE.value if hasattr(MapLinkType, 'WALKABLE') else "walkable",
+                     MapLinkType.WALKABLE.value,
                      f"Voronoi walkable: {loc_b} <-> {loc_a}"),
                 )
                 walkable += 1
@@ -179,6 +230,13 @@ def ingest(db_path: Path, threshold: float, samples: int) -> None:
                 blocked += 1
 
         print(f"{world_name}: {walkable} walkable pairs, {blocked} blocked")
+
+        if debug and world_name == "overworld":
+            render_debug_image(
+                canvas, x_min, x_max, y_min, y_max,
+                vor, points, rows, edge_results,
+                Path("data/walkability_debug.png"),
+            )
 
     conn.commit()
     print("Done")
@@ -205,5 +263,10 @@ if __name__ == "__main__":
         default=DEFAULT_SAMPLES,
         help=f"Number of samples per edge (default {DEFAULT_SAMPLES})",
     )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Produce a debug image of overworld walkability edges",
+    )
     args = parser.parse_args()
-    ingest(args.db, args.threshold, args.samples)
+    ingest(args.db, args.threshold, args.samples, args.debug)
