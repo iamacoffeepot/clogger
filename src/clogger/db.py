@@ -248,6 +248,70 @@ SCHEMAS: list[str] = [
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS monsters (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        version TEXT,
+        combat_level INTEGER,
+        hitpoints INTEGER,
+        attack_speed INTEGER,
+        max_hit TEXT,
+        attack_style TEXT,
+        aggressive INTEGER,
+        size INTEGER,
+        respawn INTEGER,
+        attack_level INTEGER,
+        strength_level INTEGER,
+        defence_level INTEGER,
+        magic_level INTEGER,
+        ranged_level INTEGER,
+        attack_bonus INTEGER,
+        strength_bonus INTEGER,
+        magic_attack INTEGER,
+        magic_strength INTEGER,
+        ranged_attack INTEGER,
+        ranged_strength INTEGER,
+        defensive_stab INTEGER,
+        defensive_slash INTEGER,
+        defensive_crush INTEGER,
+        defensive_magic INTEGER,
+        defensive_light_ranged INTEGER,
+        defensive_standard_ranged INTEGER,
+        defensive_heavy_ranged INTEGER,
+        elemental_weakness_type TEXT,
+        elemental_weakness_percent INTEGER,
+        immunities INTEGER NOT NULL DEFAULT 0,
+        slayer_xp REAL,
+        slayer_category TEXT,
+        slayer_assigned_by TEXT,
+        attributes TEXT,
+        examine TEXT,
+        members INTEGER,
+        UNIQUE(name, version)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS monster_locations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        monster_id INTEGER NOT NULL,
+        location TEXT,
+        x INTEGER,
+        y INTEGER,
+        region INTEGER,
+        FOREIGN KEY (monster_id) REFERENCES monsters(id)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS monster_drops (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        monster_id INTEGER NOT NULL,
+        item_name TEXT NOT NULL,
+        quantity TEXT,
+        rarity TEXT,
+        FOREIGN KEY (monster_id) REFERENCES monsters(id)
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS attributions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         table_name TEXT NOT NULL,
