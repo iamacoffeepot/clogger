@@ -12,7 +12,7 @@ from pathlib import Path
 
 from clogger.db import create_tables, get_connection
 from clogger.enums import Region
-from clogger.wiki import fetch_page_wikitext_with_attribution, throttle
+from clogger.wiki import fetch_page_wikitext, record_attributions_batch, throttle
 
 REGION_REQ_PATTERN = re.compile(r"\{\{RE\|(\w[\w\s]*)\}\}")
 
@@ -79,7 +79,7 @@ def ingest(db_path: Path) -> None:
     no_region = 0
 
     for quest_name, quest_id in quest_ids.items():
-        wikitext = fetch_page_wikitext_with_attribution(conn, quest_name, "quest_region_requirements")
+        wikitext = fetch_page_wikitext(quest_name)
 
         mask = parse_league_region(wikitext)
         if mask == 0:
@@ -100,6 +100,9 @@ def ingest(db_path: Path) -> None:
         )
         req_count += 1
         throttle()
+
+    print("Recording attributions...")
+    record_attributions_batch(conn, "quest_region_requirements", list(quest_ids.keys()))
 
     conn.commit()
     print(f"Inserted {req_count} quest region requirements ({no_region} quests have no region data)")

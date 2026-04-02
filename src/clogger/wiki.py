@@ -196,12 +196,16 @@ def link_requirement(
     return req_id
 
 
-def fetch_page_contributors(page: str) -> list[str]:
-    """Fetch the list of contributors for a wiki page."""
-    contributors: list[str] = []
+def fetch_contributors_batch(pages: list[str]) -> dict[str, list[str]]:
+    """Fetch contributors for up to 50 pages in a single API call.
+
+    Returns a dict mapping page title to list of contributor names.
+    """
+    result: dict[str, list[str]] = {p: [] for p in pages}
+
     params = {
         "action": "query",
-        "titles": page,
+        "titles": "|".join(pages),
         "prop": "contributors",
         "pclimit": "500",
         "format": "json",
@@ -213,15 +217,22 @@ def fetch_page_contributors(page: str) -> list[str]:
         data = resp.json()
 
         for _, page_data in data["query"]["pages"].items():
+            title = page_data.get("title", "")
             for c in page_data.get("contributors", []):
-                contributors.append(c["name"])
+                if title in result:
+                    result[title].append(c["name"])
 
         if "continue" in data:
             params["pccontinue"] = data["continue"]["pccontinue"]
         else:
             break
 
-    return contributors
+    return result
+
+
+def fetch_page_contributors(page: str) -> list[str]:
+    """Fetch the list of contributors for a single wiki page."""
+    return fetch_contributors_batch([page]).get(page, [])
 
 
 def record_attribution(
@@ -235,6 +246,23 @@ def record_attribution(
         "INSERT INTO attributions (table_name, wiki_page, authors, fetched_at) VALUES (?, ?, ?, datetime('now'))",
         (table_name, wiki_page, ", ".join(authors)),
     )
+
+
+def record_attributions_batch(
+    conn: sqlite3.Connection,
+    table_name: str,
+    pages: list[str],
+) -> None:
+    """Fetch contributors for a batch of pages and record attributions.
+
+    Pages are processed in batches of 50 (API limit).
+    """
+    for i in range(0, len(pages), 50):
+        batch = pages[i:i + 50]
+        contributors = fetch_contributors_batch(batch)
+        for page, authors in contributors.items():
+            record_attribution(conn, table_name, page, authors)
+        throttle()
 
 
 def fetch_page_wikitext_with_attribution(

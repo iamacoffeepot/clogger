@@ -11,9 +11,10 @@ from pathlib import Path
 from clogger.db import create_tables, get_connection
 from clogger.enums import DiaryLocation
 from clogger.wiki import (
-    fetch_page_wikitext_with_attribution,
+    fetch_page_wikitext,
     link_requirement,
     parse_skill_requirements,
+    record_attributions_batch,
     strip_markup,
     throttle,
 )
@@ -114,7 +115,7 @@ def ingest(db_path: Path) -> None:
     quest_req_count = 0
 
     for location, page in DIARY_PAGES.items():
-        wikitext = fetch_page_wikitext_with_attribution(conn, page, "diary_tasks")
+        wikitext = fetch_page_wikitext(page)
         tasks = parse_diary_tasks(wikitext)
 
         for task in tasks:
@@ -157,6 +158,9 @@ def ingest(db_path: Path) -> None:
         total += len(tasks)
         print(f"  {location.value}: {len(tasks)} tasks")
         throttle()
+
+    print("Recording attributions...")
+    record_attributions_batch(conn, "diary_tasks", list(DIARY_PAGES.values()))
 
     conn.commit()
     print(

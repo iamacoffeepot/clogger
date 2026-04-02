@@ -13,8 +13,9 @@ from clogger.enums import Region
 from clogger.wiki import (
     extract_template,
     fetch_category_members,
-    fetch_page_wikitext_with_attribution,
+    fetch_page_wikitext,
     parse_template_param,
+    record_attributions_batch,
     strip_wiki_links,
     throttle,
 )
@@ -147,7 +148,7 @@ def ingest(db_path: Path) -> None:
     skipped = 0
 
     for page in pages:
-        wikitext = fetch_page_wikitext_with_attribution(conn, page, "locations")
+        wikitext = fetch_page_wikitext(page)
 
         infobox = parse_infobox_location(wikitext, page)
         if not infobox:
@@ -173,6 +174,9 @@ def ingest(db_path: Path) -> None:
 
         location_count += 1
         throttle()
+
+    print("Recording attributions...")
+    record_attributions_batch(conn, "locations", pages)
 
     conn.commit()
     print(f"Inserted {location_count} locations with {adjacency_count} adjacency edges ({skipped} pages skipped) into {db_path}")

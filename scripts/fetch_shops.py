@@ -15,8 +15,9 @@ from clogger.enums import Region, ShopType
 from clogger.wiki import (
     extract_template,
     fetch_category_members,
-    fetch_page_wikitext_with_attribution,
+    fetch_page_wikitext,
     parse_template_param,
+    record_attributions_batch,
     strip_wiki_links,
     throttle,
 )
@@ -132,9 +133,10 @@ def ingest(db_path: Path) -> None:
 
     shop_count = 0
     item_count = 0
+    shop_pages: list[str] = []
 
     for page in pages:
-        wikitext = fetch_page_wikitext_with_attribution(conn, page, "shops")
+        wikitext = fetch_page_wikitext(page)
 
         if "{{StoreTableHead" not in wikitext:
             continue
@@ -193,7 +195,11 @@ def ingest(db_path: Path) -> None:
             item_count += 1
 
         shop_count += 1
+        shop_pages.append(page)
         throttle()
+
+    print("Recording attributions...")
+    record_attributions_batch(conn, "shops", shop_pages)
 
     conn.commit()
     print(f"Inserted {shop_count} shops with {item_count} items into {db_path}")
