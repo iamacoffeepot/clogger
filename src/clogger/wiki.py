@@ -284,18 +284,22 @@ def record_attribution(
 
 def record_attributions_batch(
     conn: sqlite3.Connection,
-    table_name: str,
+    table_names: str | list[str],
     pages: list[str],
 ) -> None:
     """Fetch contributors for a batch of pages and record attributions.
 
+    table_names can be a single string or a list of table names to attribute.
     Pages are processed in batches of 50 (API limit).
     """
+    if isinstance(table_names, str):
+        table_names = [table_names]
     for i in range(0, len(pages), 50):
         batch = pages[i:i + 50]
         contributors = fetch_contributors_batch(batch)
         for page, authors in contributors.items():
-            record_attribution(conn, table_name, page, authors)
+            for table_name in table_names:
+                record_attribution(conn, table_name, page, authors)
         throttle()
 
 
