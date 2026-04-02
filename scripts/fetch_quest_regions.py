@@ -8,17 +8,11 @@ Requires: fetch_quests.py to have been run first.
 
 import argparse
 import re
-import time
 from pathlib import Path
-
-import requests
 
 from clogger.db import create_tables, get_connection
 from clogger.enums import Region
-
-API_URL = "https://oldschool.runescape.wiki/api.php"
-USER_AGENT = "clogger/0.1 - OSRS Leagues planner"
-HEADERS = {"User-Agent": USER_AGENT}
+from clogger.wiki import fetch_page_wikitext, throttle
 
 REGION_REQ_PATTERN = re.compile(r"\{\{RE\|(\w[\w\s]*)\}\}")
 
@@ -85,13 +79,7 @@ def ingest(db_path: Path) -> None:
     no_region = 0
 
     for quest_name, quest_id in quest_ids.items():
-        resp = requests.get(
-            API_URL,
-            params={"action": "parse", "page": quest_name, "prop": "wikitext", "format": "json"},
-            headers=HEADERS,
-        )
-        resp.raise_for_status()
-        wikitext = resp.json().get("parse", {}).get("wikitext", {}).get("*", "")
+        wikitext = fetch_page_wikitext(quest_name)
 
         mask = parse_league_region(wikitext)
         if mask == 0:
@@ -111,7 +99,7 @@ def ingest(db_path: Path) -> None:
             (quest_id, req_id),
         )
         req_count += 1
-        time.sleep(0.1)
+        throttle()
 
     conn.commit()
     print(f"Inserted {req_count} quest region requirements ({no_region} quests have no region data)")
