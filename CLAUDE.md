@@ -23,17 +23,36 @@ uv run python scripts/fetch_all.py [--db data/clogger.db] [--league Raging_Echoe
 
 ### Individual scripts
 
-Run order matters: items -> quests -> quest regions -> diary tasks -> diary items -> shops -> locations -> link shops -> league tasks
+Pipeline order (managed by `fetch_all.py`):
 
-- `fetch_items.py` — Pulls all item names from the OSRS wiki
-- `fetch_quests.py` — Pulls quests with points, XP/item rewards, skill/quest/QP requirements
-- `fetch_quest_regions.py` — Parses the `leagueRegion` infobox field from each quest's wiki page to map quests to regions
-- `fetch_diary_tasks.py` — Pulls diary tasks with skill and quest requirements
-- `fetch_diary_items.py` — Pulls diary task item requirements from the Achievement Diary overview page
-- `fetch_shops.py` — Pulls shop data with items, stock, pricing, and shop type from Category:Shops
-- `fetch_locations.py` — Pulls locations with adjacency graph, region, and map coordinates from Category:Locations
-- `link_shop_locations.py` — Links shops to locations by matching location text
-- `fetch_league_tasks.py` — Pulls league tasks with skill, quest, item, and diary requirements. Accepts `--page` for the wiki page to fetch from
+1. `fetch_items.py` — Pulls all item names from Category:Items
+2. `fetch_quests.py` — Pulls quests with points, XP/item rewards, skill/quest/QP requirements
+3. `fetch_quest_regions.py` — Parses `leagueRegion` infobox field to map quests to regions
+4. `fetch_diary_tasks.py` — Pulls diary tasks with skill and quest requirements
+5. `fetch_diary_items.py` — Pulls diary task item requirements from Achievement Diary page
+6. `fetch_shops.py` — Pulls shop data with items, stock, pricing, and shop type from Category:Shops
+7. `fetch_locations.py` — Pulls locations with adjacency graph, region, and map coordinates from Category:Locations
+8. `fetch_facilities.py` — Pulls facility coordinates (banks, furnaces, anvils, altars, spinning wheels, looms)
+9. `fetch_monsters.py` — Pulls monsters with full stat blocks, spawn locations, and drop tables from Category:Monsters (batched)
+10. `fetch_dungeon_entrances.py` — Extracts surface-to-underground entrance/exit map links from location pages
+11. `fetch_fairy_rings.py` — Parses fairy ring codes and coordinates, creates links between all 55 codes
+12. `fetch_quetzal.py` — Parses Quetzal Transport System stops and creates links between all stops
+13. `fetch_charter_ships.py` — Parses charter ship dock coordinates from Trader Stan's Trading Post
+14. `fetch_magic_teleports.py` — Parses all spellbook teleports (Standard, Ancient, Lunar) and item teleports (jewellery, etc.)
+15. `link_shop_locations.py` — Links shops to locations by matching location text
+16. `link_facilities.py` — Derives facility bitmasks on locations from nearest facility coordinates
+17. `compute_walkability.py` — Computes walkable connections via Voronoi edges and map tile collision data. Requires `data/map-squares.zip`. Supports `--threshold`, `--samples`, `--debug` flags.
+18. `fetch_league_tasks.py` — Pulls league tasks (with `--league` flag)
+
+### release.py
+
+Creates a GitHub release with the database, map squares, and CREDITS.md attached. Auto-commits updated CREDITS.md before tagging.
+
+```sh
+uv run python scripts/release.py [version] [--notes "..."]
+```
+
+Version defaults to the `VERSION` file.
 
 All fetch scripts share utilities from `src/clogger/wiki.py` (API constants, category enumeration, wikitext fetching, template parsing, requirement linking, attribution).
 
@@ -254,6 +273,7 @@ monster.elemental_weakness_percent -> int | None
 from clogger.wiki import (
     fetch_category_members,
     fetch_page_wikitext,
+    fetch_pages_wikitext_batch,
     fetch_page_wikitext_with_attribution,
     fetch_contributors_batch,
     record_attribution,
@@ -271,12 +291,13 @@ from clogger.wiki import (
 # Fetching
 fetch_category_members(category, ...) -> list[str]                         # paginated category listing
 fetch_page_wikitext(page) -> str                                           # raw wikitext for one page
+fetch_pages_wikitext_batch(pages) -> dict[str, str]                        # batch fetch up to 50 pages
 fetch_page_wikitext_with_attribution(conn, page, table_name) -> str        # wikitext + record attribution
 fetch_contributors_batch(pages) -> dict[str, list[str]]                    # contributors for up to 50 pages
 
 # Attribution (required for all data ingestion)
 record_attribution(conn, table_name, wiki_page, authors)                   # single page
-record_attributions_batch(conn, table_name, pages)                         # batched, 50 pages per API call
+record_attributions_batch(conn, table_names, pages)                        # batched; table_names can be str or list[str]
 
 # Parsing
 strip_markup(text) -> str                                                  # remove wiki markup
@@ -301,6 +322,8 @@ throttle()                                                                 # rat
 - `ShopType(str, Enum)` — 36 shop types (General, Gem, Fishing, Magic, etc.) with `from_label` fuzzy matching
 - `Facility(int, Enum)` — Bank, Furnace, Anvil, Range, Altar, Spinning wheel, Loom with `mask`, `label` properties
 - `Immunity(int, Enum)` — Poison, Venom, Cannon, Thrall, Burn with `mask`, `label` properties
+- `MapLinkType(str, Enum)` — entrance, exit, fairy_ring, charter_ship, spirit_tree, gnome_glider, canoe, teleport, minecart, ship, quetzal, walkable
+- `MAP_LINK_ANYWHERE` — constant `"ANYWHERE"` for teleport from_location (castable from any location)
 - `ALL_SKILLS_MASK`, `ALL_REGIONS_MASK` — bitmask constants for "all"
 
 ## Tests
