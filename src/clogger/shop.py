@@ -101,6 +101,15 @@ class Shop:
         return [cls._from_row(row) for row in rows]
 
     @classmethod
+    def at_location(cls, conn: sqlite3.Connection, location_id: int) -> list[Shop]:
+        """Find all shops at a given location."""
+        rows = conn.execute(
+            f"SELECT {cls._COLS} FROM shops WHERE location_id = ? ORDER BY name",
+            (location_id,),
+        ).fetchall()
+        return [cls._from_row(row) for row in rows]
+
+    @classmethod
     def _from_row(cls, row: tuple) -> Shop:
         return cls(
             id=row[0],
