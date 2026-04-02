@@ -231,6 +231,32 @@ SCHEMAS: list[str] = [
         FOREIGN KEY (quest_requirement_id) REFERENCES quest_requirements(id)
     )
     """,
+    f"""
+    CREATE TABLE IF NOT EXISTS shops (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        location TEXT NOT NULL,
+        owner TEXT,
+        members INTEGER NOT NULL DEFAULT 1,
+        region INTEGER CHECK(region IN ({_region_ids}) OR region IS NULL),
+        sell_multiplier INTEGER NOT NULL DEFAULT 1000,
+        buy_multiplier INTEGER NOT NULL DEFAULT 1000,
+        delta INTEGER NOT NULL DEFAULT 0
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS shop_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        shop_id INTEGER NOT NULL,
+        item_name TEXT NOT NULL,
+        stock INTEGER NOT NULL DEFAULT 0,
+        restock INTEGER NOT NULL DEFAULT 0,
+        sell_price INTEGER,
+        buy_price INTEGER,
+        FOREIGN KEY (shop_id) REFERENCES shops(id),
+        UNIQUE(shop_id, item_name)
+    )
+    """,
 ]
 
 
