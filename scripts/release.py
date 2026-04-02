@@ -15,7 +15,6 @@ import sys
 from pathlib import Path
 
 DB_PATH = Path("data/clogger.db")
-MAP_SQUARES_PATH = Path("data/map-squares.zip")
 VERSION_PATH = Path("VERSION")
 CREDITS_PATH = Path("CREDITS.md")
 
@@ -115,10 +114,6 @@ def release(version: str, notes: str) -> None:
 
     # Build release assets
     assets = [str(DB_PATH)]
-    if MAP_SQUARES_PATH.exists():
-        map_mb = MAP_SQUARES_PATH.stat().st_size / (1024 * 1024)
-        print(f"Map squares: {MAP_SQUARES_PATH} ({map_mb:.1f} MB)")
-        assets.append(str(MAP_SQUARES_PATH))
     if CREDITS_PATH.exists():
         assets.append(str(CREDITS_PATH))
 

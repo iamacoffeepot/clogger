@@ -41,7 +41,11 @@ Pipeline order (managed by `fetch_all.py`):
 14. `fetch_magic_teleports.py` — Parses all spellbook teleports (Standard, Ancient, Lunar) and item teleports (jewellery, etc.)
 15. `link_shop_locations.py` — Links shops to locations by matching location text
 16. `link_facilities.py` — Derives facility bitmasks on locations from nearest facility coordinates
-17. `compute_walkability.py` — Computes walkable connections via Voronoi edges and map tile collision data. Requires `data/map-squares.zip`. Supports `--threshold`, `--samples`, `--debug` flags.
+17. `compute_walkability.py` — Computes walkable connections via Voronoi edges and map tile collision data from the database. Supports `--threshold`, `--samples`, `--debug` flags.
+
+### Utility scripts
+
+- `import_map_squares.py` — Imports map square images from `data/map-squares.zip` into the `map_squares` table. One-time setup.
 18. `fetch_league_tasks.py` — Pulls league tasks (with `--league` flag)
 
 ### release.py
@@ -241,6 +245,42 @@ entry.x -> int
 entry.y -> int
 entry.name -> str | None
 entry.region -> Region | None                          # derived from nearest location
+```
+
+### MapLink (`src/clogger/map.py`)
+
+```python
+from clogger.map import MapLink
+
+MapLink.all(conn, link_type?) -> list[MapLink]
+MapLink.departing(conn, location, link_type?) -> list[MapLink]   # links FROM a location
+MapLink.arriving(conn, location, link_type?) -> list[MapLink]    # links TO a location
+MapLink.between(conn, location_a, location_b, link_type?) -> list[MapLink]
+MapLink.reachable_from(conn, location) -> dict[str, list[MapLink]]
+link.src_location -> str
+link.dst_location -> str
+link.src_x -> int
+link.src_y -> int
+link.dst_x -> int
+link.dst_y -> int
+link.link_type -> MapLinkType
+link.description -> str | None
+```
+
+### MapSquare (`src/clogger/map.py`)
+
+Map tile images with collision data from the OSRS game cache.
+
+```python
+from clogger.map import MapSquare
+
+MapSquare.get(conn, plane, region_x, region_y) -> MapSquare | None
+MapSquare.all(conn, plane=0) -> list[MapSquare]
+MapSquare.at_game_coord(conn, x, y, plane=0) -> MapSquare | None
+MapSquare.count(conn, plane=0) -> int
+square.game_x -> int                                   # region origin in game coords
+square.game_y -> int
+square.image -> bytes                                   # PNG image data
 ```
 
 ### Monster (`src/clogger/monster.py`)
