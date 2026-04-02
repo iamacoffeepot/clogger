@@ -57,13 +57,32 @@ def parse_template_param(wikitext: str, param: str) -> str | None:
     return match.group(1).strip() if match else None
 
 
+def extract_template(wikitext: str, template_name: str) -> str | None:
+    """Extract a template block handling nested braces."""
+    start = wikitext.find("{{" + template_name)
+    if start == -1:
+        return None
+    depth = 0
+    i = start
+    while i < len(wikitext):
+        if wikitext[i:i + 2] == "{{":
+            depth += 1
+            i += 2
+        elif wikitext[i:i + 2] == "}}":
+            depth -= 1
+            if depth == 0:
+                return wikitext[start + len("{{" + template_name):i]
+            i += 2
+        else:
+            i += 1
+    return None
+
+
 def parse_infobox_shop(wikitext: str) -> dict | None:
     """Extract shop metadata from {{Infobox Shop}}."""
-    match = re.search(r"\{\{Infobox Shop(.*?)\}\}", wikitext, re.DOTALL)
-    if not match:
+    block = extract_template(wikitext, "Infobox Shop")
+    if not block:
         return None
-
-    block = match.group(1)
     return {
         "name": parse_template_param(block, "name"),
         "location": parse_template_param(block, "location") or "",
@@ -84,10 +103,18 @@ def parse_store_table_head(wikitext: str) -> dict:
     buy = parse_template_param(block, "buymultiplier")
     delta = parse_template_param(block, "delta")
 
+    def parse_int(val: str | None, default: int) -> int:
+        if not val:
+            return default
+        try:
+            return int(float(val))
+        except (ValueError, TypeError):
+            return default
+
     return {
-        "sell_multiplier": int(sell) if sell else 1000,
-        "buy_multiplier": int(buy) if buy else 1000,
-        "delta": int(delta) if delta else 0,
+        "sell_multiplier": parse_int(sell, 1000),
+        "buy_multiplier": parse_int(buy, 1000),
+        "delta": parse_int(delta, 0),
     }
 
 
@@ -107,17 +134,22 @@ def parse_store_lines(wikitext: str) -> list[dict]:
             stock = int(stock_str) if stock_str else 0
 
         restock_str = parse_template_param(block, "restock")
-        restock = int(restock_str) if restock_str else 0
+        restock = int(restock_str) if restock_str and restock_str.isdigit() else 0
 
         sell_override = parse_template_param(block, "sell")
         buy_override = parse_template_param(block, "buy")
+
+        def safe_int(val: str | None) -> int | None:
+            if not val or not val.isdigit():
+                return None
+            return int(val)
 
         items.append({
             "name": name,
             "stock": stock,
             "restock": restock,
-            "sell_override": int(sell_override) if sell_override else None,
-            "buy_override": int(buy_override) if buy_override else None,
+            "sell_override": safe_int(sell_override),
+            "buy_override": safe_int(buy_override),
         })
 
     return items
