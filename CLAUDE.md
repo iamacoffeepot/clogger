@@ -178,17 +178,39 @@ from clogger.location import Location, DistanceMetric
 
 Location.all(conn, region?) -> list[Location]
 Location.by_name(conn, name) -> Location | None
+Location.nearest(conn, x, y, metric?) -> Location | None
+Location.with_facilities(conn, [Facility, ...], region?) -> list[Location]
 Location.for_shop(conn, shop_id) -> Location | None
 location.adjacencies(conn) -> list[Adjacency]          # raw edges
 location.neighbors(conn) -> dict[str, Location | None] # resolved by direction
 location.within(conn, hops) -> list[tuple[Location, int]]  # BFS graph distance
 location.nearby(conn, max_distance, metric?) -> list[tuple[Location, float]]  # tile distance
 location.shops(conn) -> list[Shop]
-location.x -> int | None                               # map tile coordinates
+location.has_facility(facility) -> bool
+location.facility_list() -> list[Facility]
+location.x -> int | None                               # map coordinates
 location.y -> int | None
+location.facilities -> int                             # bitmask
 ```
 
-Distance metrics for `nearby()`: `DistanceMetric.CHEBYSHEV` (default, matches OSRS diagonal movement), `DistanceMetric.MANHATTAN`, `DistanceMetric.EUCLIDEAN`.
+Distance metrics for `nearby()` and `nearest()`: `DistanceMetric.CHEBYSHEV` (default, matches OSRS diagonal movement), `DistanceMetric.MANHATTAN`, `DistanceMetric.EUCLIDEAN`. Distance computation is on the enum: `metric.compute(dx, dy)`.
+
+### FacilityEntry (`src/clogger/facility.py`)
+
+Raw facility coordinate data (banks, furnaces, anvils, altars, spinning wheels, looms).
+
+```python
+from clogger.facility import FacilityEntry
+from clogger.enums import Facility
+
+FacilityEntry.all(conn, facility_type?) -> list[FacilityEntry]
+FacilityEntry.nearest(conn, x, y, facility_type?, metric?) -> FacilityEntry | None
+FacilityEntry.nearby(conn, x, y, max_distance, facility_type?, metric?) -> list[tuple[FacilityEntry, float]]
+entry.type -> Facility
+entry.x -> int
+entry.y -> int
+entry.name -> str | None
+```
 
 ## Enums (`src/clogger/enums.py`)
 
@@ -198,6 +220,7 @@ Distance metrics for `nearby()`: `DistanceMetric.CHEBYSHEV` (default, matches OS
 - `DiaryLocation(str, Enum)` — 12 diary regions with `xp_reward(tier)`, `min_level(tier)` methods
 - `DiaryTier(str, Enum)` — Easy/Medium/Hard/Elite
 - `ShopType(str, Enum)` — 36 shop types (General, Gem, Fishing, Magic, etc.) with `from_label` fuzzy matching
+- `Facility(int, Enum)` — Bank, Furnace, Anvil, Range, Altar, Spinning wheel, Loom with `mask`, `label` properties
 - `ALL_SKILLS_MASK`, `ALL_REGIONS_MASK` — bitmask constants for "all"
 
 ## Tests
