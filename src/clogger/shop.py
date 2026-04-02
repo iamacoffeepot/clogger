@@ -4,7 +4,7 @@ import math
 import sqlite3
 from dataclasses import dataclass
 
-from clogger.enums import Region
+from clogger.enums import Region, ShopType
 
 
 @dataclass
@@ -38,23 +38,33 @@ class Shop:
     owner: str | None
     members: bool
     region: Region | None
+    shop_type: ShopType
     sell_multiplier: int
     buy_multiplier: int
     delta: int
+
+    _COLS = "id, name, location, owner, members, region, shop_type, sell_multiplier, buy_multiplier, delta"
 
     @classmethod
     def all(
         cls,
         conn: sqlite3.Connection,
         region: Region | None = None,
+        shop_type: ShopType | None = None,
     ) -> list[Shop]:
-        query = "SELECT id, name, location, owner, members, region, sell_multiplier, buy_multiplier, delta FROM shops"
-        params: list[int] = []
+        query = f"SELECT {cls._COLS} FROM shops"
+        params: list = []
+        conditions: list[str] = []
 
         if region is not None:
-            query += " WHERE region = ?"
+            conditions.append("region = ?")
             params.append(region.value)
+        if shop_type is not None:
+            conditions.append("shop_type = ?")
+            params.append(shop_type.value)
 
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
         query += " ORDER BY name"
         rows = conn.execute(query, params).fetchall()
         return [cls._from_row(row) for row in rows]
@@ -62,17 +72,18 @@ class Shop:
     @classmethod
     def by_name(cls, conn: sqlite3.Connection, name: str) -> Shop | None:
         row = conn.execute(
-            "SELECT id, name, location, owner, members, region, sell_multiplier, buy_multiplier, delta FROM shops WHERE name = ?",
+            f"SELECT {cls._COLS} FROM shops WHERE name = ?",
             (name,),
         ).fetchone()
         return cls._from_row(row) if row else None
 
+    _S_COLS = "s.id, s.name, s.location, s.owner, s.members, s.region, s.shop_type, s.sell_multiplier, s.buy_multiplier, s.delta"
+
     @classmethod
     def selling(cls, conn: sqlite3.Connection, item_name: str, region: Region | None = None) -> list[Shop]:
         """Find all shops that sell a given item."""
-        query = """
-            SELECT DISTINCT s.id, s.name, s.location, s.owner, s.members, s.region,
-                   s.sell_multiplier, s.buy_multiplier, s.delta
+        query = f"""
+            SELECT DISTINCT {cls._S_COLS}
             FROM shops s
             JOIN shop_items si ON si.shop_id = s.id
             WHERE si.item_name = ?
@@ -96,9 +107,10 @@ class Shop:
             owner=row[3],
             members=bool(row[4]),
             region=Region(row[5]) if row[5] is not None else None,
-            sell_multiplier=row[6],
-            buy_multiplier=row[7],
-            delta=row[8],
+            shop_type=ShopType(row[6]),
+            sell_multiplier=row[7],
+            buy_multiplier=row[8],
+            delta=row[9],
         )
 
     def items(self, conn: sqlite3.Connection) -> list[ShopItem]:
