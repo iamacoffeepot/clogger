@@ -1,11 +1,19 @@
 from __future__ import annotations
 
+import math
 import sqlite3
 from collections import deque
 from dataclasses import dataclass
+from enum import Enum
 
 from clogger.enums import Region
 from clogger.shop import Shop
+
+
+class DistanceMetric(str, Enum):
+    CHEBYSHEV = "chebyshev"
+    MANHATTAN = "manhattan"
+    EUCLIDEAN = "euclidean"
 
 
 @dataclass
@@ -99,6 +107,44 @@ class Location:
                     queue.append((neighbor, depth + 1))
 
         return sorted(visited.values(), key=lambda x: (x[1], x[0].name))
+
+    def nearby(
+        self,
+        conn: sqlite3.Connection,
+        max_distance: int,
+        metric: DistanceMetric = DistanceMetric.CHEBYSHEV,
+    ) -> list[tuple[Location, float]]:
+        """Return locations within max_distance tiles, sorted by distance.
+
+        Only includes locations with coordinates. Defaults to Chebyshev distance
+        which matches OSRS diagonal movement (1 diagonal step = 1 tick).
+        """
+        if self.x is None or self.y is None:
+            return []
+
+        rows = conn.execute(
+            """SELECT id, name, region, type, members, x, y FROM locations
+               WHERE x IS NOT NULL AND y IS NOT NULL AND id != ?""",
+            (self.id,),
+        ).fetchall()
+
+        results: list[tuple[Location, float]] = []
+        for row in rows:
+            loc = Location._from_row(row)
+            dx = abs(self.x - loc.x)
+            dy = abs(self.y - loc.y)
+
+            if metric == DistanceMetric.CHEBYSHEV:
+                dist = max(dx, dy)
+            elif metric == DistanceMetric.MANHATTAN:
+                dist = dx + dy
+            else:
+                dist = math.sqrt(dx * dx + dy * dy)
+
+            if dist <= max_distance:
+                results.append((loc, dist))
+
+        return sorted(results, key=lambda r: (r[1], r[0].name))
 
     def shops(self, conn: sqlite3.Connection) -> list[Shop]:
         """Return all shops at this location."""
