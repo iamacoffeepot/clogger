@@ -11,14 +11,12 @@ from pathlib import Path
 from clogger.db import create_tables, get_connection
 from clogger.enums import MAP_LINK_ANYWHERE, MapLinkType
 from clogger.wiki import (
+    extract_coords,
     fetch_pages_wikitext_batch,
     record_attributions_batch,
     strip_wiki_links,
 )
 
-COORD_POSITIONAL = re.compile(r"\|(\d{3,5}),(\d{3,5})")
-COORD_XY_PARAM = re.compile(r"\|x\s*=\s*(\d+)")
-COORD_Y_PARAM = re.compile(r"\|y\s*=\s*(\d+)")
 TELEPORT_LINE = re.compile(r"\{\{TeleportLocationLine\|name=(?:\d+\.\s*)?\[\[([^\]|]+).*?\|x=(\d+)\|y=(\d+)")
 
 # Spell pages: single destination per page
@@ -72,14 +70,8 @@ ITEM_TELEPORTS = [
 
 
 def extract_first_coord(wikitext: str) -> tuple[int, int] | None:
-    match = COORD_POSITIONAL.search(wikitext)
-    if match:
-        return int(match.group(1)), int(match.group(2))
-    x_match = COORD_XY_PARAM.search(wikitext)
-    y_match = COORD_Y_PARAM.search(wikitext)
-    if x_match and y_match:
-        return int(x_match.group(1)), int(y_match.group(1))
-    return None
+    coords = extract_coords(wikitext)
+    return coords[0] if coords else None
 
 
 def extract_level(wikitext: str) -> int | None:

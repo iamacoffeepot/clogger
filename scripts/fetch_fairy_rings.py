@@ -11,25 +11,15 @@ import re
 from pathlib import Path
 
 from clogger.db import create_tables, get_connection
-from clogger.enums import MapLinkType, Region
+from clogger.enums import MapLinkType
 from clogger.wiki import (
+    extract_coords,
     fetch_page_wikitext_with_attribution,
+    resolve_region,
     strip_wiki_links,
 )
 
 FAIRYCODE_PATTERN = re.compile(r"\{\{Fairycode\|(\w+)\}\}")
-COORD_POSITIONAL = re.compile(r"\|(\d{3,5}),(\d{3,5})")
-
-
-def resolve_region(text: str) -> int | None:
-    """Try to extract a region from the location text like '[[Varlamore]]: ...'"""
-    match = re.match(r"\[\[([^\]|]+)", text)
-    if not match:
-        return None
-    try:
-        return Region.from_label(match.group(1).strip()).value
-    except KeyError:
-        return None
 
 
 def parse_fairy_rings(wikitext: str) -> list[dict]:
@@ -43,11 +33,10 @@ def parse_fairy_rings(wikitext: str) -> list[dict]:
             continue
         code = code_match.group(1).upper()
 
-        coord_match = COORD_POSITIONAL.search(row)
-        if not coord_match:
+        coords = extract_coords(row)
+        if not coords:
             continue
-        x = int(coord_match.group(1))
-        y = int(coord_match.group(2))
+        x, y = coords[0]
 
         # Extract location text from the cell after the Map template
         cells = row.split("\n|")
@@ -58,7 +47,7 @@ def parse_fairy_rings(wikitext: str) -> list[dict]:
                 location = strip_wiki_links(cell).strip()
                 break
 
-        region = resolve_region(cells[3].strip() if len(cells) > 3 else "")
+        region = resolve_region(strip_wiki_links(cells[3].strip()) if len(cells) > 3 else "")
 
         rings.append({
             "code": code,

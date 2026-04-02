@@ -11,17 +11,17 @@ import re
 from pathlib import Path
 
 from clogger.db import create_tables, get_connection
-from clogger.enums import Immunity, Region
+from clogger.enums import Immunity
 from clogger.wiki import (
+    extract_coords,
     extract_template,
     fetch_category_members,
     fetch_pages_wikitext_batch,
     parse_template_param,
     record_attributions_batch,
+    resolve_region,
     strip_wiki_links,
 )
-
-COORD_XY_COLON = re.compile(r"x:(\d+),y:(\d+)")
 DROPS_LINE_PATTERN = re.compile(r"\{\{DropsLine([^}]*)\}\}")
 
 
@@ -79,20 +79,6 @@ def parse_immunities(block: str, version: str) -> int:
         if val and "immune" in val.lower() and "not immune" not in val.lower():
             mask |= immunity.mask
     return mask
-
-
-def resolve_region(label: str | None) -> int | None:
-    if not label:
-        return None
-    cleaned = re.sub(r"<!--.*?-->", "", label).strip().lower()
-    if cleaned in ("no", "n/a", "none", ""):
-        return None
-    first_group = label.split(",")[0].strip()
-    first_region = first_group.split("&")[0].strip()
-    try:
-        return Region.from_label(first_region).value
-    except KeyError:
-        return None
 
 
 def get_versions(block: str) -> list[str]:
@@ -195,11 +181,11 @@ def parse_loc_lines(wikitext: str) -> list[dict]:
                         region = resolve_region(parse_template_param(block, "leagueRegion"))
                         version = parse_template_param(block, "version")
 
-                        for match in COORD_XY_COLON.finditer(block):
+                        for x, y in extract_coords(block):
                             locations.append({
                                 "location": loc_name,
-                                "x": int(match.group(1)),
-                                "y": int(match.group(2)),
+                                "x": x,
+                                "y": y,
                                 "region": region,
                                 "version": version,
                             })

@@ -9,12 +9,7 @@ from pathlib import Path
 
 from clogger.db import create_tables, get_connection
 from clogger.enums import Facility
-from clogger.wiki import fetch_page_wikitext_with_attribution
-
-# Map template coordinate patterns
-COORD_XY_PARAM = re.compile(r"\|x\s*=\s*(\d+)\|y\s*=\s*(\d+)")
-COORD_XY_COLON = re.compile(r"x:(\d+),y:(\d+)")
-COORD_POSITIONAL = re.compile(r"\|(\d{3,5}),(\d{3,5})")
+from clogger.wiki import extract_coords, fetch_page_wikitext_with_attribution
 
 FACILITY_PAGES = {
     Facility.BANK: "List_of_banks",
@@ -24,27 +19,6 @@ FACILITY_PAGES = {
     Facility.SPINNING_WHEEL: "Spinning_wheel",
     Facility.LOOM: "Loom",
 }
-
-
-def extract_coords_from_map(text: str) -> list[tuple[int, int]]:
-    """Extract all x,y coordinate pairs from Map template text."""
-    coords: list[tuple[int, int]] = []
-
-    match = COORD_XY_PARAM.search(text)
-    if match:
-        coords.append((int(match.group(1)), int(match.group(2))))
-        return coords
-
-    for match in COORD_XY_COLON.finditer(text):
-        coords.append((int(match.group(1)), int(match.group(2))))
-    if coords:
-        return coords
-
-    match = COORD_POSITIONAL.search(text)
-    if match:
-        coords.append((int(match.group(1)), int(match.group(2))))
-
-    return coords
 
 
 def parse_facility_entries(wikitext: str) -> list[tuple[int, int, str | None]]:
@@ -67,7 +41,7 @@ def parse_facility_entries(wikitext: str) -> list[tuple[int, int, str | None]]:
             name = name_match.group(1).strip()
 
         for map_match in map_matches:
-            coords = extract_coords_from_map(map_match.group(0))
+            coords = extract_coords(map_match.group(0))
             for x, y in coords:
                 entries.append((x, y, name))
 
@@ -88,7 +62,7 @@ def parse_facility_entries(wikitext: str) -> list[tuple[int, int, str | None]]:
                         block = wikitext[start:i]
                         name_match = re.search(r"\|location\s*=\s*\[\[([^]|]+?)(?:\|[^]]+)?\]\]", block)
                         name = name_match.group(1).strip() if name_match else None
-                        coords = extract_coords_from_map(block)
+                        coords = extract_coords(block)
                         for x, y in coords:
                             entries.append((x, y, name))
                         break

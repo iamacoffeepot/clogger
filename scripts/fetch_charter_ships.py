@@ -10,9 +10,7 @@ from pathlib import Path
 
 from clogger.db import create_tables, get_connection
 from clogger.enums import MapLinkType
-from clogger.wiki import fetch_page_wikitext_with_attribution
-
-COORD_POSITIONAL = re.compile(r"\|(\d{3,5}),(\d{3,5})")
+from clogger.wiki import extract_coords, fetch_page_wikitext_with_attribution
 
 
 def parse_charter_ports(wikitext: str) -> list[dict]:
@@ -33,18 +31,19 @@ def parse_charter_ports(wikitext: str) -> list[dict]:
         if not map_match:
             continue
         version = map_match.group(1)
-        coord_match = COORD_POSITIONAL.search(line)
-        if not coord_match:
+        coords = extract_coords(line)
+        if not coords:
             continue
 
         name = locations.get(version)
         if not name:
             continue
 
+        x, y = coords[0]
         ports.append({
             "name": name,
-            "x": int(coord_match.group(1)),
-            "y": int(coord_match.group(2)),
+            "x": x,
+            "y": y,
         })
 
     return ports

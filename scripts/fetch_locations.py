@@ -5,28 +5,26 @@ for adjacency data.
 """
 
 import argparse
-import re
 from pathlib import Path
 
 from clogger.db import create_tables, get_connection
-from clogger.enums import Region
 from clogger.wiki import (
+    extract_coords,
     extract_template,
     fetch_category_members,
     fetch_page_wikitext,
     parse_template_param,
     record_attributions_batch,
+    resolve_region,
     strip_wiki_links,
     throttle,
 )
 
 DIRECTIONS = ("north", "south", "east", "west")
 
-POSITIONAL_COORDS_PATTERN = re.compile(r"\|(\d{3,5}),(\d{3,5})")
-
 
 def parse_map_coords(wikitext: str) -> tuple[int | None, int | None]:
-    """Extract x,y tile coordinates from the {{Map}} template."""
+    """Extract x,y tile coordinates from the first {{Map}} template."""
     i = 0
     map_text = None
     while i < len(wikitext):
@@ -52,30 +50,11 @@ def parse_map_coords(wikitext: str) -> tuple[int | None, int | None]:
     if not map_text:
         return None, None
 
-    x_match = re.search(r"\|x\s*=\s*(\d+)", map_text)
-    y_match = re.search(r"\|y\s*=\s*(\d+)", map_text)
-    if x_match and y_match:
-        return int(x_match.group(1)), int(y_match.group(1))
-
-    pos_match = POSITIONAL_COORDS_PATTERN.search(map_text)
-    if pos_match:
-        return int(pos_match.group(1)), int(pos_match.group(2))
+    coords = extract_coords(map_text)
+    if coords:
+        return coords[0]
 
     return None, None
-
-
-def resolve_region(label: str | None) -> int | None:
-    if not label:
-        return None
-    cleaned = re.sub(r"<!--.*?-->", "", label).strip().lower()
-    if cleaned in ("no", "n/a", "none", ""):
-        return None
-    first_group = label.split(",")[0].strip()
-    first_region = first_group.split("&")[0].strip()
-    try:
-        return Region.from_label(first_region).value
-    except KeyError:
-        return None
 
 
 def parse_infobox_location(wikitext: str, page: str) -> dict | None:

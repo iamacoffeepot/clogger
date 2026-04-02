@@ -11,13 +11,14 @@ import re
 from pathlib import Path
 
 from clogger.db import create_tables, get_connection
-from clogger.enums import Region, ShopType
+from clogger.enums import ShopType
 from clogger.wiki import (
     extract_template,
     fetch_category_members,
     fetch_page_wikitext,
     parse_template_param,
     record_attributions_batch,
+    resolve_region,
     strip_wiki_links,
     throttle,
 )
@@ -99,29 +100,6 @@ def parse_store_lines(wikitext: str) -> list[dict]:
         })
 
     return items
-
-
-def resolve_region(label: str | None) -> int | None:
-    """Try to map a leagueRegion label to a Region enum value.
-
-    Handles complex formats like "Misthalin&Morytania&Asgarnia, Misthalin&Fremennik"
-    by extracting the first region from the first group.
-    Returns None for "no" or empty values.
-    """
-    if not label:
-        return None
-    cleaned = re.sub(r"<!--.*?-->", "", label).strip().lower()
-    if cleaned in ("no", "n/a", ""):
-        return None
-
-    first_group = label.split(",")[0].strip()
-    first_region = first_group.split("&")[0].strip()
-
-    try:
-        return Region.from_label(first_region).value
-    except KeyError:
-        print(f"  Warning: unhandled leagueRegion value: {label!r}")
-        return None
 
 
 def ingest(db_path: Path) -> None:

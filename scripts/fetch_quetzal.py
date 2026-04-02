@@ -10,9 +10,7 @@ from pathlib import Path
 
 from clogger.db import create_tables, get_connection
 from clogger.enums import MapLinkType
-from clogger.wiki import fetch_page_wikitext_with_attribution, strip_wiki_links
-
-COORD_XY_COLON = re.compile(r"x:(\d+),y:(\d+)")
+from clogger.wiki import extract_coords, fetch_page_wikitext_with_attribution, strip_wiki_links
 
 
 def parse_quetzal_stops(wikitext: str) -> list[dict]:
@@ -22,8 +20,8 @@ def parse_quetzal_stops(wikitext: str) -> list[dict]:
 
     for row in rows:
         # Look for rows with Map templates
-        coord_match = COORD_XY_COLON.search(row)
-        if not coord_match:
+        coords = extract_coords(row)
+        if not coords:
             continue
 
         # Extract location name from wiki link
@@ -32,8 +30,7 @@ def parse_quetzal_stops(wikitext: str) -> list[dict]:
             continue
         name = name_match.group(1).strip()
 
-        x = int(coord_match.group(1))
-        y = int(coord_match.group(2))
+        x, y = coords[0]
 
         built = "Unbuilt" not in row
 

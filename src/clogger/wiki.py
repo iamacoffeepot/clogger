@@ -10,7 +10,7 @@ import requests
 DEFAULT_THROTTLE = 1.0
 THROTTLE_DELAY = float(os.environ.get("CLOGGER_THROTTLE", DEFAULT_THROTTLE))
 
-from clogger.enums import Skill
+from clogger.enums import Region, Skill
 
 API_URL = "https://oldschool.runescape.wiki/api.php"
 USER_AGENT = "clogger/0.2 (https://github.com/iamacoffeepot/clogger) OSRS Leagues planner"
@@ -20,6 +20,60 @@ SKILL_NAME_MAP: dict[str, Skill] = {s.label.lower(): s for s in Skill}
 
 SKILL_REQ_PATTERN = re.compile(r"\{\{SCP\|(\w+)\|(\d+)")
 WIKI_LINK_PATTERN = re.compile(r"\[\[([^\]|]*?)(?:\|[^\]]*?)?\]\]")
+
+_COORD_X_PARAM = re.compile(r"\|x\s*=\s*(\d+)")
+_COORD_Y_PARAM = re.compile(r"\|y\s*=\s*(\d+)")
+_COORD_XY_COLON = re.compile(r"x:(\d+),y:(\d+)")
+_COORD_POSITIONAL = re.compile(r"\|(\d{3,5}),(\d{3,5})")
+
+
+def extract_coords(text: str) -> list[tuple[int, int]]:
+    """Extract all (x, y) coordinate pairs from wiki template text.
+
+    Handles three formats:
+    - |x=N|y=N (or |x = N|y = N)
+    - x:N,y:N
+    - |N,N (positional 3-5 digit pairs)
+    """
+    coords: list[tuple[int, int]] = []
+
+    # x=N|y=N format (single pair)
+    x_match = _COORD_X_PARAM.search(text)
+    y_match = _COORD_Y_PARAM.search(text)
+    if x_match and y_match:
+        coords.append((int(x_match.group(1)), int(y_match.group(1))))
+        return coords
+
+    # x:N,y:N format (may have multiple)
+    for match in _COORD_XY_COLON.finditer(text):
+        coords.append((int(match.group(1)), int(match.group(2))))
+    if coords:
+        return coords
+
+    # Positional |N,N format
+    for match in _COORD_POSITIONAL.finditer(text):
+        coords.append((int(match.group(1)), int(match.group(2))))
+
+    return coords
+
+
+def resolve_region(label: str | None) -> int | None:
+    """Map a leagueRegion label to a Region enum value.
+
+    Handles complex formats like 'Misthalin&Morytania, Misthalin&Fremennik'
+    by extracting the first region. Returns None for 'no', 'n/a', 'none', etc.
+    """
+    if not label:
+        return None
+    cleaned = re.sub(r"<!--.*?-->", "", label).strip().lower()
+    if cleaned in ("no", "n/a", "none", ""):
+        return None
+    first_group = label.split(",")[0].strip()
+    first_region = first_group.split("&")[0].strip()
+    try:
+        return Region.from_label(first_region).value
+    except KeyError:
+        return None
 
 
 def fetch_category_members(

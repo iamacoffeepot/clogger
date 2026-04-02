@@ -12,12 +12,7 @@ from pathlib import Path
 
 from clogger.db import create_tables, get_connection
 from clogger.enums import MapLinkType
-from clogger.wiki import fetch_pages_wikitext_batch, record_attributions_batch
-
-COORD_XY_PARAM = re.compile(r"\|x\s*=\s*(\d+)")
-COORD_Y_PARAM = re.compile(r"\|y\s*=\s*(\d+)")
-COORD_XY_COLON = re.compile(r"x:(\d+),y:(\d+)")
-COORD_POSITIONAL = re.compile(r"\|(\d{3,5}),(\d{3,5})")
+from clogger.wiki import extract_coords, fetch_pages_wikitext_batch, record_attributions_batch
 
 
 def extract_all_maps(wikitext: str) -> list[dict]:
@@ -45,19 +40,7 @@ def extract_all_maps(wikitext: str) -> list[dict]:
                             caption = cap_match.group(1).strip()
 
                         # Extract coordinates
-                        coords: list[tuple[int, int]] = []
-
-                        x_match = COORD_XY_PARAM.search(block)
-                        y_match = COORD_Y_PARAM.search(block)
-                        if x_match and y_match:
-                            coords.append((int(x_match.group(1)), int(y_match.group(1))))
-
-                        for match in COORD_XY_COLON.finditer(block):
-                            coords.append((int(match.group(1)), int(match.group(2))))
-
-                        if not coords:
-                            for match in COORD_POSITIONAL.finditer(block):
-                                coords.append((int(match.group(1)), int(match.group(2))))
+                        coords = extract_coords(block)
 
                         if coords:
                             maps.append({
