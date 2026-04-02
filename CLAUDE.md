@@ -35,7 +35,18 @@ Run order matters: items -> quests -> quest regions -> diary tasks -> diary item
 - `link_shop_locations.py` — Links shops to locations by matching location text
 - `fetch_league_tasks.py` — Pulls league tasks with skill, quest, item, and diary requirements. Accepts `--page` for the wiki page to fetch from
 
-All fetch scripts share utilities from `src/clogger/wiki.py` (API constants, category enumeration, wikitext fetching, template parsing, requirement linking).
+All fetch scripts share utilities from `src/clogger/wiki.py` (API constants, category enumeration, wikitext fetching, template parsing, requirement linking, attribution).
+
+### Attribution
+
+All scripts that fetch wiki data **must** record attributions. Use `record_attributions_batch()` for scripts that fetch many pages (batches contributor lookups 50 pages per API call) or `fetch_page_wikitext_with_attribution()` for single-page fetches. Attributions are stored in the `attributions` table and used to generate CREDITS.md on release.
+
+### API etiquette
+
+- Default throttle is 1 request/second (override locally via `CLOGGER_THROTTLE` in `.env`)
+- Prefer batched API calls where possible — `fetch_contributors_batch()` handles up to 50 pages per call
+- User-Agent includes project URL per wiki API policy
+- Wikitext must be fetched one page at a time (`action=parse`), but contributor lookups support batching (`action=query`)
 
 ## Database
 
@@ -211,6 +222,49 @@ entry.x -> int
 entry.y -> int
 entry.name -> str | None
 entry.region -> Region | None                          # derived from nearest location
+```
+
+### Wiki utilities (`src/clogger/wiki.py`)
+
+```python
+from clogger.wiki import (
+    fetch_category_members,
+    fetch_page_wikitext,
+    fetch_page_wikitext_with_attribution,
+    fetch_contributors_batch,
+    record_attribution,
+    record_attributions_batch,
+    strip_markup,
+    strip_wiki_links,
+    extract_template,
+    extract_section,
+    parse_template_param,
+    parse_skill_requirements,
+    link_requirement,
+    throttle,
+)
+
+# Fetching
+fetch_category_members(category, ...) -> list[str]                         # paginated category listing
+fetch_page_wikitext(page) -> str                                           # raw wikitext for one page
+fetch_page_wikitext_with_attribution(conn, page, table_name) -> str        # wikitext + record attribution
+fetch_contributors_batch(pages) -> dict[str, list[str]]                    # contributors for up to 50 pages
+
+# Attribution (required for all data ingestion)
+record_attribution(conn, table_name, wiki_page, authors)                   # single page
+record_attributions_batch(conn, table_name, pages)                         # batched, 50 pages per API call
+
+# Parsing
+strip_markup(text) -> str                                                  # remove wiki markup
+strip_wiki_links(text) -> str                                              # [[Link|Display]] -> Display
+extract_template(wikitext, template_name) -> str | None                    # nested brace-aware
+extract_section(wikitext, field_name) -> str                               # |field= section
+parse_template_param(text, param) -> str | None                            # single param
+parse_skill_requirements(text) -> list[tuple[int, int]]                    # {{SCP|Skill|Level}}
+
+# DB helpers
+link_requirement(conn, table, columns, junction_table, ...)                # insert-or-ignore + link
+throttle()                                                                 # rate limit (default 1s)
 ```
 
 ## Enums (`src/clogger/enums.py`)
