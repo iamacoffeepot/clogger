@@ -1,5 +1,6 @@
-"""Fetch standard spellbook teleport destinations and create map links.
+"""Fetch all spellbook teleport destinations and create map links.
 
+Covers Standard, Ancient, and Lunar spellbooks.
 Teleports have from_location="ANYWHERE" since they can be cast from any location.
 """
 
@@ -18,8 +19,8 @@ COORD_POSITIONAL = re.compile(r"\|(\d{3,5}),(\d{3,5})")
 COORD_XY_PARAM = re.compile(r"\|x\s*=\s*(\d+)")
 COORD_Y_PARAM = re.compile(r"\|y\s*=\s*(\d+)")
 
-# Standard spellbook teleports: page name -> destination location name
-STANDARD_TELEPORTS = [
+ALL_TELEPORTS = [
+    # Standard spellbook
     "Varrock Teleport",
     "Lumbridge Teleport",
     "Falador Teleport",
@@ -30,6 +31,24 @@ STANDARD_TELEPORTS = [
     "Watchtower Teleport",
     "Trollheim Teleport",
     "Ape Atoll Teleport",
+    # Ancient Magicks
+    "Paddewwa Teleport",
+    "Senntisten Teleport",
+    "Kharyrll Teleport",
+    "Lassar Teleport",
+    "Dareeyak Teleport",
+    "Carrallanger Teleport",
+    "Annakarl Teleport",
+    "Ghorrock Teleport",
+    # Lunar spellbook
+    "Moonclan Teleport",
+    "Ourania Teleport",
+    "Waterbirth Teleport",
+    "Barbarian Teleport",
+    "Khazard Teleport",
+    "Fishing Guild Teleport",
+    "Catherby Teleport",
+    "Ice Plateau Teleport",
 ]
 
 
@@ -54,11 +73,9 @@ def extract_level(wikitext: str) -> int | None:
 
 def extract_destination(wikitext: str, spell_name: str) -> str:
     """Try to extract the destination location name from the spell page."""
-    # Look for "Teleports the caster to [[Location]]" pattern
     match = re.search(r"[Tt]eleports?\s+(?:the\s+)?(?:caster|player)\s+to\s+(?:the\s+)?(?:[\w\s]*?)?\[\[([^\]|]+)", wikitext)
     if match:
         return match.group(1).strip()
-    # Fallback: derive from spell name
     return spell_name.replace(" Teleport", "")
 
 
@@ -67,12 +84,12 @@ def ingest(db_path: Path) -> None:
     conn = get_connection(db_path)
 
     print("Fetching teleport spell data...")
-    all_wikitext = fetch_pages_wikitext_batch(STANDARD_TELEPORTS)
+    all_wikitext = fetch_pages_wikitext_batch(ALL_TELEPORTS)
 
     link_count = 0
     found_pages: list[str] = []
 
-    for spell_name in STANDARD_TELEPORTS:
+    for spell_name in ALL_TELEPORTS:
         wikitext = all_wikitext.get(spell_name, "")
         if not wikitext:
             print(f"  Warning: page not found for '{spell_name}'")
