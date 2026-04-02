@@ -1,6 +1,6 @@
 # Clogger
 
-OSRS Leagues knowledge base for route planning. Built with [Claude Code](https://claude.ai/claude-code).
+OSRS Leagues knowledge base for route planning. Built with [Claude Code](https://docs.anthropic.com/en/docs/claude-code).
 
 Pulls data from the [OSRS Wiki](https://oldschool.runescape.wiki/) into a SQLite database and provides a Python API for querying quests, items, diary tasks, league tasks, shops, locations, and facilities — everything you need to plan a league route without writing SQL.
 
@@ -8,7 +8,7 @@ Pulls data from the [OSRS Wiki](https://oldschool.runescape.wiki/) into a SQLite
 
 - [Python 3.12+](https://www.python.org/)
 - [uv](https://docs.astral.sh/uv/) (Python package manager)
-- [Claude Code](https://claude.ai/claude-code) (CLI for Claude)
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (CLI for Claude)
 
 ## Getting started
 
