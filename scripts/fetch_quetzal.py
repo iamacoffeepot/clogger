@@ -73,7 +73,7 @@ def ingest(db_path: Path) -> None:
                     from_stop["y"],
                     to_stop["x"],
                     to_stop["y"],
-                    MapLinkType.TELEPORT.value,
+                    MapLinkType.QUETZAL.value,
                     f"Quetzal: {from_stop['name']} -> {to_stop['name']}{built_note}",
                 ),
             )

@@ -276,6 +276,7 @@ class MapLinkType(str, Enum):
     TELEPORT = "teleport"
     MINECART = "minecart"
     SHIP = "ship"
+    QUETZAL = "quetzal"
 
 
 class ShopType(str, Enum):
