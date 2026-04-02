@@ -4,6 +4,7 @@ import sqlite3
 from dataclasses import dataclass
 
 from clogger.enums import Region
+from clogger.shop import Shop
 
 
 @dataclass
@@ -74,3 +75,19 @@ class Location:
         for adj in adjs:
             result[adj.direction] = Location.by_name(conn, adj.neighbor)
         return result
+
+    def shops(self, conn: sqlite3.Connection) -> list[Shop]:
+        """Return all shops at this location."""
+        return Shop.all_at(conn, self.id)
+
+    @classmethod
+    def for_shop(cls, conn: sqlite3.Connection, shop_id: int) -> Location | None:
+        """Find the location for a given shop."""
+        row = conn.execute(
+            """SELECT l.id, l.name, l.region, l.type, l.members
+               FROM locations l
+               JOIN shops s ON s.location_id = l.id
+               WHERE s.id = ?""",
+            (shop_id,),
+        ).fetchone()
+        return cls._from_row(row) if row else None

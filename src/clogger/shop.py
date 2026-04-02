@@ -5,7 +5,6 @@ import sqlite3
 from dataclasses import dataclass
 
 from clogger.enums import Region, ShopType
-from clogger.location import Location
 
 
 @dataclass
@@ -101,7 +100,7 @@ class Shop:
         return [cls._from_row(row) for row in rows]
 
     @classmethod
-    def at_location(cls, conn: sqlite3.Connection, location_id: int) -> list[Shop]:
+    def all_at(cls, conn: sqlite3.Connection, location_id: int) -> list[Shop]:
         """Find all shops at a given location."""
         rows = conn.execute(
             f"SELECT {cls._COLS} FROM shops WHERE location_id = ? ORDER BY name",
@@ -124,15 +123,6 @@ class Shop:
             buy_multiplier=row[9],
             delta=row[10],
         )
-
-    def get_location(self, conn: sqlite3.Connection) -> Location | None:
-        if self.location_id is None:
-            return None
-        row = conn.execute(
-            "SELECT id, name, region, type, members FROM locations WHERE id = ?",
-            (self.location_id,),
-        ).fetchone()
-        return Location._from_row(row) if row else None
 
     def items(self, conn: sqlite3.Connection) -> list[ShopItem]:
         rows = conn.execute(
