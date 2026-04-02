@@ -210,7 +210,7 @@ def ingest(db_path: Path, threshold: float, samples: int, debug: bool = False) -
             if is_walkable:
                 conn.execute(
                     """INSERT INTO map_links
-                       (from_location, to_location, from_x, from_y, to_x, to_y, type, description)
+                       (src_location, dst_location, src_x, src_y, dst_x, dst_y, type, description)
                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                     (loc_a, loc_b,
                      int(points[pt_indices[0]][0]), int(points[pt_indices[0]][1]),
@@ -220,7 +220,7 @@ def ingest(db_path: Path, threshold: float, samples: int, debug: bool = False) -
                 )
                 conn.execute(
                     """INSERT INTO map_links
-                       (from_location, to_location, from_x, from_y, to_x, to_y, type, description)
+                       (src_location, dst_location, src_x, src_y, dst_x, dst_y, type, description)
                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                     (loc_b, loc_a,
                      int(points[pt_indices[1]][0]), int(points[pt_indices[1]][1]),

@@ -144,7 +144,7 @@ def ingest(db_path: Path) -> None:
         level_note = f" (Magic {level})" if level else ""
         conn.execute(
             """INSERT INTO map_links
-               (from_location, to_location, from_x, from_y, to_x, to_y, type, description)
+               (src_location, dst_location, src_x, src_y, dst_x, dst_y, type, description)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
             (MAP_LINK_ANYWHERE, destination, 0, 0, coord[0], coord[1],
              MapLinkType.TELEPORT.value, f"{spell_name}{level_note}"),
@@ -168,7 +168,7 @@ def ingest(db_path: Path) -> None:
         for dest_name, x, y in destinations:
             conn.execute(
                 """INSERT INTO map_links
-                   (from_location, to_location, from_x, from_y, to_x, to_y, type, description)
+                   (src_location, dst_location, src_x, src_y, dst_x, dst_y, type, description)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                 (MAP_LINK_ANYWHERE, dest_name, 0, 0, x, y,
                  MapLinkType.TELEPORT.value, f"{item_name}: {dest_name}"),

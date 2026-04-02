@@ -250,12 +250,12 @@ SCHEMAS: list[str] = [
     """
     CREATE TABLE IF NOT EXISTS map_links (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        from_location TEXT NOT NULL,
-        to_location TEXT NOT NULL,
-        from_x INTEGER,
-        from_y INTEGER,
-        to_x INTEGER,
-        to_y INTEGER,
+        src_location TEXT NOT NULL,
+        dst_location TEXT NOT NULL,
+        src_x INTEGER,
+        src_y INTEGER,
+        dst_x INTEGER,
+        dst_y INTEGER,
         type TEXT,
         description TEXT
     )

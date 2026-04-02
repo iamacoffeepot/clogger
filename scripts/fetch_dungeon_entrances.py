@@ -114,14 +114,14 @@ def ingest(db_path: Path) -> None:
                             # Surface -> underground
                             conn.execute(
                                 """INSERT INTO map_links
-                                   (from_location, to_location, from_x, from_y, to_x, to_y, type, description)
+                                   (src_location, dst_location, src_x, src_y, dst_x, dst_y, type, description)
                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                                 (from_loc, page_name, sx, sy, ux, uy, MapLinkType.ENTRANCE.value, description),
                             )
                             # Underground -> surface
                             conn.execute(
                                 """INSERT INTO map_links
-                                   (from_location, to_location, from_x, from_y, to_x, to_y, type, description)
+                                   (src_location, dst_location, src_x, src_y, dst_x, dst_y, type, description)
                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                                 (page_name, from_loc, ux, uy, sx, sy, MapLinkType.EXIT.value, f"Exit from {page_name}"),
                             )

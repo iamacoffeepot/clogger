@@ -61,7 +61,7 @@ def ingest(db_path: Path) -> None:
             built_note = "" if from_stop["built"] and to_stop["built"] else " (requires building)"
             conn.execute(
                 """INSERT INTO map_links
-                   (from_location, to_location, from_x, from_y, to_x, to_y, type, description)
+                   (src_location, dst_location, src_x, src_y, dst_x, dst_y, type, description)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     from_stop["name"],
