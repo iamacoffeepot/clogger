@@ -1,7 +1,7 @@
 import math
 import sqlite3
 
-from clogger.enums import Region
+from clogger.enums import Facility, Region
 from clogger.location import Adjacency, DistanceMetric, Location
 
 
@@ -205,3 +205,86 @@ def test_nearby_excludes_self(conn: sqlite3.Connection) -> None:
     results = loc.nearby(conn, 100000)
     names = [r[0].name for r in results]
     assert "Lumbridge" not in names
+
+
+def test_nearest(conn: sqlite3.Connection) -> None:
+    _seed_locations(conn)
+    # (3190, 3225) is close to Lumbridge (3188, 3220)
+    loc = Location.nearest(conn, 3190, 3225)
+    assert loc is not None
+    assert loc.name == "Lumbridge"
+
+
+def test_nearest_no_locations(conn: sqlite3.Connection) -> None:
+    # Empty DB, no locations with coords
+    assert Location.nearest(conn, 100, 100) is None
+
+
+def test_with_facilities_single(conn: sqlite3.Connection) -> None:
+    _seed_locations(conn)
+    conn.execute(
+        "UPDATE locations SET facilities = ? WHERE name = 'Lumbridge'",
+        (Facility.BANK.mask | Facility.FURNACE.mask,),
+    )
+    conn.commit()
+
+    locs = Location.with_facilities(conn, [Facility.BANK])
+    assert len(locs) == 1
+    assert locs[0].name == "Lumbridge"
+    assert locs[0].has_facility(Facility.BANK)
+    assert locs[0].has_facility(Facility.FURNACE)
+
+
+def test_with_facilities_multiple(conn: sqlite3.Connection) -> None:
+    _seed_locations(conn)
+    conn.execute(
+        "UPDATE locations SET facilities = ? WHERE name = 'Lumbridge'",
+        (Facility.BANK.mask | Facility.FURNACE.mask,),
+    )
+    conn.execute(
+        "UPDATE locations SET facilities = ? WHERE name = 'Varrock'",
+        (Facility.BANK.mask | Facility.ANVIL.mask,),
+    )
+    conn.commit()
+
+    # Both have banks
+    locs = Location.with_facilities(conn, [Facility.BANK])
+    assert len(locs) == 2
+
+    # Only Lumbridge has bank + furnace
+    locs = Location.with_facilities(conn, [Facility.BANK, Facility.FURNACE])
+    assert len(locs) == 1
+    assert locs[0].name == "Lumbridge"
+
+
+def test_with_facilities_region_filter(conn: sqlite3.Connection) -> None:
+    _seed_locations(conn)
+    conn.execute(
+        "UPDATE locations SET facilities = ? WHERE name = 'Lumbridge'",
+        (Facility.BANK.mask,),
+    )
+    conn.execute(
+        "UPDATE locations SET facilities = ? WHERE name = 'Aldarin'",
+        (Facility.BANK.mask,),
+    )
+    conn.commit()
+
+    locs = Location.with_facilities(conn, [Facility.BANK], region=Region.VARLAMORE)
+    assert len(locs) == 1
+    assert locs[0].name == "Aldarin"
+
+
+def test_facility_list(conn: sqlite3.Connection) -> None:
+    _seed_locations(conn)
+    conn.execute(
+        "UPDATE locations SET facilities = ? WHERE name = 'Lumbridge'",
+        (Facility.BANK.mask | Facility.RANGE.mask | Facility.ALTAR.mask,),
+    )
+    conn.commit()
+
+    loc = Location.by_name(conn, "Lumbridge")
+    facilities = loc.facility_list()
+    assert Facility.BANK in facilities
+    assert Facility.RANGE in facilities
+    assert Facility.ALTAR in facilities
+    assert Facility.FURNACE not in facilities

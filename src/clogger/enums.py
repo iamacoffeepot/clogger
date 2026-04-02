@@ -211,6 +211,35 @@ _KARAMJA_DIARY_MIN_LEVEL: dict[DiaryTier, int] = {
 }
 
 
+class Facility(int, Enum):
+    BANK = 0
+    FURNACE = 1
+    ANVIL = 2
+    RANGE = 3
+    ALTAR = 4
+    SPINNING_WHEEL = 5
+    LOOM = 6
+
+    @property
+    def mask(self) -> int:
+        return 1 << self.value
+
+    @property
+    def label(self) -> str:
+        return FACILITY_LABELS[self]
+
+
+FACILITY_LABELS: dict["Facility", str] = {
+    Facility.BANK: "Bank",
+    Facility.FURNACE: "Furnace",
+    Facility.ANVIL: "Anvil",
+    Facility.RANGE: "Range",
+    Facility.ALTAR: "Altar",
+    Facility.SPINNING_WHEEL: "Spinning wheel",
+    Facility.LOOM: "Loom",
+}
+
+
 class ShopType(str, Enum):
     GENERAL = "General store"
     ARCHERY = "Archery shop"

@@ -6,7 +6,7 @@ from collections import deque
 from dataclasses import dataclass
 from enum import Enum
 
-from clogger.enums import Region
+from clogger.enums import Facility, Region
 from clogger.shop import Shop
 
 
@@ -14,6 +14,15 @@ class DistanceMetric(str, Enum):
     CHEBYSHEV = "chebyshev"
     MANHATTAN = "manhattan"
     EUCLIDEAN = "euclidean"
+
+    def compute(self, dx: int, dy: int) -> float:
+        if self == DistanceMetric.CHEBYSHEV:
+            return max(dx, dy)
+        if self == DistanceMetric.MANHATTAN:
+            return dx + dy
+        if self == DistanceMetric.EUCLIDEAN:
+            return math.sqrt(dx * dx + dy * dy)
+        raise ValueError(f"Unhandled distance metric: {self}")
 
 
 @dataclass
@@ -33,6 +42,13 @@ class Location:
     members: bool
     x: int | None = None
     y: int | None = None
+    facilities: int = 0
+
+    def has_facility(self, facility: Facility) -> bool:
+        return bool(self.facilities & facility.mask)
+
+    def facility_list(self) -> list[Facility]:
+        return [f for f in Facility if self.facilities & f.mask]
 
     @classmethod
     def all(
@@ -40,7 +56,7 @@ class Location:
         conn: sqlite3.Connection,
         region: Region | None = None,
     ) -> list[Location]:
-        query = "SELECT id, name, region, type, members, x, y FROM locations"
+        query = "SELECT id, name, region, type, members, x, y, facilities FROM locations"
         params: list = []
 
         if region is not None:
@@ -52,9 +68,52 @@ class Location:
         return [cls._from_row(row) for row in rows]
 
     @classmethod
+    def with_facilities(
+        cls,
+        conn: sqlite3.Connection,
+        facilities: list[Facility],
+        region: Region | None = None,
+    ) -> list[Location]:
+        """Find all locations that have all of the specified facilities."""
+        mask = 0
+        for f in facilities:
+            mask |= f.mask
+        query = "SELECT id, name, region, type, members, x, y, facilities FROM locations WHERE facilities & ? = ?"
+        params: list = [mask, mask]
+        if region is not None:
+            query += " AND region = ?"
+            params.append(region.value)
+        query += " ORDER BY name"
+        rows = conn.execute(query, params).fetchall()
+        return [cls._from_row(row) for row in rows]
+
+    @classmethod
+    def nearest(
+        cls,
+        conn: sqlite3.Connection,
+        x: int,
+        y: int,
+        metric: DistanceMetric = DistanceMetric.CHEBYSHEV,
+    ) -> Location | None:
+        """Find the location with coordinates closest to the given point."""
+        rows = conn.execute(
+            "SELECT id, name, region, type, members, x, y, facilities FROM locations WHERE x IS NOT NULL AND y IS NOT NULL",
+        ).fetchall()
+        best: Location | None = None
+        best_dist = float("inf")
+        for row in rows:
+            dx = abs(x - row[5])
+            dy = abs(y - row[6])
+            dist = metric.compute(dx, dy)
+            if dist < best_dist:
+                best_dist = dist
+                best = cls._from_row(row)
+        return best
+
+    @classmethod
     def by_name(cls, conn: sqlite3.Connection, name: str) -> Location | None:
         row = conn.execute(
-            "SELECT id, name, region, type, members, x, y FROM locations WHERE name = ?",
+            "SELECT id, name, region, type, members, x, y, facilities FROM locations WHERE name = ?",
             (name,),
         ).fetchone()
         return cls._from_row(row) if row else None
@@ -69,6 +128,7 @@ class Location:
             members=bool(row[4]),
             x=row[5],
             y=row[6],
+            facilities=row[7],
         )
 
     def adjacencies(self, conn: sqlite3.Connection) -> list[Adjacency]:
@@ -123,7 +183,7 @@ class Location:
             return []
 
         rows = conn.execute(
-            """SELECT id, name, region, type, members, x, y FROM locations
+            """SELECT id, name, region, type, members, x, y, facilities FROM locations
                WHERE x IS NOT NULL AND y IS NOT NULL AND id != ?""",
             (self.id,),
         ).fetchall()
@@ -133,13 +193,7 @@ class Location:
             loc = Location._from_row(row)
             dx = abs(self.x - loc.x)
             dy = abs(self.y - loc.y)
-
-            if metric == DistanceMetric.CHEBYSHEV:
-                dist = max(dx, dy)
-            elif metric == DistanceMetric.MANHATTAN:
-                dist = dx + dy
-            else:
-                dist = math.sqrt(dx * dx + dy * dy)
+            dist = metric.compute(dx, dy)
 
             if dist <= max_distance:
                 results.append((loc, dist))
@@ -154,7 +208,7 @@ class Location:
     def for_shop(cls, conn: sqlite3.Connection, shop_id: int) -> Location | None:
         """Find the location for a given shop."""
         row = conn.execute(
-            """SELECT l.id, l.name, l.region, l.type, l.members, l.x, l.y
+            """SELECT l.id, l.name, l.region, l.type, l.members, l.x, l.y, l.facilities
                FROM locations l
                JOIN shops s ON s.location_id = l.id
                WHERE s.id = ?""",

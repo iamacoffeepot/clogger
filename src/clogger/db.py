@@ -255,7 +255,8 @@ SCHEMAS: list[str] = [
         type TEXT,
         members INTEGER NOT NULL DEFAULT 1,
         x INTEGER,
-        y INTEGER
+        y INTEGER,
+        facilities INTEGER NOT NULL DEFAULT 0
     )
     """,
     """
