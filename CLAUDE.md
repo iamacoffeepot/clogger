@@ -23,14 +23,19 @@ uv run python scripts/fetch_all.py [--db data/clogger.db] [--league Raging_Echoe
 
 ### Individual scripts
 
-Run order matters: items -> quests -> quest regions -> diary tasks -> diary items -> league tasks
+Run order matters: items -> quests -> quest regions -> diary tasks -> diary items -> shops -> locations -> link shops -> league tasks
 
 - `fetch_items.py` — Pulls all item names from the OSRS wiki
 - `fetch_quests.py` — Pulls quests with points, XP/item rewards, skill/quest/QP requirements
-- `fetch_quest_regions.py` — Parses the `leagueRegion` infobox field from each quest's wiki page to map quests to regions. Falls back through: explicit location requirement → first auto-complete region → bare region reference
+- `fetch_quest_regions.py` — Parses the `leagueRegion` infobox field from each quest's wiki page to map quests to regions
 - `fetch_diary_tasks.py` — Pulls diary tasks with skill and quest requirements
 - `fetch_diary_items.py` — Pulls diary task item requirements from the Achievement Diary overview page
+- `fetch_shops.py` — Pulls shop data with items, stock, pricing, and shop type from Category:Shops
+- `fetch_locations.py` — Pulls locations with adjacency graph, region, and map coordinates from Category:Locations
+- `link_shop_locations.py` — Links shops to locations by matching location text
 - `fetch_league_tasks.py` — Pulls league tasks with skill, quest, item, and diary requirements. Accepts `--page` for the wiki page to fetch from
+
+All fetch scripts share utilities from `src/clogger/wiki.py` (API constants, category enumeration, wikitext fetching, template parsing, requirement linking).
 
 ## Database
 
@@ -84,6 +89,7 @@ from clogger.league import LeagueTask
 
 LeagueTask.all(conn, difficulty?, region?) -> list[LeagueTask]
 LeagueTask.by_name(conn, name) -> LeagueTask | None
+LeagueTask.by_skill(conn, skill, difficulty?, region?) -> list[LeagueTask]
 task.points -> int                                    # derived from difficulty
 task.skill_requirements(conn) -> list[SkillRequirement]
 task.quest_requirements(conn) -> list[QuestRequirement]
@@ -99,6 +105,7 @@ from clogger.league import LeagueConfig
 
 config = LeagueConfig.from_yaml(Path("config/demonic-pacts.yaml"))
 config.starting_region -> Region
+config.starting_location -> str
 config.always_accessible -> list[Region]
 config.unlockable_regions -> list[Region]
 config.max_region_unlocks -> int
@@ -132,6 +139,7 @@ account.get_xp(skill) -> int
 account.has_quest(quest) -> bool
 account.has_skill(skill, level) -> bool
 account.has_region(region) -> bool
+account.current_location -> str
 account.quest_points -> int
 account.league_points -> int
 account.regions -> list[Region]
@@ -143,6 +151,45 @@ account.completed_quests() -> list[Quest]
 account.completed_tasks() -> list[LeagueTask]
 ```
 
+### Shop (`src/clogger/shop.py`)
+
+```python
+from clogger.shop import Shop, ShopItem
+
+Shop.all(conn, region?, shop_type?) -> list[Shop]
+Shop.by_name(conn, name) -> Shop | None
+Shop.selling(conn, item_name, region?) -> list[Shop]
+Shop.all_at(conn, location_id) -> list[Shop]
+shop.items(conn) -> list[ShopItem]
+shop.item_by_name(conn, item_name) -> ShopItem | None
+shop.location_id -> int | None                        # FK to locations table
+shop.shop_type -> ShopType
+shop.sell_multiplier -> int                            # permille (1000 = 100%)
+shop.buy_multiplier -> int
+shop.delta -> int                                      # price change per stock unit
+item.effective_sell_price(sell_multiplier, base_value) -> int
+item.effective_buy_price(buy_multiplier, base_value) -> int
+```
+
+### Location (`src/clogger/location.py`)
+
+```python
+from clogger.location import Location, DistanceMetric
+
+Location.all(conn, region?) -> list[Location]
+Location.by_name(conn, name) -> Location | None
+Location.for_shop(conn, shop_id) -> Location | None
+location.adjacencies(conn) -> list[Adjacency]          # raw edges
+location.neighbors(conn) -> dict[str, Location | None] # resolved by direction
+location.within(conn, hops) -> list[tuple[Location, int]]  # BFS graph distance
+location.nearby(conn, max_distance, metric?) -> list[tuple[Location, float]]  # tile distance
+location.shops(conn) -> list[Shop]
+location.x -> int | None                               # map tile coordinates
+location.y -> int | None
+```
+
+Distance metrics for `nearby()`: `DistanceMetric.CHEBYSHEV` (default, matches OSRS diagonal movement), `DistanceMetric.MANHATTAN`, `DistanceMetric.EUCLIDEAN`.
+
 ## Enums (`src/clogger/enums.py`)
 
 - `Skill(int, Enum)` — 23 OSRS skills, int-based with `label`, `mask` properties
@@ -150,6 +197,7 @@ account.completed_tasks() -> list[LeagueTask]
 - `TaskDifficulty(int, Enum)` — Easy/Medium/Hard/Elite/Master with `label`, `points` properties
 - `DiaryLocation(str, Enum)` — 12 diary regions with `xp_reward(tier)`, `min_level(tier)` methods
 - `DiaryTier(str, Enum)` — Easy/Medium/Hard/Elite
+- `ShopType(str, Enum)` — 36 shop types (General, Gem, Fishing, Magic, etc.) with `from_label` fuzzy matching
 - `ALL_SKILLS_MASK`, `ALL_REGIONS_MASK` — bitmask constants for "all"
 
 ## Tests
