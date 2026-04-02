@@ -270,3 +270,216 @@ def find_path(
                 best_path = prefix + result
 
     return best_path
+
+
+def _stitch_canvas(conn: sqlite3.Connection, x_min: int, x_max: int, y_min: int, y_max: int):
+    """Stitch map tiles for a game coordinate region. Returns (canvas, extent)."""
+    import io
+
+    import numpy as np
+    from PIL import Image
+
+    rx_min = max(0, x_min // GAME_TILES_PER_REGION - 1)
+    rx_max = x_max // GAME_TILES_PER_REGION + 1
+    ry_min = max(0, y_min // GAME_TILES_PER_REGION - 1)
+    ry_max = y_max // GAME_TILES_PER_REGION + 1
+
+    canvas_w = (rx_max - rx_min + 1) * PIXELS_PER_REGION
+    canvas_h = (ry_max - ry_min + 1) * PIXELS_PER_REGION
+    canvas = np.zeros((canvas_h, canvas_w, 3), dtype=np.uint8)
+
+    rows = conn.execute(
+        "SELECT region_x, region_y, image FROM map_squares WHERE plane = 0 "
+        "AND region_x >= ? AND region_x <= ? AND region_y >= ? AND region_y <= ?",
+        (rx_min, rx_max, ry_min, ry_max),
+    ).fetchall()
+    for rx, ry, img_data in rows:
+        try:
+            tile = np.array(Image.open(io.BytesIO(img_data)).convert("RGB"))
+            px = (rx - rx_min) * PIXELS_PER_REGION
+            py = (ry_max - ry) * PIXELS_PER_REGION
+            canvas[py:py + PIXELS_PER_REGION, px:px + PIXELS_PER_REGION] = tile
+        except Exception:
+            pass
+
+    extent = [
+        rx_min * GAME_TILES_PER_REGION,
+        (rx_max + 1) * GAME_TILES_PER_REGION,
+        ry_min * GAME_TILES_PER_REGION,
+        (ry_max + 1) * GAME_TILES_PER_REGION,
+    ]
+    return canvas, extent
+
+
+def render_path(
+    conn: sqlite3.Connection,
+    path: list[MapLink],
+    output_path: str,
+    padding: int = 200,
+    dpi: int = 200,
+) -> None:
+    """Render a path on the map with colored arrows for each edge type.
+
+    Solid arrows for walking, dashed for teleports/transport.
+    Surface and underground are rendered as stacked subplots.
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    if not path:
+        return
+
+    UNDERGROUND_THRESHOLD = 5000
+
+    edge_styles = {
+        MapLinkType.WALKABLE: {"color": "lime", "linestyle": "-", "label": "Walk"},
+        MapLinkType.ENTRANCE: {"color": "cyan", "linestyle": "-", "label": "Entrance"},
+        MapLinkType.EXIT: {"color": "cyan", "linestyle": "-", "label": "Exit"},
+        MapLinkType.FAIRY_RING: {"color": "magenta", "linestyle": "--", "label": "Fairy ring"},
+        MapLinkType.CHARTER_SHIP: {"color": "orange", "linestyle": "--", "label": "Charter ship"},
+        MapLinkType.QUETZAL: {"color": "yellow", "linestyle": "--", "label": "Quetzal"},
+        MapLinkType.TELEPORT: {"color": "white", "linestyle": ":", "label": "Teleport"},
+    }
+    default_style = {"color": "white", "linestyle": "--", "label": "Other"}
+
+    # Chain links for visual continuity: each link starts where the previous ended.
+    # Insert implicit walk segments when there's a gap between links.
+    chained: list[MapLink] = []
+    for i, link in enumerate(path):
+        if i > 0:
+            prev = chained[-1]
+            # If there's a gap, insert an implicit walk to bridge it
+            if prev.dst_x != link.src_x or prev.dst_y != link.src_y:
+                chained.append(MapLink(
+                    id=-1,
+                    src_location=prev.dst_location,
+                    dst_location=link.src_location,
+                    src_x=prev.dst_x,
+                    src_y=prev.dst_y,
+                    dst_x=link.src_x,
+                    dst_y=link.src_y,
+                    link_type=MapLinkType.WALKABLE,
+                    description=f"Walk to {link.src_location}",
+                ))
+        chained.append(link)
+    path = chained
+
+    # Collect coordinates per zone
+    coords: list[tuple[int, int]] = []
+    for link in path:
+        if link.src_location != MAP_LINK_ANYWHERE:
+            coords.append((link.src_x, link.src_y))
+        coords.append((link.dst_x, link.dst_y))
+
+    surface_coords = [(x, y) for x, y in coords if y < UNDERGROUND_THRESHOLD]
+    underground_coords = [(x, y) for x, y in coords if y >= UNDERGROUND_THRESHOLD]
+    has_underground = len(underground_coords) > 0
+
+    # Determine subplot layout
+    n_panels = 2 if has_underground else 1
+    fig, axes = plt.subplots(n_panels, 1, figsize=(16, 8 * n_panels),
+                              gridspec_kw={"height_ratios": [2, 1] if has_underground else [1]})
+    if n_panels == 1:
+        axes = [axes]
+
+    # --- Surface panel ---
+    ax_surface = axes[0]
+    if surface_coords:
+        sx = [c[0] for c in surface_coords]
+        sy = [c[1] for c in surface_coords]
+        s_xmin, s_xmax = min(sx) - padding, max(sx) + padding
+        s_ymin, s_ymax = min(sy) - padding, max(sy) + padding
+
+        canvas, extent = _stitch_canvas(conn, s_xmin, s_xmax, s_ymin, s_ymax)
+        ax_surface.imshow(canvas, extent=extent, aspect="equal")
+        ax_surface.set_xlim(s_xmin, s_xmax)
+        ax_surface.set_ylim(s_ymin, s_ymax)
+    ax_surface.set_title("Surface", fontsize=12)
+    ax_surface.axis("off")
+
+    # --- Underground panel ---
+    ax_under = axes[1] if has_underground else None
+    if has_underground:
+        ux = [c[0] for c in underground_coords]
+        uy = [c[1] for c in underground_coords]
+        u_xmin, u_xmax = min(ux) - padding, max(ux) + padding
+        u_ymin, u_ymax = min(uy) - padding, max(uy) + padding
+
+        canvas, extent = _stitch_canvas(conn, u_xmin, u_xmax, u_ymin, u_ymax)
+        ax_under.imshow(canvas, extent=extent, aspect="equal")
+        ax_under.set_xlim(u_xmin, u_xmax)
+        ax_under.set_ylim(u_ymin, u_ymax)
+        ax_under.set_title("Underground", fontsize=12)
+        ax_under.axis("off")
+
+    def get_ax(y: int):
+        if y >= UNDERGROUND_THRESHOLD and ax_under is not None:
+            return ax_under
+        return ax_surface
+
+    # Draw edges
+    seen_labels: set[str] = set()
+    for link in path:
+        style = edge_styles.get(link.link_type, default_style)
+
+        if link.src_location == MAP_LINK_ANYWHERE:
+            ax = get_ax(link.dst_y)
+            ax.plot(link.dst_x, link.dst_y, "*", color=style["color"], markersize=15, zorder=15,
+                    label=style["label"] if style["label"] not in seen_labels else None)
+            seen_labels.add(style["label"])
+            continue
+
+        src_ax = get_ax(link.src_y)
+        dst_ax = get_ax(link.dst_y)
+
+        if src_ax is dst_ax:
+            # Same panel — draw normal arrow
+            ax = src_ax
+            ax.annotate("",
+                         xy=(link.dst_x, link.dst_y),
+                         xytext=(link.src_x, link.src_y),
+                         arrowprops=dict(arrowstyle="->", color=style["color"],
+                                         linestyle=style["linestyle"], lw=2),
+                         zorder=10)
+        else:
+            # Cross-panel — mark source with label pointing to destination
+            src_ax.plot(link.src_x, link.src_y, "v", color=style["color"], markersize=12,
+                        markeredgecolor="black", markeredgewidth=1, zorder=15)
+            src_ax.text(link.src_x, link.src_y - 15, f"→ {link.dst_location}",
+                        fontsize=8, color=style["color"], ha="center", va="top",
+                        fontweight="bold",
+                        bbox=dict(boxstyle="round,pad=0.3", facecolor="black", alpha=0.8))
+
+        label = style["label"] if style["label"] not in seen_labels else None
+        if label:
+            ax_surface.plot([], [], color=style["color"], linestyle=style["linestyle"], lw=2, label=label)
+            seen_labels.add(style["label"])
+
+    # Mark locations
+    locations_on_path = []
+    for link in path:
+        if link.src_location != MAP_LINK_ANYWHERE:
+            locations_on_path.append((link.src_location, link.src_x, link.src_y))
+        locations_on_path.append((link.dst_location, link.dst_x, link.dst_y))
+
+    seen_locs: set[str] = set()
+    unique_locs = []
+    for name, x, y in locations_on_path:
+        if name not in seen_locs:
+            seen_locs.add(name)
+            unique_locs.append((name, x, y))
+
+    for name, x, y in unique_locs:
+        ax = get_ax(y)
+        ax.plot(x, y, "o", color="white", markersize=8, markeredgecolor="black",
+                markeredgewidth=1, zorder=20)
+        ax.text(x, y + 12, name, fontsize=8, color="white", ha="center", va="bottom",
+                zorder=21, fontweight="bold",
+                bbox=dict(boxstyle="round,pad=0.2", facecolor="black", alpha=0.7))
+
+    ax_surface.legend(loc="upper left", fontsize=10, framealpha=0.8)
+    fig.suptitle(f"{unique_locs[0][0]} → {unique_locs[-1][0]}", fontsize=14)
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=dpi, bbox_inches="tight")
+    plt.close()
