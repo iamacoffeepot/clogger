@@ -91,9 +91,13 @@ def release(version: str, notes: str) -> None:
         CREDITS_PATH.write_text(credits)
         print(f"Generated {CREDITS_PATH} ({len(credits)} chars)")
         run(["git", "add", str(CREDITS_PATH)])
-        run(["git", "commit", "-m", f"docs: update CREDITS.md for {version}"])
-        run(["git", "push"])
-        print("Committed and pushed CREDITS.md")
+        result = run(["git", "diff", "--cached", "--quiet"], check=False)
+        if result.returncode != 0:
+            run(["git", "commit", "-m", f"docs: update CREDITS.md for {version}"])
+            run(["git", "push"])
+            print("Committed and pushed CREDITS.md")
+        else:
+            print("CREDITS.md unchanged, no commit needed")
 
     # Tag the commit
     result = run(["git", "tag", version], check=False)
