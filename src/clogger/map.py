@@ -148,7 +148,7 @@ _ZERO_COST_TYPES = {
 }
 
 
-def _build_adjacency(conn: sqlite3.Connection) -> dict[str, list[MapLink]]:
+def _build_adjacency(conn: sqlite3.Connection, allowed_types: set[MapLinkType] | None = None) -> dict[str, list[MapLink]]:
     """Build adjacency dict from all non-ANYWHERE map links."""
     adj: dict[str, list[MapLink]] = defaultdict(list)
     rows = conn.execute(
@@ -158,6 +158,8 @@ def _build_adjacency(conn: sqlite3.Connection) -> dict[str, list[MapLink]]:
     ).fetchall()
     for row in rows:
         link = MapLink._from_row(row)
+        if allowed_types is not None and link.link_type not in allowed_types:
+            continue
         adj[link.src_location].append(link)
     return adj
 
@@ -227,32 +229,37 @@ def find_path(
     conn: sqlite3.Connection,
     src: str,
     dst: str,
+    allowed_types: set[MapLinkType] | None = None,
 ) -> list[MapLink] | None:
     """Find the shortest path between two locations.
 
     Considers all ANYWHERE teleports as potential starting points and
     picks the overall shortest path. Returns a list of MapLinks to
     traverse in order, or None if no path exists.
+
+    allowed_types: if set, only use these link types. Teleports from
+    ANYWHERE are only considered if MapLinkType.TELEPORT is allowed.
     """
-    adj = _build_adjacency(conn)
+    adj = _build_adjacency(conn, allowed_types)
 
     # Build location coordinate lookup
     loc_coords: dict[str, tuple[int, int]] = {}
     for row in conn.execute("SELECT name, x, y FROM locations WHERE x IS NOT NULL").fetchall():
         loc_coords[row[0]] = (row[1], row[2])
 
-    # Collect ANYWHERE teleport links
-    anywhere_links = conn.execute(
-        "SELECT id, src_location, dst_location, src_x, src_y, dst_x, dst_y, type, description "
-        "FROM map_links WHERE src_location = ?",
-        (MAP_LINK_ANYWHERE,),
-    ).fetchall()
-    anywhere = [MapLink._from_row(r) for r in anywhere_links]
-
-    # Candidate starts: actual source + each ANYWHERE teleport destination
+    # Candidate starts: always include actual source
     candidates: list[tuple[list[MapLink], str]] = [([], src)]
-    for link in anywhere:
-        candidates.append(([link], link.dst_location))
+
+    # Collect ANYWHERE teleport links if teleports are allowed
+    if allowed_types is None or MapLinkType.TELEPORT in allowed_types:
+        anywhere_links = conn.execute(
+            "SELECT id, src_location, dst_location, src_x, src_y, dst_x, dst_y, type, description "
+            "FROM map_links WHERE src_location = ?",
+            (MAP_LINK_ANYWHERE,),
+        ).fetchall()
+        for row in anywhere_links:
+            link = MapLink._from_row(row)
+            candidates.append(([link], link.dst_location))
 
     best_path: list[MapLink] | None = None
     best_cost = float("inf")
