@@ -1,7 +1,7 @@
-"""Fetch all spellbook teleport destinations and create map links.
+"""Fetch all teleport destinations and create map links.
 
-Covers Standard, Ancient, and Lunar spellbooks.
-Teleports have from_location="ANYWHERE" since they can be cast from any location.
+Covers spell teleports (Standard, Ancient, Lunar) and item teleports
+(jewellery, special items). All use from_location="ANYWHERE".
 """
 
 import argparse
@@ -13,13 +13,16 @@ from clogger.enums import MAP_LINK_ANYWHERE, MapLinkType
 from clogger.wiki import (
     fetch_pages_wikitext_batch,
     record_attributions_batch,
+    strip_wiki_links,
 )
 
 COORD_POSITIONAL = re.compile(r"\|(\d{3,5}),(\d{3,5})")
 COORD_XY_PARAM = re.compile(r"\|x\s*=\s*(\d+)")
 COORD_Y_PARAM = re.compile(r"\|y\s*=\s*(\d+)")
+TELEPORT_LINE = re.compile(r"\{\{TeleportLocationLine\|name=(?:\d+\.\s*)?\[\[([^\]|]+).*?\|x=(\d+)\|y=(\d+)")
 
-ALL_TELEPORTS = [
+# Spell pages: single destination per page
+SPELL_TELEPORTS = [
     # Standard spellbook
     "Varrock Teleport",
     "Lumbridge Teleport",
@@ -51,18 +54,31 @@ ALL_TELEPORTS = [
     "Ice Plateau Teleport",
 ]
 
+# Item pages: multiple destinations per page via {{TeleportLocationLine}}
+ITEM_TELEPORTS = [
+    "Ring of dueling",
+    "Games necklace",
+    "Combat bracelet",
+    "Skills necklace",
+    "Amulet of glory",
+    "Ring of wealth",
+    "Slayer ring",
+    "Digsite pendant",
+    "Necklace of passage",
+    "Burning amulet",
+    "Xeric's talisman",
+    "Drakan's medallion",
+]
+
 
 def extract_first_coord(wikitext: str) -> tuple[int, int] | None:
-    """Extract the first coordinate pair from a spell page."""
     match = COORD_POSITIONAL.search(wikitext)
     if match:
         return int(match.group(1)), int(match.group(2))
-
     x_match = COORD_XY_PARAM.search(wikitext)
     y_match = COORD_Y_PARAM.search(wikitext)
     if x_match and y_match:
         return int(x_match.group(1)), int(y_match.group(1))
-
     return None
 
 
@@ -72,24 +88,54 @@ def extract_level(wikitext: str) -> int | None:
 
 
 def extract_destination(wikitext: str, spell_name: str) -> str:
-    """Try to extract the destination location name from the spell page."""
     match = re.search(r"[Tt]eleports?\s+(?:the\s+)?(?:caster|player)\s+to\s+(?:the\s+)?(?:[\w\s]*?)?\[\[([^\]|]+)", wikitext)
     if match:
         return match.group(1).strip()
     return spell_name.replace(" Teleport", "")
 
 
+def parse_item_teleports(wikitext: str) -> list[tuple[str, int, int]]:
+    """Parse teleport destinations from an item page.
+
+    Handles {{TeleportLocationLine}} templates and wikitable rows with
+    [[Location]] + {{Map|x=...|y=...}} format.
+
+    Returns list of (destination_name, x, y).
+    """
+    results: list[tuple[str, int, int]] = []
+
+    # Method 1: TeleportLocationLine templates
+    for match in TELEPORT_LINE.finditer(wikitext):
+        results.append((match.group(1).strip(), int(match.group(2)), int(match.group(3))))
+
+    if results:
+        return results
+
+    # Method 2: Wikitable rows with [[Location]] and {{Map|x=|y=}}
+    rows = wikitext.split("|-")
+    for row in rows:
+        name_match = re.search(r"^\|?\s*\[\[([^\]|]+)", row.strip())
+        x_match = re.search(r"\|x=(\d+)", row)
+        y_match = re.search(r"\|y=(\d+)", row)
+        if name_match and x_match and y_match:
+            results.append((name_match.group(1).strip(), int(x_match.group(1)), int(y_match.group(1))))
+
+    return results
+
+
 def ingest(db_path: Path) -> None:
     create_tables(db_path)
     conn = get_connection(db_path)
 
-    print("Fetching teleport spell data...")
-    all_wikitext = fetch_pages_wikitext_batch(ALL_TELEPORTS)
+    all_pages = SPELL_TELEPORTS + ITEM_TELEPORTS
+    print(f"Fetching {len(all_pages)} teleport pages...")
+    all_wikitext = fetch_pages_wikitext_batch(all_pages)
 
     link_count = 0
     found_pages: list[str] = []
 
-    for spell_name in ALL_TELEPORTS:
+    # Spell teleports: single destination per page
+    for spell_name in SPELL_TELEPORTS:
         wikitext = all_wikitext.get(spell_name, "")
         if not wikitext:
             print(f"  Warning: page not found for '{spell_name}'")
@@ -108,20 +154,37 @@ def ingest(db_path: Path) -> None:
             """INSERT INTO map_links
                (from_location, to_location, from_x, from_y, to_x, to_y, type, description)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (
-                MAP_LINK_ANYWHERE,
-                destination,
-                0,
-                0,
-                coord[0],
-                coord[1],
-                MapLinkType.TELEPORT.value,
-                f"{spell_name}{level_note}",
-            ),
+            (MAP_LINK_ANYWHERE, destination, 0, 0, coord[0], coord[1],
+             MapLinkType.TELEPORT.value, f"{spell_name}{level_note}"),
         )
         link_count += 1
         found_pages.append(spell_name)
         print(f"  {spell_name}: -> {destination} ({coord[0]}, {coord[1]}){level_note}")
+
+    # Item teleports: multiple destinations per page
+    for item_name in ITEM_TELEPORTS:
+        wikitext = all_wikitext.get(item_name, "")
+        if not wikitext:
+            print(f"  Warning: page not found for '{item_name}'")
+            continue
+
+        destinations = parse_item_teleports(wikitext)
+        if not destinations:
+            print(f"  Warning: no teleport destinations for '{item_name}'")
+            continue
+
+        for dest_name, x, y in destinations:
+            conn.execute(
+                """INSERT INTO map_links
+                   (from_location, to_location, from_x, from_y, to_x, to_y, type, description)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (MAP_LINK_ANYWHERE, dest_name, 0, 0, x, y,
+                 MapLinkType.TELEPORT.value, f"{item_name}: {dest_name}"),
+            )
+            link_count += 1
+            print(f"  {item_name}: -> {dest_name} ({x}, {y})")
+
+        found_pages.append(item_name)
 
     if found_pages:
         print("Recording attributions...")
