@@ -12,7 +12,7 @@ from clogger.enums import Facility
 from clogger.wiki import fetch_page_wikitext
 
 # Map template coordinate patterns
-COORD_XY_PARAM = re.compile(r"\|x=(\d+)\|y=(\d+)")
+COORD_XY_PARAM = re.compile(r"\|x\s*=\s*(\d+)\|y\s*=\s*(\d+)")
 COORD_XY_COLON = re.compile(r"x:(\d+),y:(\d+)")
 COORD_POSITIONAL = re.compile(r"\|(\d{3,5}),(\d{3,5})")
 
@@ -20,7 +20,7 @@ FACILITY_PAGES = {
     Facility.BANK: "List_of_banks",
     Facility.FURNACE: "Furnace",
     Facility.ANVIL: "Anvil",
-    Facility.ALTAR: "Altar",
+    Facility.ALTAR: "Altar/Locations",
 }
 
 

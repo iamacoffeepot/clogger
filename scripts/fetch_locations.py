@@ -51,8 +51,8 @@ def parse_map_coords(wikitext: str) -> tuple[int | None, int | None]:
     if not map_text:
         return None, None
 
-    x_match = re.search(r"\|x=(\d+)", map_text)
-    y_match = re.search(r"\|y=(\d+)", map_text)
+    x_match = re.search(r"\|x\s*=\s*(\d+)", map_text)
+    y_match = re.search(r"\|y\s*=\s*(\d+)", map_text)
     if x_match and y_match:
         return int(x_match.group(1)), int(y_match.group(1))
 
