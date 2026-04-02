@@ -89,17 +89,17 @@ class Location:
             result[adj.direction] = Location.by_name(conn, adj.neighbor)
         return result
 
-    def within(self, conn: sqlite3.Connection, distance: int) -> list[tuple[Location, int]]:
-        """Return all locations reachable within `distance` hops via adjacency graph.
+    def within(self, conn: sqlite3.Connection, hops: int) -> list[tuple[Location, int]]:
+        """Return all locations reachable within `hops` via adjacency graph.
 
-        Returns a list of (Location, distance) tuples sorted by distance then name.
+        Returns a list of (Location, hops) tuples sorted by hops then name.
         """
         visited: dict[int, tuple[Location, int]] = {self.id: (self, 0)}
         queue: deque[tuple[Location, int]] = deque([(self, 0)])
 
         while queue:
             current, depth = queue.popleft()
-            if depth >= distance:
+            if depth >= hops:
                 continue
             for neighbor in current.neighbors(conn).values():
                 if neighbor is not None and neighbor.id not in visited:
