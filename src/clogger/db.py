@@ -247,6 +247,15 @@ SCHEMAS: list[str] = [
         FOREIGN KEY (location_id) REFERENCES locations(id)
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS facilities (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        type INTEGER NOT NULL,
+        x INTEGER NOT NULL,
+        y INTEGER NOT NULL,
+        name TEXT
+    )
+    """,
     f"""
     CREATE TABLE IF NOT EXISTS locations (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
