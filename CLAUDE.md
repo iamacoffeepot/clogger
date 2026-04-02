@@ -224,6 +224,30 @@ entry.name -> str | None
 entry.region -> Region | None                          # derived from nearest location
 ```
 
+### Monster (`src/clogger/monster.py`)
+
+```python
+from clogger.monster import Monster, MonsterLocation, MonsterDrop
+
+Monster.all(conn, region?) -> list[Monster]
+Monster.by_name(conn, name, version?) -> Monster | None
+Monster.by_slayer_category(conn, category) -> list[Monster]
+Monster.search(conn, name) -> list[Monster]            # partial name match
+monster.locations(conn) -> list[MonsterLocation]
+monster.drops(conn) -> list[MonsterDrop]
+monster.drops_by_name(conn, item_name) -> list[MonsterDrop]
+monster.has_immunity(immunity) -> bool
+monster.immunity_list() -> list[Immunity]
+monster.combat_level -> int | None
+monster.hitpoints -> int | None
+monster.immunities -> int                              # bitmask
+monster.slayer_category -> str | None
+monster.elemental_weakness_type -> str | None
+monster.elemental_weakness_percent -> int | None
+# Full stat block: attack/strength/defence/magic/ranged levels and bonuses
+# Full defensive bonuses: stab/slash/crush/magic/light/standard/heavy ranged
+```
+
 ### Wiki utilities (`src/clogger/wiki.py`)
 
 ```python
@@ -276,6 +300,7 @@ throttle()                                                                 # rat
 - `DiaryTier(str, Enum)` — Easy/Medium/Hard/Elite
 - `ShopType(str, Enum)` — 36 shop types (General, Gem, Fishing, Magic, etc.) with `from_label` fuzzy matching
 - `Facility(int, Enum)` — Bank, Furnace, Anvil, Range, Altar, Spinning wheel, Loom with `mask`, `label` properties
+- `Immunity(int, Enum)` — Poison, Venom, Cannon, Thrall, Burn with `mask`, `label` properties
 - `ALL_SKILLS_MASK`, `ALL_REGIONS_MASK` — bitmask constants for "all"
 
 ## Tests
