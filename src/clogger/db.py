@@ -248,6 +248,19 @@ SCHEMAS: list[str] = [
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS npcs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        version TEXT,
+        location TEXT,
+        x INTEGER,
+        y INTEGER,
+        options TEXT,
+        region INTEGER,
+        UNIQUE(name, version)
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS map_squares (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         plane INTEGER NOT NULL,
