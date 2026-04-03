@@ -117,6 +117,9 @@ public class ConsoleOverlay extends Overlay {
                 } else {
                     lines.add(new ConsoleLine(rawLine, LineType.TABLE_ROW, cells));
                 }
+            } else if (rawLine.strip().matches("^[-*_]{3,}$")) {
+                lines.add(new ConsoleLine(null, LineType.RULER));
+                seenTableHeader = false;
             } else {
                 seenTableHeader = false;
                 lines.add(new ConsoleLine(rawLine, LineType.TEXT));
@@ -324,6 +327,12 @@ public class ConsoleOverlay extends Overlay {
                         y -= LINE_HEIGHT;
                     }
                 }
+                case RULER -> {
+                    g.setColor(TABLE_BORDER);
+                    int rulerY = y - LINE_HEIGHT / 2 + 4;
+                    g.drawLine(PADDING + 4, rulerY, PADDING + 4 + maxWidth, rulerY);
+                    y -= LINE_HEIGHT;
+                }
                 case TOOL -> {
                     g.setFont(FONT);
                     List<String> wrapped = wrapText(line.text, g.getFontMetrics(), maxWidth);
@@ -505,7 +514,7 @@ public class ConsoleOverlay extends Overlay {
         return result;
     }
 
-    private enum LineType { SENDER, TEXT, CODE, QUOTE, TABLE_ROW, TABLE_HEADER, LIST_ITEM, TOOL, THINKING }
+    private enum LineType { SENDER, TEXT, CODE, QUOTE, TABLE_ROW, TABLE_HEADER, LIST_ITEM, RULER, TOOL, THINKING }
 
     private record ConsoleLine(String text, LineType type, String[] cells, int indent, String bullet) {
         ConsoleLine(String text, LineType type) {
