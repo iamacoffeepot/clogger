@@ -1,6 +1,9 @@
 package dev.ragger.plugin.ui;
 
 import net.runelite.client.ui.PluginPanel;
+import org.commonmark.node.Node;
+import org.commonmark.parser.Parser;
+import org.commonmark.renderer.html.HtmlRenderer;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -11,20 +14,33 @@ import java.util.function.Consumer;
 
 public class ChatPanel extends PluginPanel {
 
-    private final JTextArea chatLog;
+    private static final Parser MARKDOWN_PARSER = Parser.builder().build();
+    private static final HtmlRenderer HTML_RENDERER = HtmlRenderer.builder().build();
+
+    private static final String STYLE =
+        "<style>" +
+        "body { font-family: monospace; font-size: 10px; margin: 4px; color: #ddd; }" +
+        ".sender { font-weight: bold; color: #ffb347; }" +
+        "pre { background: #2a2a2a; padding: 4px; overflow-x: auto; }" +
+        "code { background: #2a2a2a; padding: 1px 3px; }" +
+        "hr { border: 1px solid #444; }" +
+        "</style>";
+
+    private final JEditorPane chatLog;
     private final JTextField inputField;
+    private final StringBuilder chatHtml = new StringBuilder();
 
     public ChatPanel(Consumer<String> onMessage) {
         super(false);
         setLayout(new BorderLayout());
         setBorder(new EmptyBorder(10, 10, 10, 10));
 
-        // Chat log
-        chatLog = new JTextArea();
+        // Chat log — HTML rendering
+        chatLog = new JEditorPane();
+        chatLog.setContentType("text/html");
         chatLog.setEditable(false);
-        chatLog.setLineWrap(true);
-        chatLog.setWrapStyleWord(true);
-        chatLog.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        chatLog.putClientProperty(JEditorPane.HONOR_DISPLAY_PROPERTIES, Boolean.TRUE);
+        chatLog.setBackground(new Color(0x2d, 0x2d, 0x2d));
 
         JScrollPane scrollPane = new JScrollPane(chatLog);
         scrollPane.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_ALWAYS);
@@ -49,8 +65,24 @@ public class ChatPanel extends PluginPanel {
 
     public void addMessage(String sender, String message) {
         SwingUtilities.invokeLater(() -> {
-            chatLog.append(sender + ": " + message + "\n\n");
+            Node document = MARKDOWN_PARSER.parse(message);
+            String html = HTML_RENDERER.render(document);
+
+            chatHtml.append("<p><span class='sender'>").append(sender).append(":</span></p>");
+            chatHtml.append(html);
+            chatHtml.append("<hr>");
+
+            chatLog.setText("<html><head>" + STYLE + "</head><body>" + chatHtml + "</body></html>");
+
+            // Scroll to bottom
             chatLog.setCaretPosition(chatLog.getDocument().getLength());
+        });
+    }
+
+    public void clear() {
+        SwingUtilities.invokeLater(() -> {
+            chatHtml.setLength(0);
+            chatLog.setText("");
         });
     }
 }

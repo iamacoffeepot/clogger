@@ -1,5 +1,7 @@
 package dev.ragger.plugin;
 
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -13,7 +15,7 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * Manages communication with the Claude CLI.
+ * Manages communication with the Claude CLI with persistent sessions.
  */
 public class ClaudeClient {
 
@@ -43,26 +45,26 @@ public class ClaudeClient {
     private String execute(String message, String... behaviors) throws IOException, InterruptedException {
         List<String> command = new ArrayList<>();
         command.add(claudePath);
-        command.add("--bare");
         command.add("-p");
         command.add(message);
+        command.add("--output-format");
+        command.add("json");
 
-        String systemPrompt = loadBehaviors(behaviors);
-        if (!systemPrompt.isEmpty()) {
-            command.add("--system-prompt");
-            command.add(systemPrompt);
-        }
-
-        if (sessionId != null) {
+        // Only set system prompt on the first message (new session)
+        if (sessionId == null) {
+            String systemPrompt = loadBehaviors(behaviors);
+            if (!systemPrompt.isEmpty()) {
+                command.add("--system-prompt");
+                command.add(systemPrompt);
+            }
+        } else {
             command.add("--resume");
             command.add(sessionId);
         }
 
-        command.add("--output-format");
-        command.add("text");
-
         ProcessBuilder pb = new ProcessBuilder(command);
         pb.redirectErrorStream(true);
+        pb.redirectInput(ProcessBuilder.Redirect.from(new java.io.File("/dev/null")));
         Process process = pb.start();
 
         StringBuilder output = new StringBuilder();
@@ -82,7 +84,29 @@ public class ClaudeClient {
             log.warn("Claude CLI exited with code {}", exitCode);
         }
 
-        return output.toString();
+        return parseResponse(output.toString());
+    }
+
+    private String parseResponse(String rawOutput) {
+        try {
+            JsonObject json = new JsonParser().parse(rawOutput).getAsJsonObject();
+
+            // Capture session ID for subsequent messages
+            if (json.has("session_id")) {
+                sessionId = json.get("session_id").getAsString();
+                log.info("Session ID: {}", sessionId);
+            }
+
+            if (json.has("result")) {
+                return json.get("result").getAsString();
+            }
+
+            return rawOutput;
+        } catch (Exception e) {
+            // If it's not valid JSON, return raw output (error messages, etc.)
+            log.warn("Failed to parse Claude response as JSON", e);
+            return rawOutput;
+        }
     }
 
     /**

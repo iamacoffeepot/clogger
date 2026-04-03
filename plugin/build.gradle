@@ -26,6 +26,9 @@ dependencies {
     annotationProcessor 'org.projectlombok:lombok:1.18.34'
     compileOnly 'org.slf4j:slf4j-api:2.0.16'
 
+    // Markdown rendering
+    implementation 'org.commonmark:commonmark:0.28.0'
+
     // Wasm runtime
     implementation 'com.dylibso.chicory:runtime:1.1.1'
 
