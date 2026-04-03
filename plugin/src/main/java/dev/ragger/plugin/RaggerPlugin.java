@@ -78,7 +78,24 @@ public class RaggerPlugin extends Plugin {
         chatPanel.addMessage("You", message);
         chatPanel.showThinking();
         claude.send(message, "BASE", "ASSISTANT").thenAccept(response -> {
-            chatPanel.addMessage("Claude", response);
+            // Display tool usage log
+            for (String toolEntry : response.getToolLog()) {
+                chatPanel.addToolMessage(toolEntry);
+            }
+
+            // Load any scripts Claude submitted via ragger_run
+            if (response.hasScripts()) {
+                for (int i = 0; i < response.getScripts().size(); i++) {
+                    String script = response.getScripts().get(i);
+                    String name = "script_" + System.currentTimeMillis() + "_" + i;
+                    scriptManager.load(name, script);
+                }
+            }
+
+            // Display Claude's chat response
+            if (!response.getText().isEmpty()) {
+                chatPanel.addMessage("Claude", response.getText());
+            }
         });
     }
 }

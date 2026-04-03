@@ -1,5 +1,6 @@
 package dev.ragger.plugin;
 
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import org.slf4j.Logger;
@@ -16,6 +17,7 @@ import java.util.concurrent.CompletableFuture;
 
 /**
  * Manages communication with the Claude CLI with persistent sessions.
+ * Uses stream-json output to capture both chat text and tool calls.
  */
 public class ClaudeClient {
 
@@ -33,24 +35,25 @@ public class ClaudeClient {
     /**
      * Send a message to Claude asynchronously with the given behavior profiles.
      */
-    public CompletableFuture<String> send(String message, String... behaviors) {
+    public CompletableFuture<ClaudeResponse> send(String message, String... behaviors) {
         return CompletableFuture.supplyAsync(() -> {
             try {
                 return execute(message, behaviors);
             } catch (Exception e) {
                 log.error("Claude CLI error", e);
-                return "Error: " + e.getMessage();
+                return new ClaudeResponse("Error: " + e.getMessage(), List.of(), List.of());
             }
         });
     }
 
-    private String execute(String message, String... behaviors) throws IOException, InterruptedException {
+    private ClaudeResponse execute(String message, String... behaviors) throws IOException, InterruptedException {
         List<String> command = new ArrayList<>();
         command.add(claudePath);
         command.add("-p");
         command.add(message);
         command.add("--output-format");
-        command.add("json");
+        command.add("stream-json");
+        command.add("--verbose");
         command.add("--model");
         command.add(model);
         command.add("--allowedTools");
@@ -58,6 +61,11 @@ public class ClaudeClient {
         command.add("Read");
         command.add("Glob");
         command.add("Grep");
+        command.add("mcp__ragger__RaggerRun");
+
+        // Load Ragger MCP tools only for plugin sessions
+        command.add("--mcp-config");
+        command.add("{\"mcpServers\":{\"ragger\":{\"type\":\"stdio\",\"command\":\"uv\",\"args\":[\"run\",\"python\",\"src/ragger/mcp_server.py\"]}}}");
 
         // Only set system prompt on the first message (new session)
         if (sessionId == null) {
@@ -80,15 +88,15 @@ public class ClaudeClient {
         pb.redirectInput(ProcessBuilder.Redirect.from(new java.io.File("/dev/null")));
         Process process = pb.start();
 
-        StringBuilder output = new StringBuilder();
+        StringBuilder resultText = new StringBuilder();
+        List<String> scripts = new ArrayList<>();
+        List<String> toolLog = new ArrayList<>();
+
         try (BufferedReader reader = new BufferedReader(
                 new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
             String line;
             while ((line = reader.readLine()) != null) {
-                if (!output.isEmpty()) {
-                    output.append("\n");
-                }
-                output.append(line);
+                processStreamLine(line, resultText, scripts, toolLog);
             }
         }
 
@@ -97,29 +105,106 @@ public class ClaudeClient {
             log.warn("Claude CLI exited with code {}", exitCode);
         }
 
-        return parseResponse(output.toString());
+        return new ClaudeResponse(resultText.toString(), scripts, toolLog);
     }
 
-    private String parseResponse(String rawOutput) {
-        try {
-            JsonObject json = new JsonParser().parse(rawOutput).getAsJsonObject();
+    private void processStreamLine(String line, StringBuilder resultText, List<String> scripts, List<String> toolLog) {
+        if (line.isBlank()) return;
 
-            // Capture session ID for subsequent messages
-            if (json.has("session_id")) {
-                sessionId = json.get("session_id").getAsString();
+        try {
+            JsonObject event = new JsonParser().parse(line).getAsJsonObject();
+
+            // Capture session ID from result event
+            if (event.has("session_id")) {
+                sessionId = event.get("session_id").getAsString();
                 log.info("Session ID: {}", sessionId);
             }
 
-            if (json.has("result")) {
-                return json.get("result").getAsString();
+            // Final result text
+            if (event.has("result")) {
+                resultText.append(event.get("result").getAsString());
             }
 
-            return rawOutput;
+            // Process assistant messages for tool use
+            if (event.has("type") && "assistant".equals(event.get("type").getAsString())) {
+                if (event.has("message")) {
+                    processToolUse(event.getAsJsonObject("message"), scripts, toolLog);
+                }
+            }
         } catch (Exception e) {
-            // If it's not valid JSON, return raw output (error messages, etc.)
-            log.warn("Failed to parse Claude response as JSON", e);
-            return rawOutput;
+            // Not all lines are JSON (e.g. stderr), log for debugging
+            log.debug("Non-JSON stream line: {}", line);
         }
+    }
+
+    private void processToolUse(JsonObject event, List<String> scripts, List<String> toolLog) {
+        try {
+            // Check for tool_use content blocks
+            if (event.has("content")) {
+                for (JsonElement element : event.getAsJsonArray("content")) {
+                    JsonObject block = element.getAsJsonObject();
+                    if (!"tool_use".equals(block.get("type").getAsString())) continue;
+
+                    String toolName = block.get("name").getAsString();
+                    JsonObject input = block.has("input") ? block.getAsJsonObject("input") : null;
+
+                    // Log all tool usage
+                    toolLog.add(formatToolLog(toolName, input));
+
+                    // Extract scripts from ragger_run
+                    if (isRaggerRun(toolName) && input != null && input.has("script")) {
+                        scripts.add(input.get("script").getAsString());
+                        log.info("Script captured from ragger_run: {} chars", input.get("script").getAsString().length());
+                    }
+                }
+            }
+
+            // Also check top-level tool_use events
+            if (event.has("name")) {
+                String toolName = event.get("name").getAsString();
+                JsonObject input = event.has("input") ? event.getAsJsonObject("input") : null;
+
+                toolLog.add(formatToolLog(toolName, input));
+
+                if (isRaggerRun(toolName) && input != null && input.has("script")) {
+                    scripts.add(input.get("script").getAsString());
+                    log.info("Script captured from ragger_run: {} chars", input.get("script").getAsString().length());
+                }
+            }
+        } catch (Exception e) {
+            log.debug("Error processing tool use event", e);
+        }
+    }
+
+    private boolean isRaggerRun(String toolName) {
+        return toolName.endsWith("RaggerRun");
+    }
+
+    private String formatToolLog(String toolName, JsonObject input) {
+        // Strip mcp__ prefix for display
+        String displayName = toolName.replaceFirst("^mcp__\\w+__", "");
+
+        if (input == null) return displayName;
+
+        // Show a brief summary of the input
+        if (input.has("command")) {
+            return displayName + ": " + truncate(input.get("command").getAsString(), 80);
+        }
+        if (input.has("pattern")) {
+            return displayName + ": " + input.get("pattern").getAsString();
+        }
+        if (input.has("file_path")) {
+            return displayName + ": " + input.get("file_path").getAsString();
+        }
+        if (input.has("script")) {
+            return displayName + ": " + truncate(input.get("script").getAsString(), 60);
+        }
+        return displayName;
+    }
+
+    private static String truncate(String s, int maxLen) {
+        if (s.length() <= maxLen) return s;
+        return s.substring(0, maxLen) + "...";
     }
 
     /**

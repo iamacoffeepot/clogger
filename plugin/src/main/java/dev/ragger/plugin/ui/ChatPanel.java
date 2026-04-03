@@ -43,6 +43,7 @@ public class ChatPanel extends PluginPanel {
         "th, td { border: 1px solid #555; padding: 3px 6px; }" +
         "th { background: #383838; }" +
         ".thinking { color: #888; font-style: italic; }" +
+        ".tool { color: #666; font-style: italic; font-size: 9px; padding: 2px 0; }" +
         // JEditorPane ignores margin on most elements, use padding instead
         "ul, ol { padding-left: 20px; margin: 2px 0; }" +
         "li { margin: 1px 0; }" +
@@ -182,6 +183,15 @@ public class ChatPanel extends PluginPanel {
             chatHtml.append("<div class='message'>").append(html).append("</div>");
             chatHtml.append("<p class='divider'></p>");
 
+            refreshDisplay();
+        });
+    }
+
+    public void addToolMessage(String message) {
+        SwingUtilities.invokeLater(() -> {
+            chatHtml.append("<div class='tool'>")
+                .append(escapeHtml(message))
+                .append("</div>");
             refreshDisplay();
         });
     }
