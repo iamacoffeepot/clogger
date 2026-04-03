@@ -40,6 +40,14 @@ public class ClientApi {
     public GameState state() { return client.getGameState(); }
     public boolean logged_in() { return client.getGameState() == GameState.LOGGED_IN; }
 
+    // Canvas/viewport dimensions
+    public int canvas_width() { return client.getCanvasWidth(); }
+    public int canvas_height() { return client.getCanvasHeight(); }
+    public int viewport_width() { return client.getViewportWidth(); }
+    public int viewport_height() { return client.getViewportHeight(); }
+    public int viewport_x() { return client.getViewportXOffset(); }
+    public int viewport_y() { return client.getViewportYOffset(); }
+
     // Idle tracking
     public int mouse_idle_ticks() { return client.getMouseIdleTicks(); }
     public int keyboard_idle_ticks() { return client.getKeyboardIdleTicks(); }

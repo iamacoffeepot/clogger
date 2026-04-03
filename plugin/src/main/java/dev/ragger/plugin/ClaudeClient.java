@@ -156,8 +156,9 @@ public class ClaudeClient {
                     // Extract scripts from RaggerRun
                     if (isRaggerRun(toolName) && input != null && input.has("script")) {
                         String scriptName = input.has("name") ? input.get("name").getAsString() : "unnamed";
-                        scripts.put(scriptName, input.get("script").getAsString());
-                        log.info("Script '{}' captured: {} chars", scriptName, input.get("script").getAsString().length());
+                        String uid = scriptName + "-" + Integer.toHexString((int)(Math.random() * 0xFFFF));
+                        scripts.put(uid, input.get("script").getAsString());
+                        log.info("Script '{}' captured: {} chars", uid, input.get("script").getAsString().length());
                     }
                 }
             }

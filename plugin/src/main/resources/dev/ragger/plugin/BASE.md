@@ -22,6 +22,8 @@ To execute code in the RuneLite client, call the `RaggerRun` MCP tool with a Lua
 
 Standard Lua libraries: `base`, `string`, `table`, `math`. No `io`, `os`, or `debug` — the sandbox is locked down.
 
+`math.random()` is pre-seeded with the system clock. Use `math.random()` for 0-1 float, `math.random(n)` for 1-n integer, `math.random(m, n)` for m-n integer. Note: the seed is not cryptographically secure — do not use for anything security-sensitive.
+
 ### API: `chat`
 
 Send messages to the RuneLite chat box. Methods use colon syntax (`:`).
@@ -87,6 +89,31 @@ camera:shake_disabled()       -- is shake disabled?
 camera:set_shake_disabled(true)
 ```
 
+### API: `overlay` (render context)
+
+Drawing context passed as an argument to `on_render`. Not a global — only available during rendering.
+
+```lua
+on_render = function(g)
+    -- Text
+    g:text(x, y, "message", 0xFFFFFF)       -- draw text (color optional, default white)
+    g:text(x, y, "message")
+
+    -- Rectangles
+    g:rect(x, y, w, h, 0xFF0000)            -- rectangle outline
+    g:fill_rect(x, y, w, h, 0x00FF00)       -- filled rectangle
+
+    -- Lines
+    g:line(x1, y1, x2, y2, 0xFFFF00)        -- draw line
+
+    -- Circles
+    g:circle(x, y, radius, 0x00FFFF)        -- circle outline
+    g:fill_circle(x, y, radius, 0xFF00FF)   -- filled circle
+end
+```
+
+Colors are RGB integers (e.g. `0xFF0000` for red, `0x00FF00` for green).
+
 ### API: `client`
 
 Read client and game state information.
@@ -106,6 +133,14 @@ client:weight()               -- carried weight
 client:state()                -- GameState enum value
 client:logged_in()            -- true if logged in
 
+-- Canvas/viewport
+client:canvas_width()         -- full canvas width
+client:canvas_height()        -- full canvas height
+client:viewport_width()       -- game viewport width
+client:viewport_height()      -- game viewport height
+client:viewport_x()           -- viewport X offset
+client:viewport_y()           -- viewport Y offset
+
 -- Idle tracking
 client:mouse_idle_ticks()     -- ticks since last mouse input
 client:keyboard_idle_ticks()  -- ticks since last keyboard input
@@ -121,6 +156,102 @@ client.LOGIN_SCREEN           client.LOGIN_SCREEN_AUTHENTICATOR
 client.LOGGING_IN             client.LOADING
 client.LOGGED_IN              client.CONNECTION_LOST
 client.HOPPING
+```
+
+### API: `scene`
+
+Query NPCs, objects, and items in the loaded scene area (~104x104 tiles around the player).
+
+```lua
+-- NPCs — returns array of tables
+local npcs = scene:npcs()
+for i = 1, #npcs do
+    local npc = npcs[i]
+    -- npc.name       (string)
+    -- npc.id         (int)
+    -- npc.x          (int, world X)
+    -- npc.y          (int, world Y)
+    -- npc.plane      (int)
+    -- npc.combat     (int, combat level)
+    -- npc.animation  (int, -1 if idle)
+    -- npc.hp_ratio   (int)
+    -- npc.hp_scale   (int)
+    -- npc.is_dead    (bool)
+end
+```
+
+Note: returns all NPCs loaded by the client, not just those visible on screen.
+
+```lua
+-- Players — returns array of tables
+local players = scene:players()
+for i = 1, #players do
+    local p = players[i]
+    -- p.name        (string)
+    -- p.x           (int, world X)
+    -- p.y           (int, world Y)
+    -- p.plane       (int)
+    -- p.combat      (int, combat level)
+    -- p.animation   (int, -1 if idle)
+    -- p.hp_ratio    (int)
+    -- p.hp_scale    (int)
+    -- p.is_dead     (bool)
+    -- p.is_friend   (bool)
+    -- p.is_clan     (bool)
+    -- p.team        (int, team cape number)
+end
+```
+
+### API: `player`
+
+Read local player state.
+
+```lua
+-- Identity
+player:name()                 -- player name
+player:combat_level()         -- combat level
+
+-- Position
+player:x()                    -- world X coordinate
+player:y()                    -- world Y coordinate
+player:plane()                -- current plane/level
+
+-- Skills (use skill.NAME constants)
+player:level(skill.MINING)    -- real level
+player:boosted_level(skill.STRENGTH) -- boosted level (potions etc)
+player:xp(skill.ATTACK)      -- experience points
+player:total_level()          -- total level
+
+-- Health/prayer
+player:hp()                   -- current hitpoints
+player:max_hp()               -- max hitpoints
+player:prayer()               -- current prayer
+player:max_prayer()           -- max prayer
+
+-- State
+player:animation()            -- current animation ID (-1 if idle)
+player:is_dead()              -- true if dead
+player:is_interacting()       -- true if interacting with something
+player:orientation()          -- facing direction
+
+-- Overhead text
+player:overhead_text()        -- get overhead text
+player:set_overhead_text("!") -- set overhead text
+```
+
+### API: `skill`
+
+Skill enum constants for use with `player:level()`, `player:boosted_level()`, `player:xp()`.
+
+```
+skill.ATTACK       skill.DEFENCE      skill.STRENGTH
+skill.HITPOINTS    skill.RANGED       skill.PRAYER
+skill.MAGIC        skill.COOKING      skill.WOODCUTTING
+skill.FLETCHING    skill.FISHING      skill.FIREMAKING
+skill.CRAFTING     skill.SMITHING     skill.MINING
+skill.HERBLORE     skill.AGILITY      skill.THIEVING
+skill.SLAYER       skill.FARMING      skill.RUNECRAFT
+skill.HUNTER       skill.CONSTRUCTION skill.SAILING
 ```
 
 ### Examples
@@ -140,6 +271,12 @@ Print camera position:
 chat:game("Camera: " .. camera:x() .. ", " .. camera:y() .. ", " .. camera:z())
 ```
 
+Show player stats:
+```lua
+chat:game(player:name() .. " - HP: " .. player:hp() .. "/" .. player:max_hp())
+chat:game("Mining level: " .. player:level(skill.MINING))
+```
+
 ### Lifecycle Hooks
 
 Scripts can return a table with lifecycle hooks for persistent behavior:
@@ -154,7 +291,10 @@ return {
 
     on_tick = function()
         counter = counter + 1
-        chat:game("Tick " .. counter)
+    end,
+
+    on_render = function(g)
+        g:text(50, 50, "Ticks: " .. counter, 0xFFFF00)
     end,
 
     on_stop = function()
@@ -165,6 +305,7 @@ return {
 
 - `on_start` — called once when the script is loaded
 - `on_tick` — called every game tick (600ms)
+- `on_render` — called every render frame (use overlay API here)
 - `on_stop` — called when the script is unloaded
 
 If a script does not return a table, it runs once top-to-bottom (one-shot mode). Locals defined in the script body are captured by hook closures and persist for the script's lifetime.
@@ -175,3 +316,4 @@ If a script does not return a table, it runs once top-to-bottom (one-shot mode).
 - Persistent scripts return a hooks table and run until unloaded.
 - Keep scripts focused on a single task.
 - Do not use infinite loops — use `on_tick` for recurring work.
+- Return `false` from `on_tick` to self-terminate the script.
