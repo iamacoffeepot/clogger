@@ -207,6 +207,24 @@ for i = 1, #players do
 end
 ```
 
+### API: `items`
+
+Look up item information and prices by item ID.
+
+```lua
+items:name(4151)                    -- "Abyssal whip"
+items:grand_exchange_price(4151)    -- current GE price
+items:high_alchemy_price(4151)      -- high alchemy value
+items:base_price(4151)              -- store/base value
+items:is_stackable(4151)            -- true/false
+items:is_members(4151)              -- true/false
+
+-- Full lookup returns a table
+local item = items:lookup(4151)
+-- item.name, item.grand_exchange_price, item.high_alchemy_price,
+-- item.base_price, item.stackable, item.members
+```
+
 ### API: `coords`
 
 Convert between coordinate systems. Returns nil if the point is off-screen or outside the loaded scene.
@@ -354,3 +372,4 @@ If a script does not return a table, it runs once top-to-bottom (one-shot mode).
 - Keep scripts focused on a single task.
 - Do not use infinite loops — use `on_tick` for recurring work.
 - Return `false` from `on_tick` to self-terminate the script.
+- Fetch data (scene:npcs(), scene:players()) in `on_tick` and store in locals. Only draw in `on_render` — it runs every frame (~50 FPS) so keep it lightweight.

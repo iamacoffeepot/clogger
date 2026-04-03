@@ -2,6 +2,7 @@ package dev.ragger.plugin.scripting;
 
 import net.runelite.api.Client;
 import net.runelite.client.chat.ChatMessageManager;
+import net.runelite.client.game.ItemManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import party.iroiro.luajava.Lua;
@@ -21,17 +22,19 @@ public class LuaScript {
     private final String source;
     private final Client client;
     private final ChatMessageManager chatMessageManager;
+    private final ItemManager itemManager;
     private final OverlayApi overlayApi = new OverlayApi();
     private Lua lua;
     private boolean running = false;
     private boolean hasHooks = false;
     private boolean requestStop = false;
 
-    public LuaScript(String name, String source, Client client, ChatMessageManager chatMessageManager) {
+    public LuaScript(String name, String source, Client client, ChatMessageManager chatMessageManager, ItemManager itemManager) {
         this.name = name;
         this.source = source;
         this.client = client;
         this.chatMessageManager = chatMessageManager;
+        this.itemManager = itemManager;
     }
 
     public void start() {
@@ -53,6 +56,7 @@ public class LuaScript {
             lua.set("skill", new SkillApi());
             new SceneApi(client).register(lua);
             new CoordsApi(client).register(lua);
+            new ItemsApi(itemManager).register(lua);
 
             lua.run(source);
 

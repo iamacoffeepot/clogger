@@ -2,6 +2,7 @@ package dev.ragger.plugin.scripting;
 
 import net.runelite.api.Client;
 import net.runelite.client.chat.ChatMessageManager;
+import net.runelite.client.game.ItemManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -17,11 +18,13 @@ public class ScriptManager {
 
     private final Client client;
     private final ChatMessageManager chatMessageManager;
+    private final ItemManager itemManager;
     private final ConcurrentHashMap<String, LuaScript> scripts = new ConcurrentHashMap<>();
 
-    public ScriptManager(Client client, ChatMessageManager chatMessageManager) {
+    public ScriptManager(Client client, ChatMessageManager chatMessageManager, ItemManager itemManager) {
         this.client = client;
         this.chatMessageManager = chatMessageManager;
+        this.itemManager = itemManager;
     }
 
     /**
@@ -33,7 +36,7 @@ public class ScriptManager {
             existing.stop();
         }
 
-        LuaScript script = new LuaScript(name, source, client, chatMessageManager);
+        LuaScript script = new LuaScript(name, source, client, chatMessageManager, itemManager);
         scripts.put(name, script);
         script.start();
         log.info("Loaded script: {}", name);

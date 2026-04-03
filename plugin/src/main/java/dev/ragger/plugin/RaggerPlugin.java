@@ -6,6 +6,7 @@ import dev.ragger.plugin.scripting.ScriptManager;
 import dev.ragger.plugin.scripting.ScriptOverlay;
 import net.runelite.api.Client;
 import net.runelite.client.chat.ChatMessageManager;
+import net.runelite.client.game.ItemManager;
 import net.runelite.api.events.GameTick;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
@@ -42,6 +43,9 @@ public class RaggerPlugin extends Plugin {
     private OverlayManager overlayManager;
 
     @Inject
+    private ItemManager itemManager;
+
+    @Inject
     private RaggerConfig config;
 
     @Provides
@@ -58,7 +62,7 @@ public class RaggerPlugin extends Plugin {
 
     @Override
     protected void startUp() {
-        scriptManager = new ScriptManager(client, chatMessageManager);
+        scriptManager = new ScriptManager(client, chatMessageManager, itemManager);
         scriptOverlay = new ScriptOverlay(scriptManager);
         overlayManager.add(scriptOverlay);
         claude = new ClaudeClient(config.claudePath(), config.claudeModel());
