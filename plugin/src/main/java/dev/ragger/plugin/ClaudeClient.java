@@ -69,18 +69,18 @@ public class ClaudeClient {
         command.add("--mcp-config");
         command.add("{\"mcpServers\":{\"ragger\":{\"type\":\"stdio\",\"command\":\"uv\",\"args\":[\"run\",\"python\",\"src/ragger/mcp_server.py\"]}}}");
 
-        // Only set system prompt on the first message (new session)
-        if (sessionId == null) {
-            String systemPrompt = loadBehaviors(behaviors);
-            if (!systemPrompt.isEmpty()) {
-                command.add("--append-system-prompt");
-                command.add(systemPrompt);
-            }
-        } else {
+        String systemPrompt = loadBehaviors(behaviors);
+        if (!systemPrompt.isEmpty()) {
+            command.add("--append-system-prompt");
+            command.add(systemPrompt);
+        }
+
+        if (sessionId != null) {
             command.add("--resume");
             command.add(sessionId);
         }
 
+        log.info("Claude CLI command args: {}", command.size());
         ProcessBuilder pb = new ProcessBuilder(command);
         String projectRoot = System.getenv("RAGGER_PROJECT_ROOT");
         if (projectRoot != null) {
@@ -234,7 +234,9 @@ public class ClaudeClient {
                 if (!sb.isEmpty()) {
                     sb.append("\n\n");
                 }
-                sb.append(new String(is.readAllBytes(), StandardCharsets.UTF_8));
+                String content = new String(is.readAllBytes(), StandardCharsets.UTF_8);
+                sb.append(content);
+                log.info("Loaded behavior '{}': {} chars", behavior, content.length());
             } catch (IOException e) {
                 log.error("Failed to load behavior: {}", behavior, e);
             }
