@@ -78,7 +78,7 @@ public class RaggerPlugin extends Plugin {
         scriptOverlay = new ScriptOverlay(scriptManager);
         overlayManager.add(scriptOverlay);
         claude = new ClaudeClient(config.claudePath(), config.claudeModel());
-        chatPanel = new ChatPanel(this::onUserMessage);
+        chatPanel = new ChatPanel();
         consoleOverlay = new ConsoleOverlay(client, this::onUserMessage);
         overlayManager.add(consoleOverlay);
 
@@ -134,78 +134,62 @@ public class RaggerPlugin extends Plugin {
 
     @Subscribe
     public void onGameTick(GameTick event) {
-        // Load pending scripts on the client thread
         Map.Entry<String, String> pending;
         while ((pending = pendingScripts.poll()) != null) {
             scriptManager.load(pending.getKey(), pending.getValue());
-            addToolMessage("Loaded script: " + pending.getKey());
+            consoleOverlay.addToolMessage("Loaded script: " + pending.getKey());
         }
         scriptManager.tick();
-    }
-
-    private void addMessage(String sender, String message) {
-        chatPanel.addMessage(sender, message);
-        consoleOverlay.addMessage(sender, message);
-    }
-
-    private void addToolMessage(String message) {
-        chatPanel.addToolMessage(message);
-        consoleOverlay.addToolMessage(message);
     }
 
     private void onUserMessage(String message) {
         if (message.equalsIgnoreCase("/reset")) {
             claude.resetSession();
-            chatPanel.clear();
             consoleOverlay.clear();
-            addMessage("Claude", "Session reset.");
+            consoleOverlay.addMessage("Claude", "Session reset.");
             return;
         }
 
         if (message.equalsIgnoreCase("/stop")) {
             scriptManager.shutdown();
-            addToolMessage("All scripts stopped.");
+            consoleOverlay.addToolMessage("All scripts stopped.");
             return;
         }
 
         if (message.startsWith("/stop ")) {
             String name = message.substring(6).trim();
             scriptManager.unload(name);
-            addToolMessage("Stopped: " + name);
+            consoleOverlay.addToolMessage("Stopped: " + name);
             return;
         }
 
         if (message.equalsIgnoreCase("/scripts")) {
             var names = scriptManager.list();
             if (names.isEmpty()) {
-                addToolMessage("No active scripts.");
+                consoleOverlay.addToolMessage("No active scripts.");
             } else {
-                addToolMessage("Active scripts: " + String.join(", ", names));
+                consoleOverlay.addToolMessage("Active scripts: " + String.join(", ", names));
             }
             return;
         }
 
-        addMessage("You", message);
-        chatPanel.showThinking();
+        consoleOverlay.addMessage("You", message);
         consoleOverlay.addThinking();
         claude.send(message, "BASE", "ASSISTANT").thenAccept(response -> {
             consoleOverlay.removeThinking();
 
-            // Display tool usage log
             for (String toolEntry : response.getToolLog()) {
-                addToolMessage(toolEntry);
+                consoleOverlay.addToolMessage(toolEntry);
             }
 
-            // Queue scripts to load on the client thread (next game tick)
             if (response.hasScripts()) {
                 response.getScripts().forEach((name, source) -> {
                     pendingScripts.add(new AbstractMap.SimpleEntry<>(name, source));
                 });
             }
 
-            // Display Claude's chat response
             if (!response.getText().isEmpty()) {
-                addMessage("Claude", response.getText());
+                consoleOverlay.addMessage("Claude", response.getText());
             }
         });
     }

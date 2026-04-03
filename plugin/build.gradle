@@ -27,11 +27,6 @@ dependencies {
     annotationProcessor 'org.projectlombok:lombok:1.18.34'
     compileOnly 'org.slf4j:slf4j-api:2.0.16'
 
-    // Markdown rendering
-    implementation 'org.commonmark:commonmark:0.28.0'
-    implementation 'org.commonmark:commonmark-ext-gfm-tables:0.28.0'
-    implementation 'org.commonmark:commonmark-ext-gfm-strikethrough:0.28.0'
-
     // Lua scripting
     implementation 'party.iroiro.luajava:luaj:4.1.0'
 
