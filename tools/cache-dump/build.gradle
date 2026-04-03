@@ -1,0 +1,35 @@
+plugins {
+    id 'java'
+}
+
+group = 'dev.clogger'
+version = '0.1.0'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+repositories {
+    mavenCentral()
+    maven {
+        url 'https://repo.runelite.net'
+    }
+}
+
+dependencies {
+    implementation 'net.runelite:cache:1.12.24-SNAPSHOT'
+    implementation 'com.google.code.gson:gson:2.11.0'
+    implementation 'org.slf4j:slf4j-simple:2.0.16'
+}
+
+tasks.register('dumpCollision', JavaExec) {
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'dev.clogger.cachedump.DumpCollision'
+}
+
+tasks.register('dumpWater', JavaExec) {
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'dev.clogger.cachedump.DumpWater'
+}
