@@ -20,6 +20,9 @@ import net.runelite.client.ui.ClientToolbar;
 import net.runelite.client.ui.NavigationButton;
 import net.runelite.client.util.ImageUtil;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import javax.inject.Inject;
 import java.awt.image.BufferedImage;
 import java.util.AbstractMap;
@@ -32,6 +35,8 @@ import java.util.concurrent.ConcurrentLinkedQueue;
     tags = {"ai", "claude", "lua", "assistant"}
 )
 public class RaggerPlugin extends Plugin {
+
+    private static final Logger log = LoggerFactory.getLogger(RaggerPlugin.class);
 
     @Inject
     private Client client;
@@ -67,6 +72,7 @@ public class RaggerPlugin extends Plugin {
     private ScriptManager scriptManager;
     private ScriptOverlay scriptOverlay;
     private ConsoleOverlay consoleOverlay;
+    private BridgeServer bridgeServer;
     private ClaudeClient claude;
     private final ConcurrentLinkedQueue<Map.Entry<String, String>> pendingScripts = new ConcurrentLinkedQueue<>();
     private net.runelite.client.input.KeyListener consoleKeyListener;
@@ -77,7 +83,15 @@ public class RaggerPlugin extends Plugin {
         scriptManager = new ScriptManager(client, chatMessageManager, itemManager);
         scriptOverlay = new ScriptOverlay(scriptManager);
         overlayManager.add(scriptOverlay);
-        claude = new ClaudeClient(config.claudePath(), config.claudeModel());
+
+        bridgeServer = new BridgeServer(scriptManager);
+        try {
+            bridgeServer.start(config.bridgePort());
+        } catch (java.io.IOException e) {
+            log.error("Failed to start bridge server", e);
+        }
+
+        claude = new ClaudeClient(config.claudePath(), config.claudeModel(), config.bridgePort(), bridgeServer.getToken());
         chatPanel = new ChatPanel();
         consoleOverlay = new ConsoleOverlay(client, this::onUserMessage);
         overlayManager.add(consoleOverlay);
@@ -129,6 +143,7 @@ public class RaggerPlugin extends Plugin {
         overlayManager.remove(consoleOverlay);
         keyManager.unregisterKeyListener(consoleKeyListener);
         mouseManager.unregisterMouseWheelListener(consoleMouseWheelListener);
+        bridgeServer.stop();
         scriptManager.shutdown();
     }
 
@@ -139,6 +154,7 @@ public class RaggerPlugin extends Plugin {
             scriptManager.load(pending.getKey(), pending.getValue());
             consoleOverlay.addToolMessage("Loaded script: " + pending.getKey());
         }
+        bridgeServer.tick();
         scriptManager.tick();
     }
 

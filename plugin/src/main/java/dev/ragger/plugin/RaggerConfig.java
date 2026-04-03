@@ -26,4 +26,14 @@ public interface RaggerConfig extends Config {
     default String claudeModel() {
         return "claude-opus-4-6";
     }
+
+    @ConfigItem(
+        keyName = "bridgePort",
+        name = "Bridge Port",
+        description = "HTTP port for MCP tool bridge",
+        position = 2
+    )
+    default int bridgePort() {
+        return 7919;
+    }
 }

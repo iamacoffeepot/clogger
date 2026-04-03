@@ -61,6 +61,19 @@ public class ScriptManager {
     }
 
     /**
+     * Evaluate a Lua expression and return the result as a string.
+     * Runs in a temporary LuaJ runtime with all API bindings.
+     */
+    public String eval(String script) {
+        LuaScript temp = new LuaScript("__eval", "return " + script, client, chatMessageManager, itemManager);
+        try {
+            return temp.evalAndReturn();
+        } finally {
+            temp.stop();
+        }
+    }
+
+    /**
      * Unload and stop a script.
      */
     public void unload(String name) {
