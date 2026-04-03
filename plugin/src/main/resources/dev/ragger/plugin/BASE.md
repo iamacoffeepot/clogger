@@ -188,6 +188,23 @@ end
 Note: returns all NPCs loaded by the client, not just those visible on screen.
 
 ```lua
+-- Ground items — returns array of tables
+local items = scene:ground_items()
+for i = 1, #items do
+    local item = items[i]
+    -- item.id         (int, item ID)
+    -- item.quantity   (int)
+    -- item.x          (int, world X)
+    -- item.y          (int, world Y)
+    -- item.plane      (int)
+    -- item.ownership  (int: 0=none, 1=self, 2=other, 3=group)
+    -- item.is_private (bool)
+end
+```
+
+Combine with `items:name()` and `items:grand_exchange_price()` to get names and values.
+
+```lua
 -- Players — returns array of tables
 local players = scene:players()
 for i = 1, #players do

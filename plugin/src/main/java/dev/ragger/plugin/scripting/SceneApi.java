@@ -1,8 +1,6 @@
 package dev.ragger.plugin.scripting;
 
-import net.runelite.api.Client;
-import net.runelite.api.NPC;
-import net.runelite.api.Player;
+import net.runelite.api.*;
 import net.runelite.api.coords.WorldPoint;
 import party.iroiro.luajava.Lua;
 
@@ -24,13 +22,16 @@ public class SceneApi {
      * Register the scene table and all its functions on the Lua state.
      */
     public void register(Lua lua) {
-        lua.createTable(0, 2);
+        lua.createTable(0, 3);
 
         lua.push(this::npcs);
         lua.setField(-2, "npcs");
 
         lua.push(this::players);
         lua.setField(-2, "players");
+
+        lua.push(this::ground_items);
+        lua.setField(-2, "ground_items");
 
         lua.setGlobal("scene");
     }
@@ -96,6 +97,48 @@ public class SceneApi {
             }
 
             lua.rawSetI(-2, index++);
+        }
+
+        return 1;
+    }
+
+    private int ground_items(Lua lua) {
+        Scene scene = client.getScene();
+        Tile[][][] tiles = scene.getTiles();
+        int plane = client.getPlane();
+
+        lua.createTable(0, 0);
+        int index = 1;
+
+        for (int x = 0; x < tiles[plane].length; x++) {
+            for (int y = 0; y < tiles[plane][x].length; y++) {
+                Tile tile = tiles[plane][x][y];
+                if (tile == null) continue;
+
+                List<TileItem> items = tile.getGroundItems();
+                if (items == null) continue;
+
+                WorldPoint wp = tile.getWorldLocation();
+
+                for (TileItem item : items) {
+                    if (item == null) continue;
+
+                    lua.createTable(0, 7);
+
+                    pushInt(lua, "id", item.getId());
+                    pushInt(lua, "quantity", item.getQuantity());
+                    pushInt(lua, "ownership", item.getOwnership());
+                    pushBool(lua, "is_private", item.isPrivate());
+
+                    if (wp != null) {
+                        pushInt(lua, "x", wp.getX());
+                        pushInt(lua, "y", wp.getY());
+                        pushInt(lua, "plane", wp.getPlane());
+                    }
+
+                    lua.rawSetI(-2, index++);
+                }
+            }
         }
 
         return 1;
