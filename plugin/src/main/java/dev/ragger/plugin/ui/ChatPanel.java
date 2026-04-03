@@ -27,23 +27,24 @@ public class ChatPanel extends PluginPanel {
 
     private static final String STYLE =
         "<style>" +
-        "body { font-family: monospace; font-size: 10px; margin: 4px; color: #ddd; }" +
-        ".sender { font-weight: bold; color: #ffb347; margin: 0 0 4px 0; padding: 0; }" +
-        ".message { margin-top: 2px; margin-bottom: 4px; }" +
-        ".message p { margin: 2px 0; }" +
+        "body { font-family: monospace; font-size: 10px; margin: 4px; padding-bottom: 8px; color: #ddd; " +
+        "       overflow-x: hidden; word-wrap: break-word; }" +
+        ".sender { font-weight: bold; color: #ffb347; margin: 0; padding: 0; }" +
+        ".message { margin-top: 1px; margin-bottom: 1px; }" +
+        ".message p { margin: 1px 0; }" +
         // JEditorPane uses HTML 3.2 — <pre> works but needs explicit font
-        "pre { background: #2a2a2a; padding: 4px; margin: 2px 0; }" +
+        "pre { background: #2a2a2a; padding: 4px; margin: 2px 0; overflow: hidden; word-wrap: break-word; }" +
         "code { background: #2a2a2a; padding: 1px 3px; }" +
         // JEditorPane draws its own bright line for <hr>, so we zero it out
         "hr { border: none; margin: 0; padding: 0; height: 0; }" +
-        ".divider { border-top: 1px solid #444; padding-top: 8px; }" +
+        ".divider { border-top: 1px solid #444; padding-top: 4px; margin-top: 4px; }" +
         // JEditorPane doesn't support <del>, only <strike>
         "strike { text-decoration: line-through; color: #888; }" +
         "table { border-collapse: collapse; width: 100%; margin: 4px 0; }" +
         "th, td { border: 1px solid #555; padding: 3px 6px; }" +
         "th { background: #383838; }" +
         ".thinking { color: #888; font-style: italic; }" +
-        ".tool { color: #666; font-style: italic; font-size: 9px; padding: 2px 0; }" +
+        ".tool { color: #777; font-size: 9px; padding: 1px 0; }" +
         // JEditorPane ignores margin on most elements, use padding instead
         "ul, ol { padding-left: 20px; margin: 2px 0; }" +
         "li { margin: 1px 0; }" +
@@ -64,23 +65,37 @@ public class ChatPanel extends PluginPanel {
         super(false);
         this.onMessage = onMessage;
         setLayout(new BorderLayout());
-        setBorder(new EmptyBorder(10, 10, 10, 10));
+        setBorder(new EmptyBorder(5, 5, 5, 5));
 
-        // Detach button
-        JButton detachButton = new JButton("Detach");
-        detachButton.addActionListener(e -> toggleDetach());
+        // Detach button — small, out of the way
+        JButton detachButton = new JButton("\u2197"); // ↗ arrow
+        detachButton.setToolTipText("Detach");
+        detachButton.setMargin(new Insets(1, 4, 1, 4));
+        detachButton.setFont(detachButton.getFont().deriveFont(10f));
         JPanel topBar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+        topBar.setOpaque(false);
         topBar.add(detachButton);
+        detachButton.addActionListener(e -> toggleDetach());
         add(topBar, BorderLayout.NORTH);
 
         // Chat log
         chatLog = createChatLog();
 
         JScrollPane scrollPane = new JScrollPane(chatLog);
-        scrollPane.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_ALWAYS);
+        scrollPane.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
+        scrollPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
         add(scrollPane, BorderLayout.CENTER);
 
-        // Input field
+        // Input field with prompt indicator
+        JPanel inputPanel = new JPanel(new BorderLayout(4, 0));
+        inputPanel.setBorder(new EmptyBorder(4, 0, 0, 0));
+        inputPanel.setOpaque(false);
+
+        JLabel prompt = new JLabel("\u25B6"); // ▶ arrow
+        prompt.setForeground(new Color(0x88, 0x88, 0x88));
+        prompt.setFont(prompt.getFont().deriveFont(10f));
+        inputPanel.add(prompt, BorderLayout.WEST);
+
         inputField = new JTextField();
         inputField.addKeyListener(new KeyAdapter() {
             @Override
@@ -90,7 +105,8 @@ public class ChatPanel extends PluginPanel {
                 }
             }
         });
-        add(inputField, BorderLayout.SOUTH);
+        inputPanel.add(inputField, BorderLayout.CENTER);
+        add(inputPanel, BorderLayout.SOUTH);
     }
 
     private JEditorPane createChatLog() {
@@ -149,7 +165,16 @@ public class ChatPanel extends PluginPanel {
             detachedLog.setText(buildFullHtml(""));
 
             JScrollPane scrollPane = new JScrollPane(detachedLog);
-            scrollPane.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_ALWAYS);
+            scrollPane.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
+            scrollPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+
+            JPanel inputPanel = new JPanel(new BorderLayout(4, 0));
+            inputPanel.setBorder(new EmptyBorder(4, 0, 0, 0));
+
+            JLabel prompt = new JLabel("\u25B6");
+            prompt.setForeground(new Color(0x88, 0x88, 0x88));
+            prompt.setFont(prompt.getFont().deriveFont(10f));
+            inputPanel.add(prompt, BorderLayout.WEST);
 
             detachedInput = new JTextField(pendingText);
             detachedInput.addKeyListener(new KeyAdapter() {
@@ -160,11 +185,12 @@ public class ChatPanel extends PluginPanel {
                     }
                 }
             });
+            inputPanel.add(detachedInput, BorderLayout.CENTER);
 
             JPanel content = new JPanel(new BorderLayout());
             content.setBorder(new EmptyBorder(10, 10, 10, 10));
             content.add(scrollPane, BorderLayout.CENTER);
-            content.add(detachedInput, BorderLayout.SOUTH);
+            content.add(inputPanel, BorderLayout.SOUTH);
 
             detachedFrame.setContentPane(content);
             detachedFrame.setVisible(true);
