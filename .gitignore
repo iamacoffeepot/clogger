@@ -15,6 +15,9 @@ data/
 # IDE
 .idea/
 
+# Gradle
+.gradle/
+
 # Environment variables
 .env
 

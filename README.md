@@ -9,7 +9,7 @@ Pulls data from the [OSRS Wiki](https://oldschool.runescape.wiki/) and the game 
 - [Python 3.12+](https://www.python.org/)
 - [uv](https://docs.astral.sh/uv/) (Python package manager)
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (CLI for Claude)
-- [JDK 21+](https://adoptium.net/) (optional, for cache dump tool)
+- [JDK 21+](https://openjdk.org/) (for RuneLite plugin and cache dump tool)
 
 ## Getting started
 
@@ -52,7 +52,18 @@ Claude reads [CLAUDE.md](CLAUDE.md) automatically and knows the full API. You ca
 
 Claude will use the Python API to query the database and answer without you needing to write any code.
 
-### 4. Cache dump tool (optional)
+### 4. RuneLite plugin
+
+An AI assistant that lives inside the RuneLite client. Chat with Claude in a sidebar panel — ask about quests, items, strategies, or have it generate Wasm scripts to modify the client. Requires JDK 21+.
+
+```sh
+cd plugin
+./run.sh
+```
+
+This launches RuneLite with the Ragger plugin pre-loaded. Look for the Claude icon in the sidebar.
+
+### 5. Cache dump tool (optional)
 
 Extracts collision maps, water masks, and rendered map tiles from the OSRS game cache. Requires JDK 21+.
 

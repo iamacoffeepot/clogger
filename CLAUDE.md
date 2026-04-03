@@ -6,6 +6,7 @@ OSRS knowledge base powered by retrieval-augmented generation.
 
 - `src/ragger/` — Python package with data models and database module
 - `scripts/` — Data ingestion scripts that pull from the OSRS wiki API
+- `plugin/` — RuneLite plugin with AI chat panel and Wasm scripting engine
 - `tools/cache-dump/` — Java tool for extracting map data from the OSRS game cache
 - `data/` — SQLite database and cache dump output (gitignored)
 - `tests/` — pytest tests
@@ -434,6 +435,40 @@ throttle()                                                                 # rat
 - `MapLinkType(str, Enum)` — entrance, exit, fairy_ring, charter_ship, spirit_tree, gnome_glider, canoe, teleport, minecart, ship, quetzal, walkable, npc_transport
 - `MAP_LINK_ANYWHERE` — constant `"ANYWHERE"` for teleport from_location (castable from any location)
 - `ALL_SKILLS_MASK`, `ALL_REGIONS_MASK` — bitmask constants for "all"
+
+## RuneLite Plugin
+
+Java plugin in `plugin/` that embeds an AI assistant into the RuneLite client. Chat panel in the sidebar talks to Claude CLI, with a Wasm scripting engine (Chicory) for dynamic client modifications.
+
+Requires JDK 21+. Run from `plugin/`:
+
+```sh
+./run.sh                    # launches RuneLite with the plugin loaded
+```
+
+Or manually:
+
+```sh
+JAVA_HOME="$(brew --prefix openjdk@21)/libexec/openjdk.jdk/Contents/Home" ./gradlew run
+```
+
+### Plugin structure
+
+- `RaggerPlugin.java` — main plugin entry, sidebar panel registration, game tick dispatch
+- `RaggerConfig.java` — plugin config (Claude CLI path)
+- `ClaudeClient.java` — spawns Claude CLI with behavior prompts, returns responses
+- `ui/ChatPanel.java` — Swing chat sidebar panel
+- `wasm/ScriptManager.java` — Wasm script lifecycle manager
+- `wasm/WasmScript.java` — single Wasm script instance (Chicory, stubbed)
+
+### Behaviors
+
+System prompts are embedded as classpath resources in `src/main/resources/dev/ragger/plugin/`:
+
+- `BASE.md` — core identity and rules
+- `ASSISTANT.md` — OSRS Q&A mode
+
+Behaviors are composable — the plugin concatenates multiple behavior files when constructing the system prompt for Claude.
 
 ## Tests
 

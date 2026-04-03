@@ -1,0 +1,42 @@
+plugins {
+    id 'java'
+}
+
+group = 'dev.ragger'
+version = '0.1.0'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+repositories {
+    mavenCentral()
+    maven { url = 'https://repo.runelite.net' }
+}
+
+def runeLiteVersion = '1.12.24-SNAPSHOT'
+
+dependencies {
+    compileOnly "net.runelite:client:${runeLiteVersion}"
+    compileOnly "net.runelite:runelite-api:${runeLiteVersion}"
+    compileOnly 'javax.inject:javax.inject:1'
+    compileOnly 'org.projectlombok:lombok:1.18.34'
+    annotationProcessor 'org.projectlombok:lombok:1.18.34'
+    compileOnly 'org.slf4j:slf4j-api:2.0.16'
+
+    // Wasm runtime
+    implementation 'com.dylibso.chicory:runtime:1.1.1'
+
+    // Test harness — launches RuneLite with the plugin loaded
+    testImplementation "net.runelite:client:${runeLiteVersion}"
+    testImplementation "net.runelite:jshell:${runeLiteVersion}"
+    testImplementation 'junit:junit:4.13.2'
+}
+
+tasks.register('run', JavaExec) {
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.ragger.plugin.RaggerPluginTest'
+    jvmArgs = ['-ea', '--add-exports', 'java.desktop/com.apple.eawt=ALL-UNNAMED']
+}
