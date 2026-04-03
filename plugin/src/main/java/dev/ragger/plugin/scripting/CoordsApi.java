@@ -27,7 +27,7 @@ public class CoordsApi {
     }
 
     public void register(Lua lua) {
-        lua.createTable(0, 5);
+        lua.createTable(0, 6);
 
         lua.push(this::world_to_canvas);
         lua.setField(-2, "world_to_canvas");
@@ -43,6 +43,9 @@ public class CoordsApi {
 
         lua.push(this::world_tile_poly);
         lua.setField(-2, "world_tile_poly");
+
+        lua.push(this::world_text_pos);
+        lua.setField(-2, "world_text_pos");
 
         lua.setGlobal("coords");
     }
@@ -129,6 +132,32 @@ public class CoordsApi {
 
         lua.push(minimap.getX());
         lua.push(minimap.getY());
+        return 2;
+    }
+
+    /**
+     * coords:world_text_pos(worldX, worldY, height) -> x, y or nil
+     * Height is in game units above the tile (e.g. 150 for above-head text).
+     */
+    private int world_text_pos(Lua lua) {
+        int worldX = (int) lua.toInteger(2);
+        int worldY = (int) lua.toInteger(3);
+        int height = lua.getTop() >= 4 ? (int) lua.toInteger(4) : 0;
+
+        LocalPoint lp = LocalPoint.fromWorld(client, worldX, worldY);
+        if (lp == null) {
+            lua.pushNil();
+            return 1;
+        }
+
+        Point canvas = Perspective.localToCanvas(client, lp, client.getPlane(), height);
+        if (canvas == null) {
+            lua.pushNil();
+            return 1;
+        }
+
+        lua.push(canvas.getX());
+        lua.push(canvas.getY());
         return 2;
     }
 

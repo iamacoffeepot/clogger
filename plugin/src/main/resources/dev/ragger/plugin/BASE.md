@@ -219,6 +219,9 @@ local lx, ly = coords:world_to_local(3200, 3400)
 -- World tile to minimap pixel
 local mx, my = coords:world_to_minimap(3200, 3400)
 
+-- World tile to text position (x, y above tile at given height)
+local tx, ty = coords:world_text_pos(3200, 3400, 150)  -- height optional, default 0
+
 -- World tile to screen polygon (array of {x, y} points)
 local poly = coords:world_tile_poly(3200, 3400)
 ```
