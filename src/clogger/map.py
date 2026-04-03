@@ -372,77 +372,88 @@ def render_path(
         chained.append(link)
     path = chained
 
-    # Collect coordinates per zone
-    coords: list[tuple[int, int]] = []
-    for link in path:
-        if link.src_location != MAP_LINK_ANYWHERE:
-            coords.append((link.src_x, link.src_y))
-        coords.append((link.dst_x, link.dst_y))
+    # Cluster path into panels based on coordinate jumps
+    # A jump > PANEL_BREAK_THRESHOLD tiles triggers a new panel
+    PANEL_BREAK_THRESHOLD = 6 * GAME_TILES_PER_REGION  # 384 tiles
 
-    surface_coords = [(x, y) for x, y in coords if y < UNDERGROUND_THRESHOLD]
-    underground_coords = [(x, y) for x, y in coords if y >= UNDERGROUND_THRESHOLD]
-    has_underground = len(underground_coords) > 0
+    # Collect ordered coordinates with their link index
+    panels: list[list[tuple[int, int]]] = [[]]
+    link_panel: dict[int, int] = {}  # link index -> panel index
 
-    # Determine subplot layout
-    n_panels = 2 if has_underground else 1
-    fig, axes = plt.subplots(n_panels, 1, figsize=(16, 8 * n_panels),
-                              gridspec_kw={"height_ratios": [2, 1] if has_underground else [1]})
+    for li, link in enumerate(path):
+        if link.src_location == MAP_LINK_ANYWHERE:
+            link_panel[li] = 0
+            panels[0].append((link.dst_x, link.dst_y))
+            continue
+
+        src = (link.src_x, link.src_y)
+        dst = (link.dst_x, link.dst_y)
+
+        # Check if this link's src is far from the current panel
+        if panels[-1]:
+            last = panels[-1][-1]
+            dx = abs(src[0] - last[0])
+            dy = abs(src[1] - last[1])
+            if max(dx, dy) > PANEL_BREAK_THRESHOLD:
+                panels.append([])
+
+        panels[-1].append(src)
+
+        # Check if dst jumps far from src (the link itself spans a long distance)
+        jump = max(abs(dst[0] - src[0]), abs(dst[1] - src[1]))
+        if jump > PANEL_BREAK_THRESHOLD:
+            link_panel[li] = len(panels) - 1
+            panels.append([])
+            panels[-1].append(dst)
+        else:
+            panels[-1].append(dst)
+            link_panel[li] = len(panels) - 1
+
+    # Remove empty panels
+    panels = [p for p in panels if p]
+
+    n_panels = len(panels)
+    fig, axes = plt.subplots(n_panels, 1, figsize=(16, max(4, 8 * n_panels)))
     if n_panels == 1:
         axes = [axes]
 
-    # --- Surface panel ---
-    ax_surface = axes[0]
-    if surface_coords:
-        sx = [c[0] for c in surface_coords]
-        sy = [c[1] for c in surface_coords]
-        s_xmin, s_xmax = min(sx) - padding, max(sx) + padding
-        s_ymin, s_ymax = min(sy) - padding, max(sy) + padding
+    panel_axes = []
+    for pi, panel_coords in enumerate(panels):
+        ax = axes[pi]
+        px = [c[0] for c in panel_coords]
+        py = [c[1] for c in panel_coords]
+        p_xmin, p_xmax = min(px) - padding, max(px) + padding
+        p_ymin, p_ymax = min(py) - padding, max(py) + padding
 
-        canvas, extent = _stitch_canvas(conn, s_xmin, s_xmax, s_ymin, s_ymax)
-        ax_surface.imshow(canvas, extent=extent, aspect="equal")
-        ax_surface.set_xlim(s_xmin, s_xmax)
-        ax_surface.set_ylim(s_ymin, s_ymax)
-    ax_surface.set_title("Surface", fontsize=12)
-    ax_surface.axis("off")
+        canvas_img, extent = _stitch_canvas(conn, p_xmin, p_xmax, p_ymin, p_ymax)
+        ax.imshow(canvas_img, extent=extent, aspect="equal")
+        ax.set_xlim(p_xmin, p_xmax)
+        ax.set_ylim(p_ymin, p_ymax)
+        ax.axis("off")
+        panel_axes.append(ax)
 
-    # --- Underground panel ---
-    ax_under = axes[1] if has_underground else None
-    if has_underground:
-        ux = [c[0] for c in underground_coords]
-        uy = [c[1] for c in underground_coords]
-        u_xmin, u_xmax = min(ux) - padding, max(ux) + padding
-        u_ymin, u_ymax = min(uy) - padding, max(uy) + padding
-
-        canvas, extent = _stitch_canvas(conn, u_xmin, u_xmax, u_ymin, u_ymax)
-        ax_under.imshow(canvas, extent=extent, aspect="equal")
-        ax_under.set_xlim(u_xmin, u_xmax)
-        ax_under.set_ylim(u_ymin, u_ymax)
-        ax_under.set_title("Underground", fontsize=12)
-        ax_under.axis("off")
-
-    def get_ax(y: int):
-        if y >= UNDERGROUND_THRESHOLD and ax_under is not None:
-            return ax_under
-        return ax_surface
+    def get_ax_for_link(link_idx: int):
+        return panel_axes[link_panel.get(link_idx, 0)]
 
     # Draw edges
     seen_labels: set[str] = set()
-    for link in path:
+    for li, link in enumerate(path):
         style = edge_styles.get(link.link_type, default_style)
+        ax = get_ax_for_link(li)
 
         if link.src_location == MAP_LINK_ANYWHERE:
-            ax = get_ax(link.dst_y)
             ax.plot(link.dst_x, link.dst_y, "*", color=style["color"], markersize=15, zorder=15,
                     label=style["label"] if style["label"] not in seen_labels else None)
             seen_labels.add(style["label"])
             continue
 
-        src_ax = get_ax(link.src_y)
-        dst_ax = get_ax(link.dst_y)
+        src_panel_idx = link_panel.get(li, 0)
+        # Check if dst is in the same panel by seeing if the next link is on a different panel
+        # or if this link itself spans a large jump
+        jump = max(abs(link.src_x - link.dst_x), abs(link.src_y - link.dst_y))
+        dst_in_same = jump <= PANEL_BREAK_THRESHOLD
 
-        if src_ax is dst_ax:
-            # Same panel — draw normal arrow
-            ax = src_ax
+        if dst_in_same:
             ax.annotate("",
                          xy=(link.dst_x, link.dst_y),
                          xytext=(link.src_x, link.src_y),
@@ -450,17 +461,26 @@ def render_path(
                                          linestyle=style["linestyle"], lw=2),
                          zorder=10)
         else:
-            # Cross-panel — mark source with label pointing to destination
-            src_ax.plot(link.src_x, link.src_y, "v", color=style["color"], markersize=12,
+            # Cross-panel: departure marker on src panel, arrival marker on dst panel
+            ax.plot(link.src_x, link.src_y, "v", color=style["color"], markersize=12,
+                    markeredgecolor="black", markeredgewidth=1, zorder=15)
+            ax.text(link.src_x, link.src_y - 15, f"→ {link.dst_location}",
+                    fontsize=8, color=style["color"], ha="center", va="top",
+                    fontweight="bold",
+                    bbox=dict(boxstyle="round,pad=0.3", facecolor="black", alpha=0.8))
+            # Arrival marker on the destination panel
+            dst_panel_idx = src_panel_idx + 1 if src_panel_idx + 1 < n_panels else src_panel_idx
+            dst_ax = panel_axes[dst_panel_idx]
+            dst_ax.plot(link.dst_x, link.dst_y, "^", color=style["color"], markersize=12,
                         markeredgecolor="black", markeredgewidth=1, zorder=15)
-            src_ax.text(link.src_x, link.src_y - 15, f"→ {link.dst_location}",
-                        fontsize=8, color=style["color"], ha="center", va="top",
+            dst_ax.text(link.dst_x, link.dst_y + 15, f"← {link.src_location}",
+                        fontsize=8, color=style["color"], ha="center", va="bottom",
                         fontweight="bold",
                         bbox=dict(boxstyle="round,pad=0.3", facecolor="black", alpha=0.8))
 
         label = style["label"] if style["label"] not in seen_labels else None
         if label:
-            ax_surface.plot([], [], color=style["color"], linestyle=style["linestyle"], lw=2, label=label)
+            panel_axes[0].plot([], [], color=style["color"], linestyle=style["linestyle"], lw=2, label=label)
             seen_labels.add(style["label"])
 
     # Mark locations
@@ -478,14 +498,21 @@ def render_path(
             unique_locs.append((name, x, y))
 
     for name, x, y in unique_locs:
-        ax = get_ax(y)
-        ax.plot(x, y, "o", color="white", markersize=8, markeredgecolor="black",
-                markeredgewidth=1, zorder=20)
-        ax.text(x, y + 12, name, fontsize=8, color="white", ha="center", va="bottom",
-                zorder=21, fontweight="bold",
-                bbox=dict(boxstyle="round,pad=0.2", facecolor="black", alpha=0.7))
+        # Find which panel this coord belongs to
+        best_ax = panel_axes[0]
+        for pi, panel_coords in enumerate(panels):
+            px = [c[0] for c in panel_coords]
+            py = [c[1] for c in panel_coords]
+            if px and py and min(px) - padding <= x <= max(px) + padding and min(py) - padding <= y <= max(py) + padding:
+                best_ax = panel_axes[pi]
+                break
+        best_ax.plot(x, y, "o", color="white", markersize=8, markeredgecolor="black",
+                     markeredgewidth=1, zorder=20)
+        best_ax.text(x, y + 12, name, fontsize=8, color="white", ha="center", va="bottom",
+                     zorder=21, fontweight="bold",
+                     bbox=dict(boxstyle="round,pad=0.2", facecolor="black", alpha=0.7))
 
-    ax_surface.legend(loc="upper left", fontsize=10, framealpha=0.8)
+    panel_axes[0].legend(loc="upper left", fontsize=10, framealpha=0.8)
     fig.suptitle(f"{unique_locs[0][0]} → {unique_locs[-1][0]}", fontsize=14)
     plt.tight_layout()
     plt.savefig(output_path, dpi=dpi, bbox_inches="tight")
