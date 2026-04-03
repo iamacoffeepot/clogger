@@ -73,13 +73,14 @@ public class RaggerPlugin extends Plugin {
         if (message.equalsIgnoreCase("/reset")) {
             claude.resetSession();
             chatPanel.clear();
-            chatPanel.addMessage("Ragger", "Session reset.");
+            chatPanel.addMessage("Claude", "Session reset.");
             return;
         }
 
         chatPanel.addMessage("You", message);
+        chatPanel.showThinking();
         claude.send(message, "BASE", "ASSISTANT").thenAccept(response -> {
-            chatPanel.addMessage("Ragger", response);
+            chatPanel.addMessage("Claude", response);
         });
     }
 }

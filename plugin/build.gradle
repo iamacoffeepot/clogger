@@ -28,6 +28,8 @@ dependencies {
 
     // Markdown rendering
     implementation 'org.commonmark:commonmark:0.28.0'
+    implementation 'org.commonmark:commonmark-ext-gfm-tables:0.28.0'
+    implementation 'org.commonmark:commonmark-ext-gfm-strikethrough:0.28.0'
 
     // Wasm runtime
     implementation 'com.dylibso.chicory:runtime:1.1.1'
