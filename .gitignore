@@ -12,6 +12,9 @@ wheels/
 # Data directory
 data/
 
+# IDE
+.idea/
+
 # Environment variables
 .env
 
