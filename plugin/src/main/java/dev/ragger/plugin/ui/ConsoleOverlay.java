@@ -1,0 +1,385 @@
+package dev.ragger.plugin.ui;
+
+import net.runelite.api.Client;
+import net.runelite.client.ui.overlay.Overlay;
+import net.runelite.client.ui.overlay.OverlayLayer;
+import net.runelite.client.ui.overlay.OverlayPosition;
+
+import java.awt.*;
+import java.awt.event.KeyEvent;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.function.Consumer;
+
+/**
+ * Full-screen console overlay toggled with F12.
+ * Renders a semi-transparent terminal over the game canvas.
+ */
+public class ConsoleOverlay extends Overlay {
+
+    private static final Color BG_COLOR = new Color(0x18, 0x18, 0x1E, 0xE8);
+    private static final Color TEXT_COLOR = new Color(0xE0, 0xE0, 0xE0);
+    private static final Color SENDER_COLOR = new Color(0xFF, 0xB3, 0x47);
+    private static final Color TOOL_COLOR = new Color(0x99, 0x99, 0x99);
+    private static final Color CODE_COLOR = new Color(0x7E, 0xC8, 0xE3);
+    private static final Color CODE_BG = new Color(0x2A, 0x2A, 0x35, 0xCC);
+    private static final Color QUOTE_COLOR = new Color(0xAA, 0xAA, 0xAA);
+    private static final Color QUOTE_BAR = new Color(0x55, 0x55, 0x66);
+    private static final Color INPUT_BG = new Color(0x22, 0x22, 0x2A, 0xEE);
+    private static final Color INPUT_BORDER = new Color(0x55, 0x55, 0x66);
+    private static final Color CURSOR_COLOR = new Color(0xFF, 0xB3, 0x47);
+    private static final String FONT_FAMILY = "Menlo";
+    private static final Font FONT = new Font(FONT_FAMILY, Font.PLAIN, 12);
+    private static final Font FONT_BOLD = new Font(FONT_FAMILY, Font.BOLD, 12);
+    private static final Font FONT_ITALIC = new Font(FONT_FAMILY, Font.ITALIC, 12);
+    private static final Font FONT_BOLD_ITALIC = new Font(FONT_FAMILY, Font.BOLD | Font.ITALIC, 12);
+    private static final Font FONT_HEADER = new Font(FONT_FAMILY, Font.BOLD, 14);
+    private static final int PADDING = 12;
+    private static final int LINE_HEIGHT = 16;
+
+    private final Client client;
+    private final Consumer<String> onMessage;
+    private final List<ConsoleLine> lines = new ArrayList<>();
+    private StringBuilder inputBuffer = new StringBuilder();
+    private boolean visible = false;
+    private int scrollOffset = 0;
+    private boolean cursorBlink = true;
+    private long lastBlink = 0;
+
+    public ConsoleOverlay(Client client, Consumer<String> onMessage) {
+        this.client = client;
+        this.onMessage = onMessage;
+        setPosition(OverlayPosition.DYNAMIC);
+        setLayer(OverlayLayer.ALWAYS_ON_TOP);
+    }
+
+    public boolean isVisible() {
+        return visible;
+    }
+
+    public void toggle() {
+        visible = !visible;
+        scrollOffset = 0;
+    }
+
+    public void addMessage(String sender, String message) {
+        lines.add(new ConsoleLine(sender, LineType.SENDER));
+
+        message = message.strip();
+
+        boolean inCodeBlock = false;
+        for (String rawLine : message.split("\n")) {
+            if (rawLine.startsWith("```")) {
+                inCodeBlock = !inCodeBlock;
+                continue;
+            }
+            if (inCodeBlock || rawLine.startsWith("    ")) {
+                lines.add(new ConsoleLine(rawLine, LineType.CODE));
+            } else if (rawLine.startsWith("> ")) {
+                lines.add(new ConsoleLine(rawLine.substring(2), LineType.QUOTE));
+            } else if (rawLine.startsWith(">")) {
+                lines.add(new ConsoleLine(rawLine.substring(1), LineType.QUOTE));
+            } else {
+                lines.add(new ConsoleLine(rawLine, LineType.TEXT));
+            }
+        }
+        scrollToBottom();
+    }
+
+    public void addToolMessage(String message) {
+        lines.add(new ConsoleLine(message, LineType.TOOL));
+        scrollToBottom();
+    }
+
+    public void addThinking() {
+        lines.removeIf(l -> l.type == LineType.THINKING);
+        lines.add(new ConsoleLine(null, LineType.THINKING));
+    }
+
+    public void removeThinking() {
+        lines.removeIf(l -> l.type == LineType.THINKING);
+    }
+
+    public void clear() {
+        lines.clear();
+        scrollOffset = 0;
+    }
+
+    public void handleKeyTyped(KeyEvent e) {
+        if (!visible) return;
+
+        char c = e.getKeyChar();
+        if (c == KeyEvent.VK_BACK_SPACE) {
+            if (!inputBuffer.isEmpty()) {
+                inputBuffer.deleteCharAt(inputBuffer.length() - 1);
+            }
+        } else if (c == '\n' || c == '\r') {
+            String text = inputBuffer.toString().trim();
+            if (!text.isEmpty()) {
+                inputBuffer.setLength(0);
+                onMessage.accept(text);
+            }
+        } else if (c != KeyEvent.CHAR_UNDEFINED && c >= 32) {
+            inputBuffer.append(c);
+        }
+
+        e.consume();
+    }
+
+    public void handleScroll(int rotation) {
+        if (!visible) return;
+        scrollOffset = Math.max(0, Math.min(scrollOffset + rotation, Math.max(0, lines.size() - 1)));
+    }
+
+    public void handleKeyPressed(KeyEvent e) {
+        if (!visible) return;
+
+        if (e.getKeyCode() == KeyEvent.VK_UP) {
+            scrollOffset = Math.min(scrollOffset + 1, Math.max(0, lines.size() - 1));
+            e.consume();
+        } else if (e.getKeyCode() == KeyEvent.VK_DOWN) {
+            scrollOffset = Math.max(scrollOffset - 1, 0);
+            e.consume();
+        } else if (e.getKeyCode() == KeyEvent.VK_ESCAPE) {
+            visible = false;
+            e.consume();
+        }
+    }
+
+    private void scrollToBottom() {
+        scrollOffset = 0;
+    }
+
+    @Override
+    public Dimension render(Graphics2D g) {
+        if (!visible) return null;
+
+        int width = client.getCanvasWidth();
+        int height = client.getCanvasHeight();
+        int consoleHeight = height / 2;
+
+        // Background
+        g.setColor(BG_COLOR);
+        g.fillRect(0, 0, width, consoleHeight);
+
+        // Border at bottom
+        g.setColor(INPUT_BORDER);
+        g.drawLine(0, consoleHeight - 1, width, consoleHeight - 1);
+
+        g.setFont(FONT);
+        g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+
+        // Input area
+        int inputY = consoleHeight - LINE_HEIGHT - PADDING;
+        g.setColor(INPUT_BG);
+        g.fillRect(PADDING, inputY - 2, width - PADDING * 2, LINE_HEIGHT + 4);
+        g.setColor(INPUT_BORDER);
+        g.drawRect(PADDING, inputY - 2, width - PADDING * 2, LINE_HEIGHT + 4);
+
+        // Input text with cursor
+        g.setColor(SENDER_COLOR);
+        g.drawString("\u25B6", PADDING + 4, inputY + 12);
+        g.setColor(TEXT_COLOR);
+        String inputText = inputBuffer.toString();
+        g.drawString(inputText, PADDING + 18, inputY + 12);
+
+        // Blinking cursor
+        long now = System.currentTimeMillis();
+        if (now - lastBlink > 500) {
+            cursorBlink = !cursorBlink;
+            lastBlink = now;
+        }
+        if (cursorBlink) {
+            int cursorX = PADDING + 18 + g.getFontMetrics().stringWidth(inputText);
+            g.setColor(CURSOR_COLOR);
+            g.fillRect(cursorX, inputY + 1, 2, LINE_HEIGHT - 2);
+        }
+
+        // Chat lines — render bottom-up above input
+        int maxWidth = width - PADDING * 2 - 8;
+        int maxLines = (inputY - PADDING) / LINE_HEIGHT;
+        int startLine = Math.max(0, lines.size() - maxLines - scrollOffset);
+        int endLine = Math.max(0, lines.size() - scrollOffset);
+        int y = inputY - PADDING;
+
+        for (int i = endLine - 1; i >= startLine && y > PADDING; i--) {
+            ConsoleLine line = lines.get(i);
+
+            switch (line.type) {
+                case SENDER -> {
+                    g.setFont(FONT_BOLD);
+                    g.setColor(SENDER_COLOR);
+                    g.drawString(line.text, PADDING + 4, y);
+                    y -= LINE_HEIGHT;
+                }
+                case TEXT -> {
+                    String text = line.text;
+                    if (text.startsWith("# ") || text.startsWith("## ") || text.startsWith("### ")) {
+                        text = text.replaceFirst("^#+\\s+", "");
+                        g.setFont(FONT_HEADER);
+                        g.setColor(TEXT_COLOR);
+                        List<String> wrapped = wrapText(text, g.getFontMetrics(), maxWidth);
+                        for (int w = wrapped.size() - 1; w >= 0 && y > PADDING; w--) {
+                            g.drawString(wrapped.get(w), PADDING + 4, y);
+                            y -= LINE_HEIGHT + 2;
+                        }
+                    } else {
+                        g.setFont(FONT);
+                        List<String> wrapped = wrapText(text, g.getFontMetrics(), maxWidth);
+                        for (int w = wrapped.size() - 1; w >= 0 && y > PADDING; w--) {
+                            drawStyledLine(g, wrapped.get(w), PADDING + 4, y, maxWidth);
+                            y -= LINE_HEIGHT;
+                        }
+                    }
+                }
+                case CODE -> {
+                    g.setFont(FONT);
+                    String codeText = line.text;
+                    // Truncate if too long, don't wrap code
+                    if (g.getFontMetrics().stringWidth(codeText) > maxWidth) {
+                        while (codeText.length() > 1 && g.getFontMetrics().stringWidth(codeText + "...") > maxWidth) {
+                            codeText = codeText.substring(0, codeText.length() - 1);
+                        }
+                        codeText = codeText + "...";
+                    }
+                    g.setColor(CODE_BG);
+                    g.fillRect(PADDING + 2, y - LINE_HEIGHT + 4, maxWidth, LINE_HEIGHT);
+                    g.setColor(CODE_COLOR);
+                    g.drawString(codeText, PADDING + 8, y);
+                    y -= LINE_HEIGHT;
+                }
+                case QUOTE -> {
+                    g.setFont(FONT_ITALIC);
+                    List<String> wrapped = wrapText(line.text, g.getFontMetrics(), maxWidth - 12);
+                    for (int w = wrapped.size() - 1; w >= 0 && y > PADDING; w--) {
+                        g.setColor(QUOTE_BAR);
+                        g.fillRect(PADDING + 4, y - LINE_HEIGHT + 4, 2, LINE_HEIGHT);
+                        g.setColor(QUOTE_COLOR);
+                        g.drawString(wrapped.get(w), PADDING + 12, y);
+                        y -= LINE_HEIGHT;
+                    }
+                }
+                case TOOL -> {
+                    g.setFont(FONT);
+                    List<String> wrapped = wrapText(line.text, g.getFontMetrics(), maxWidth);
+                    for (int w = wrapped.size() - 1; w >= 0 && y > PADDING; w--) {
+                        g.setColor(TOOL_COLOR);
+                        g.drawString(wrapped.get(w), PADDING + 4, y);
+                        y -= LINE_HEIGHT;
+                    }
+                }
+                case THINKING -> {
+                    g.setFont(FONT);
+                    g.setColor(TOOL_COLOR);
+                    int dots = (int) ((System.currentTimeMillis() / 400) % 3) + 1;
+                    g.drawString("Thinking" + ".".repeat(dots), PADDING + 4, y);
+                    y -= LINE_HEIGHT;
+                }
+            }
+        }
+
+        return new Dimension(width, consoleHeight);
+    }
+
+    /**
+     * Draw a line with inline markdown: **bold**, *italic*, `code`
+     */
+    private void drawStyledLine(Graphics2D g, String text, int x, int y, int maxWidth) {
+        int cx = x;
+        int idx = 0;
+
+        while (idx < text.length()) {
+            // Inline code: `text`
+            if (text.charAt(idx) == '`') {
+                int end = text.indexOf('`', idx + 1);
+                if (end > idx) {
+                    String code = text.substring(idx + 1, end);
+                    g.setFont(FONT);
+                    int codeWidth = g.getFontMetrics().stringWidth(code) + 6;
+                    g.setColor(CODE_BG);
+                    g.fillRoundRect(cx, y - LINE_HEIGHT + 4, codeWidth, LINE_HEIGHT, 4, 4);
+                    g.setColor(CODE_COLOR);
+                    g.drawString(code, cx + 3, y);
+                    cx += codeWidth + 1;
+                    idx = end + 1;
+                    continue;
+                }
+            }
+
+            // Bold: **text**
+            if (idx + 1 < text.length() && text.charAt(idx) == '*' && text.charAt(idx + 1) == '*') {
+                int end = text.indexOf("**", idx + 2);
+                if (end > idx) {
+                    String bold = text.substring(idx + 2, end);
+                    g.setFont(FONT_BOLD);
+                    g.setColor(TEXT_COLOR);
+                    g.drawString(bold, cx, y);
+                    cx += g.getFontMetrics().stringWidth(bold);
+                    idx = end + 2;
+                    continue;
+                }
+            }
+
+            // Italic: *text*
+            if (text.charAt(idx) == '*') {
+                int end = text.indexOf('*', idx + 1);
+                if (end > idx) {
+                    String italic = text.substring(idx + 1, end);
+                    g.setFont(FONT_ITALIC);
+                    g.setColor(TEXT_COLOR);
+                    g.drawString(italic, cx, y);
+                    cx += g.getFontMetrics().stringWidth(italic);
+                    idx = end + 1;
+                    continue;
+                }
+            }
+
+            // Plain text — collect until next markdown marker
+            int next = text.length();
+            for (int j = idx + 1; j < text.length(); j++) {
+                char c = text.charAt(j);
+                if (c == '`' || c == '*') {
+                    next = j;
+                    break;
+                }
+            }
+
+            String plain = text.substring(idx, next);
+            g.setFont(FONT);
+            g.setColor(TEXT_COLOR);
+            g.drawString(plain, cx, y);
+            cx += g.getFontMetrics().stringWidth(plain);
+            idx = next;
+        }
+    }
+
+    private static List<String> wrapText(String text, FontMetrics fm, int maxWidth) {
+        List<String> result = new ArrayList<>();
+        if (text == null || text.isEmpty()) {
+            result.add("");
+            return result;
+        }
+
+        String[] words = text.split(" ");
+        StringBuilder current = new StringBuilder();
+
+        for (String word : words) {
+            if (current.isEmpty()) {
+                current.append(word);
+            } else if (fm.stringWidth(current + " " + word) <= maxWidth) {
+                current.append(" ").append(word);
+            } else {
+                result.add(current.toString());
+                current = new StringBuilder(word);
+            }
+        }
+        if (!current.isEmpty()) {
+            result.add(current.toString());
+        }
+        return result;
+    }
+
+    private enum LineType { SENDER, TEXT, CODE, QUOTE, TOOL, THINKING }
+
+    private record ConsoleLine(String text, LineType type) {}
+}
