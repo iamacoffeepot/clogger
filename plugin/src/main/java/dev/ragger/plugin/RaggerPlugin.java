@@ -150,6 +150,11 @@ public class RaggerPlugin extends Plugin {
             return;
         }
 
+        if (message.equalsIgnoreCase("/clear")) {
+            consoleOverlay.clear();
+            return;
+        }
+
         if (message.equalsIgnoreCase("/stop")) {
             scriptManager.shutdown();
             consoleOverlay.addToolMessage("All scripts stopped.");
