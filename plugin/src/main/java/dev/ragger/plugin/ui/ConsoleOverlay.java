@@ -219,7 +219,10 @@ public class ConsoleOverlay extends Overlay {
 
     public void handleScroll(int rotation) {
         if (!visible) return;
-        scrollOffset = Math.max(0, Math.min(scrollOffset + rotation, Math.max(0, lines.size() - 1)));
+        int consoleHeight = client.getCanvasHeight() / 2;
+        int visibleLines = (consoleHeight - PADDING * 3 - LINE_HEIGHT) / LINE_HEIGHT;
+        int maxScroll = Math.max(0, lines.size() - visibleLines);
+        scrollOffset = Math.max(0, Math.min(scrollOffset + rotation, maxScroll));
     }
 
 
@@ -250,10 +253,24 @@ public class ConsoleOverlay extends Overlay {
         g.setFont(FONT);
         FontMetrics fm = g.getFontMetrics();
         String inputText = inputBuffer.toString();
-        int promptWidth = fm.stringWidth("\u25B6") + 8;
+        int promptWidth = fm.stringWidth("\u276F") + 8;
         int inputTextWidth = width - PADDING * 2 - promptWidth - 4;
-        List<String> inputLines = wrapText(inputText.isEmpty() ? " " : inputText, fm, inputTextWidth);
-        int inputLineCount = Math.max(1, inputLines.size());
+
+        // Character-accurate line wrapping for input
+        List<String> inputLines = new ArrayList<>();
+        int lineStart = 0;
+        while (lineStart < inputText.length()) {
+            int lineEnd = lineStart;
+            while (lineEnd < inputText.length() && fm.stringWidth(inputText.substring(lineStart, lineEnd + 1)) <= inputTextWidth) {
+                lineEnd++;
+            }
+            if (lineEnd == lineStart) lineEnd = lineStart + 1; // at least one char
+            inputLines.add(inputText.substring(lineStart, lineEnd));
+            lineStart = lineEnd;
+        }
+        if (inputLines.isEmpty()) inputLines.add("");
+
+        int inputLineCount = Math.min(inputLines.size(), 16);
         int inputAreaHeight = inputLineCount * LINE_HEIGHT + 4;
         int inputY = consoleHeight - inputAreaHeight - PADDING;
 
@@ -262,31 +279,36 @@ public class ConsoleOverlay extends Overlay {
         g.setColor(INPUT_BORDER);
         g.drawRect(PADDING, inputY, width - PADDING * 2, inputAreaHeight);
 
-        // Prompt arrow
-        g.setColor(SENDER_COLOR);
-        g.drawString("\u25B6", PADDING + 4, inputY + LINE_HEIGHT - 2);
+        // Prompt chevron — aligned to first line baseline
+        int baselineOffset = inputY + LINE_HEIGHT - 1;
+        g.setColor(TOOL_COLOR);
+        g.drawString("\u276F", PADDING + 4, baselineOffset);
 
-        // Input text lines
+        // Input text lines — same baseline
         g.setColor(TEXT_COLOR);
         int textX = PADDING + promptWidth;
         for (int il = 0; il < inputLines.size(); il++) {
-            g.drawString(inputLines.get(il), textX, inputY + (il + 1) * LINE_HEIGHT - 2);
+            g.drawString(inputLines.get(il), textX, baselineOffset + il * LINE_HEIGHT);
         }
 
-        // Blinking cursor at cursorPos
-        long now = System.currentTimeMillis();
-        if (now - lastBlink > 500) {
-            cursorBlink = !cursorBlink;
-            lastBlink = now;
-        }
-        if (cursorBlink) {
-            // Find which wrapped line the cursor is on
-            String beforeCursor = inputText.substring(0, cursorPos);
-            List<String> cursorLines = wrapText(beforeCursor.isEmpty() ? " " : beforeCursor, fm, inputTextWidth);
-            int cursorLine = cursorLines.size() - 1;
-            String lastCursorLine = cursorLines.get(cursorLine);
-            int cursorX = textX + fm.stringWidth(lastCursorLine.equals(" ") ? "" : lastCursorLine);
-            int cursorDrawY = inputY + cursorLine * LINE_HEIGHT + 2;
+        // Cursor at cursorPos
+        {
+            // Find cursor line and x position
+            int charsConsumed = 0;
+            int cursorLine = 0;
+            int cursorLineOffset = cursorPos;
+            for (int il = 0; il < inputLines.size(); il++) {
+                int lineLen = inputLines.get(il).length();
+                if (charsConsumed + lineLen >= cursorPos) {
+                    cursorLine = il;
+                    cursorLineOffset = cursorPos - charsConsumed;
+                    break;
+                }
+                charsConsumed += lineLen;
+            }
+            String beforeCursorOnLine = inputLines.get(cursorLine).substring(0, Math.min(cursorLineOffset, inputLines.get(cursorLine).length()));
+            int cursorX = textX + fm.stringWidth(beforeCursorOnLine);
+            int cursorDrawY = baselineOffset + cursorLine * LINE_HEIGHT - LINE_HEIGHT + 5;
             g.setColor(CURSOR_COLOR);
             g.fillRect(cursorX, cursorDrawY, 2, LINE_HEIGHT - 2);
         }
@@ -350,15 +372,10 @@ public class ConsoleOverlay extends Overlay {
                     g.setColor(LIST_BULLET_COLOR);
                     g.drawString(line.bullet, indentPx, y);
                     int bulletWidth = g.getFontMetrics().stringWidth(line.bullet) + 6;
-                    g.setColor(TEXT_COLOR);
-                    List<String> wrapped = wrapText(line.text, g.getFontMetrics(), maxWidth - indentPx - bulletWidth + PADDING);
+                    int listTextWidth = maxWidth - indentPx - bulletWidth + PADDING;
+                    List<String> wrapped = wrapText(line.text, g.getFontMetrics(), listTextWidth);
                     for (int w = wrapped.size() - 1; w >= 0 && y > PADDING; w--) {
-                        if (w < wrapped.size() - 1) {
-                            // continuation lines align after bullet
-                            g.drawString(wrapped.get(w), indentPx + bulletWidth, y);
-                        } else {
-                            g.drawString(wrapped.get(w), indentPx + bulletWidth, y);
-                        }
+                        drawStyledLine(g, wrapped.get(w), indentPx + bulletWidth, y, listTextWidth);
                         y -= LINE_HEIGHT;
                     }
                 }
@@ -423,12 +440,12 @@ public class ConsoleOverlay extends Overlay {
                 if (end > idx) {
                     String code = text.substring(idx + 1, end);
                     g.setFont(FONT);
-                    int codeWidth = g.getFontMetrics().stringWidth(code) + 6;
+                    int codeWidth = g.getFontMetrics().stringWidth(code) + 10;
                     g.setColor(CODE_BG);
-                    g.fillRoundRect(cx, y - LINE_HEIGHT + 4, codeWidth, LINE_HEIGHT, 4, 4);
+                    g.fillRoundRect(cx, y - LINE_HEIGHT + 2, codeWidth, LINE_HEIGHT + 2, 4, 4);
                     g.setColor(CODE_COLOR);
-                    g.drawString(code, cx + 3, y);
-                    cx += codeWidth + 1;
+                    g.drawString(code, cx + 5, y);
+                    cx += codeWidth + 2;
                     idx = end + 1;
                     continue;
                 }
