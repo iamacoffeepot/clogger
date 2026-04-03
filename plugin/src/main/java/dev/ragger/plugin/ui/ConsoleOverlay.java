@@ -21,10 +21,13 @@ public class ConsoleOverlay extends Overlay {
     private static final Color TEXT_COLOR = new Color(0xE0, 0xE0, 0xE0);
     private static final Color SENDER_COLOR = new Color(0xFF, 0xB3, 0x47);
     private static final Color TOOL_COLOR = new Color(0x99, 0x99, 0x99);
-    private static final Color CODE_COLOR = new Color(0x7E, 0xC8, 0xE3);
+    private static final Color CODE_COLOR = new Color(0xA8, 0xD8, 0xF0);
     private static final Color CODE_BG = new Color(0x2A, 0x2A, 0x35, 0xCC);
     private static final Color QUOTE_COLOR = new Color(0xAA, 0xAA, 0xAA);
     private static final Color QUOTE_BAR = new Color(0x55, 0x55, 0x66);
+    private static final Color LIST_BULLET_COLOR = new Color(0xFF, 0xB3, 0x47);
+    private static final Color TABLE_HEADER_BG = new Color(0x2A, 0x2A, 0x38, 0xCC);
+    private static final Color TABLE_BORDER = new Color(0x44, 0x44, 0x55);
     private static final Color INPUT_BG = new Color(0x22, 0x22, 0x2A, 0xEE);
     private static final Color INPUT_BORDER = new Color(0x55, 0x55, 0x66);
     private static final Color CURSOR_COLOR = new Color(0xFF, 0xB3, 0x47);
@@ -68,18 +71,54 @@ public class ConsoleOverlay extends Overlay {
         message = message.strip();
 
         boolean inCodeBlock = false;
+        boolean seenTableHeader = false;
         for (String rawLine : message.split("\n")) {
             if (rawLine.startsWith("```")) {
                 inCodeBlock = !inCodeBlock;
+                seenTableHeader = false;
                 continue;
             }
-            if (inCodeBlock || rawLine.startsWith("    ")) {
+            if (inCodeBlock) {
                 lines.add(new ConsoleLine(rawLine, LineType.CODE));
+                seenTableHeader = false;
+            } else if (isListItem(rawLine)) {
+                int indent = countIndent(rawLine);
+                String stripped = rawLine.stripLeading();
+                String bullet;
+                String text;
+                if (stripped.matches("^\\d+\\.\\s.*")) {
+                    int dotIdx = stripped.indexOf('.');
+                    bullet = stripped.substring(0, dotIdx + 1);
+                    text = stripped.substring(dotIdx + 1).strip();
+                } else {
+                    bullet = "\u2022"; // •
+                    text = stripped.substring(2); // skip "- " or "* "
+                }
+                lines.add(new ConsoleLine(text, LineType.LIST_ITEM, null, indent, bullet));
+                seenTableHeader = false;
+            } else if (rawLine.startsWith("    ")) {
+                lines.add(new ConsoleLine(rawLine, LineType.CODE));
+                seenTableHeader = false;
             } else if (rawLine.startsWith("> ")) {
                 lines.add(new ConsoleLine(rawLine.substring(2), LineType.QUOTE));
+                seenTableHeader = false;
             } else if (rawLine.startsWith(">")) {
                 lines.add(new ConsoleLine(rawLine.substring(1), LineType.QUOTE));
+                seenTableHeader = false;
+            } else if (rawLine.contains("|") && rawLine.strip().startsWith("|")) {
+                String trimmed = rawLine.strip();
+                if (trimmed.matches("\\|[\\s\\-:|]+\\|")) {
+                    continue; // skip separator row
+                }
+                String[] cells = parseCells(trimmed);
+                if (!seenTableHeader) {
+                    lines.add(new ConsoleLine(rawLine, LineType.TABLE_HEADER, cells));
+                    seenTableHeader = true;
+                } else {
+                    lines.add(new ConsoleLine(rawLine, LineType.TABLE_ROW, cells));
+                }
             } else {
+                seenTableHeader = false;
                 lines.add(new ConsoleLine(rawLine, LineType.TEXT));
             }
         }
@@ -248,6 +287,32 @@ public class ConsoleOverlay extends Overlay {
                     g.drawString(codeText, PADDING + 8, y);
                     y -= LINE_HEIGHT;
                 }
+                case LIST_ITEM -> {
+                    int indentPx = PADDING + 4 + line.indent * 16;
+                    g.setFont(FONT);
+                    g.setColor(LIST_BULLET_COLOR);
+                    g.drawString(line.bullet, indentPx, y);
+                    int bulletWidth = g.getFontMetrics().stringWidth(line.bullet) + 6;
+                    g.setColor(TEXT_COLOR);
+                    List<String> wrapped = wrapText(line.text, g.getFontMetrics(), maxWidth - indentPx - bulletWidth + PADDING);
+                    for (int w = wrapped.size() - 1; w >= 0 && y > PADDING; w--) {
+                        if (w < wrapped.size() - 1) {
+                            // continuation lines align after bullet
+                            g.drawString(wrapped.get(w), indentPx + bulletWidth, y);
+                        } else {
+                            g.drawString(wrapped.get(w), indentPx + bulletWidth, y);
+                        }
+                        y -= LINE_HEIGHT;
+                    }
+                }
+                case TABLE_HEADER -> {
+                    drawTableRow(g, line.cells, PADDING + 4, y, maxWidth, true);
+                    y -= LINE_HEIGHT;
+                }
+                case TABLE_ROW -> {
+                    drawTableRow(g, line.cells, PADDING + 4, y, maxWidth, false);
+                    y -= LINE_HEIGHT;
+                }
                 case QUOTE -> {
                     g.setFont(FONT_ITALIC);
                     List<String> wrapped = wrapText(line.text, g.getFontMetrics(), maxWidth - 12);
@@ -353,6 +418,67 @@ public class ConsoleOverlay extends Overlay {
         }
     }
 
+    private static boolean isListItem(String line) {
+        String stripped = line.stripLeading();
+        return stripped.startsWith("- ") || stripped.startsWith("* ") || stripped.matches("^\\d+\\.\\s.*");
+    }
+
+    private static int countIndent(String line) {
+        int spaces = 0;
+        for (char c : line.toCharArray()) {
+            if (c == ' ') spaces++;
+            else break;
+        }
+        return spaces / 2; // 2 spaces per indent level
+    }
+
+    private static String[] parseCells(String row) {
+        // Strip leading/trailing pipes and split
+        if (row.startsWith("|")) row = row.substring(1);
+        if (row.endsWith("|")) row = row.substring(0, row.length() - 1);
+        String[] cells = row.split("\\|");
+        for (int i = 0; i < cells.length; i++) {
+            cells[i] = cells[i].strip();
+        }
+        return cells;
+    }
+
+    private void drawTableRow(Graphics2D g, String[] cells, int x, int y, int maxWidth, boolean isHeader) {
+        if (cells == null || cells.length == 0) return;
+
+        int cellWidth = Math.min(maxWidth / cells.length, 200);
+        int cellPadding = 6;
+
+        if (isHeader) {
+            g.setColor(TABLE_HEADER_BG);
+            g.fillRect(x, y - LINE_HEIGHT + 4, cellWidth * cells.length, LINE_HEIGHT);
+            g.setFont(FONT_BOLD);
+        } else {
+            g.setFont(FONT);
+        }
+
+        for (int c = 0; c < cells.length; c++) {
+            int cellX = x + c * cellWidth;
+
+            // Cell border
+            g.setColor(TABLE_BORDER);
+            g.drawRect(cellX, y - LINE_HEIGHT + 4, cellWidth, LINE_HEIGHT);
+
+            // Cell text
+            g.setColor(isHeader ? SENDER_COLOR : TEXT_COLOR);
+            String cellText = cells[c];
+            // Truncate if too wide
+            FontMetrics fm = g.getFontMetrics();
+            if (fm.stringWidth(cellText) > cellWidth - cellPadding * 2) {
+                while (cellText.length() > 1 && fm.stringWidth(cellText + "..") > cellWidth - cellPadding * 2) {
+                    cellText = cellText.substring(0, cellText.length() - 1);
+                }
+                cellText = cellText + "..";
+            }
+            g.drawString(cellText, cellX + cellPadding, y);
+        }
+    }
+
     private static List<String> wrapText(String text, FontMetrics fm, int maxWidth) {
         List<String> result = new ArrayList<>();
         if (text == null || text.isEmpty()) {
@@ -379,7 +505,15 @@ public class ConsoleOverlay extends Overlay {
         return result;
     }
 
-    private enum LineType { SENDER, TEXT, CODE, QUOTE, TOOL, THINKING }
+    private enum LineType { SENDER, TEXT, CODE, QUOTE, TABLE_ROW, TABLE_HEADER, LIST_ITEM, TOOL, THINKING }
 
-    private record ConsoleLine(String text, LineType type) {}
+    private record ConsoleLine(String text, LineType type, String[] cells, int indent, String bullet) {
+        ConsoleLine(String text, LineType type) {
+            this(text, type, null, 0, null);
+        }
+
+        ConsoleLine(String text, LineType type, String[] cells) {
+            this(text, type, cells, 0, null);
+        }
+    }
 }
