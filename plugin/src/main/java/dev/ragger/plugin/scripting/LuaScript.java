@@ -21,9 +21,11 @@ public class LuaScript {
     private final String source;
     private final Client client;
     private final ChatMessageManager chatMessageManager;
+    private final OverlayApi overlayApi = new OverlayApi();
     private Lua lua;
     private boolean running = false;
     private boolean hasHooks = false;
+    private boolean requestStop = false;
 
     public LuaScript(String name, String source, Client client, ChatMessageManager chatMessageManager) {
         this.name = name;
@@ -42,9 +44,14 @@ public class LuaScript {
             lua.openLibrary("table");
             lua.openLibrary("math");
 
+            lua.run("math.randomseed(" + System.currentTimeMillis() + ")");
+
             lua.set("chat", new ChatApi(chatMessageManager));
             lua.set("camera", new CameraApi(client));
             lua.set("client", new ClientApi(client));
+            lua.set("player", new PlayerApi(client));
+            lua.set("skill", new SkillApi());
+            new SceneApi(client).register(lua);
 
             lua.run(source);
 
@@ -65,7 +72,22 @@ public class LuaScript {
 
     public void tick() {
         if (!running || !hasHooks) return;
-        callHook("on_tick");
+        if (!callHook("on_tick")) {
+            requestStop = true;
+        }
+    }
+
+    public void render(java.awt.Graphics2D graphics) {
+        if (!running || !hasHooks) return;
+        callHookWithArg("on_render", overlayApi);
+        overlayApi.flush(graphics);
+    }
+
+    /**
+     * Returns true if the script has requested to stop itself.
+     */
+    public boolean shouldStop() {
+        return requestStop;
     }
 
     public void stop() {
@@ -81,14 +103,40 @@ public class LuaScript {
         log.info("Script stopped: {}", name);
     }
 
-    private void callHook(String hookName) {
+    /**
+     * Call a hook function. Returns false if the hook explicitly returned false (request stop).
+     */
+    private boolean callHook(String hookName) {
+        if (lua == null) return true;
+
+        try {
+            lua.getGlobal("__hooks");
+            lua.getField(-1, hookName);
+            if (lua.type(-1) == Lua.LuaType.FUNCTION) {
+                lua.pCall(0, 1);
+                // Only stop if the hook explicitly returned false
+                boolean keepRunning = lua.type(-1) != Lua.LuaType.BOOLEAN || lua.toBoolean(-1);
+                lua.pop(2); // pop return value + __hooks
+                return keepRunning;
+            } else {
+                lua.pop(2); // pop non-function + __hooks
+                return true;
+            }
+        } catch (Exception e) {
+            log.error("Script '{}' hook '{}' error: {}", name, hookName, e.getMessage());
+            return true;
+        }
+    }
+
+    private void callHookWithArg(String hookName, Object arg) {
         if (lua == null) return;
 
         try {
             lua.getGlobal("__hooks");
             lua.getField(-1, hookName);
             if (lua.type(-1) == Lua.LuaType.FUNCTION) {
-                lua.pCall(0, 0);
+                lua.push(arg, Lua.Conversion.FULL);
+                lua.pCall(1, 0);
             } else {
                 lua.pop(1);
             }

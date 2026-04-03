@@ -3,6 +3,7 @@ package dev.ragger.plugin;
 import com.google.inject.Provides;
 import dev.ragger.plugin.ui.ChatPanel;
 import dev.ragger.plugin.scripting.ScriptManager;
+import dev.ragger.plugin.scripting.ScriptOverlay;
 import net.runelite.api.Client;
 import net.runelite.client.chat.ChatMessageManager;
 import net.runelite.api.events.GameTick;
@@ -10,12 +11,16 @@ import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
+import net.runelite.client.ui.overlay.OverlayManager;
 import net.runelite.client.ui.ClientToolbar;
 import net.runelite.client.ui.NavigationButton;
 import net.runelite.client.util.ImageUtil;
 
 import javax.inject.Inject;
 import java.awt.image.BufferedImage;
+import java.util.AbstractMap;
+import java.util.Map;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 @PluginDescriptor(
     name = "Ragger",
@@ -34,6 +39,9 @@ public class RaggerPlugin extends Plugin {
     private ChatMessageManager chatMessageManager;
 
     @Inject
+    private OverlayManager overlayManager;
+
+    @Inject
     private RaggerConfig config;
 
     @Provides
@@ -44,11 +52,15 @@ public class RaggerPlugin extends Plugin {
     private ChatPanel chatPanel;
     private NavigationButton navButton;
     private ScriptManager scriptManager;
+    private ScriptOverlay scriptOverlay;
     private ClaudeClient claude;
+    private final ConcurrentLinkedQueue<Map.Entry<String, String>> pendingScripts = new ConcurrentLinkedQueue<>();
 
     @Override
     protected void startUp() {
         scriptManager = new ScriptManager(client, chatMessageManager);
+        scriptOverlay = new ScriptOverlay(scriptManager);
+        overlayManager.add(scriptOverlay);
         claude = new ClaudeClient(config.claudePath(), config.claudeModel());
         chatPanel = new ChatPanel(this::onUserMessage);
 
@@ -65,11 +77,18 @@ public class RaggerPlugin extends Plugin {
     @Override
     protected void shutDown() {
         clientToolbar.removeNavigation(navButton);
+        overlayManager.remove(scriptOverlay);
         scriptManager.shutdown();
     }
 
     @Subscribe
     public void onGameTick(GameTick event) {
+        // Load pending scripts on the client thread
+        Map.Entry<String, String> pending;
+        while ((pending = pendingScripts.poll()) != null) {
+            scriptManager.load(pending.getKey(), pending.getValue());
+            chatPanel.addToolMessage("Loaded script: " + pending.getKey());
+        }
         scriptManager.tick();
     }
 
@@ -112,11 +131,10 @@ public class RaggerPlugin extends Plugin {
                 chatPanel.addToolMessage(toolEntry);
             }
 
-            // Load any scripts Claude submitted via RaggerRun
+            // Queue scripts to load on the client thread (next game tick)
             if (response.hasScripts()) {
                 response.getScripts().forEach((name, source) -> {
-                    scriptManager.load(name, source);
-                    chatPanel.addToolMessage("Loaded script: " + name);
+                    pendingScripts.add(new AbstractMap.SimpleEntry<>(name, source));
                 });
             }
 

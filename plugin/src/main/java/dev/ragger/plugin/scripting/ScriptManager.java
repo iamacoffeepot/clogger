@@ -44,8 +44,16 @@ public class ScriptManager {
      * Called every game tick — dispatches to all active scripts with hooks.
      */
     public void tick() {
-        for (LuaScript script : scripts.values()) {
+        var it = scripts.entrySet().iterator();
+        while (it.hasNext()) {
+            var entry = it.next();
+            LuaScript script = entry.getValue();
             script.tick();
+            if (script.shouldStop()) {
+                script.stop();
+                it.remove();
+                log.info("Script self-stopped: {}", entry.getKey());
+            }
         }
     }
 
@@ -57,6 +65,15 @@ public class ScriptManager {
         if (script != null) {
             script.stop();
             log.info("Unloaded script: {}", name);
+        }
+    }
+
+    /**
+     * Called during overlay render — dispatches to all active scripts with hooks.
+     */
+    public void render(java.awt.Graphics2D graphics) {
+        for (LuaScript script : scripts.values()) {
+            script.render(graphics);
         }
     }
 
