@@ -9,6 +9,7 @@ Pulls data from the [OSRS Wiki](https://oldschool.runescape.wiki/) into a SQLite
 - [Python 3.12+](https://www.python.org/)
 - [uv](https://docs.astral.sh/uv/) (Python package manager)
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (CLI for Claude)
+- [JDK 21+](https://adoptium.net/) (optional, for cache dump tool)
 
 ## Getting started
 
@@ -50,6 +51,19 @@ Claude reads [CLAUDE.md](CLAUDE.md) automatically and knows the full API. You ca
 - "What quests can I do with 50 Attack and access to Morytania?"
 
 Claude will use the Python API to query the database and answer without you needing to write any code.
+
+### 4. Cache dump tool (optional)
+
+Extracts collision maps, water masks, and rendered map tiles from the OSRS game cache. Requires JDK 21+.
+
+```sh
+cd tools/cache-dump
+./gradlew dumpCollision   # collision flags
+./gradlew dumpWater       # water masks
+./gradlew dumpMapTiles    # rendered terrain tiles
+```
+
+The tool automatically downloads the latest OSRS cache from [OpenRS2](https://archive.openrs2.org/). Output goes to `data/cache-dump/`.
 
 ## Running tests
 

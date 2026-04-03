@@ -6,7 +6,8 @@ OSRS Leagues knowledge base for route planning.
 
 - `src/clogger/` — Python package with data models and database module
 - `scripts/` — Data ingestion scripts that pull from the OSRS wiki API
-- `data/` — SQLite database (gitignored)
+- `tools/cache-dump/` — Java tool for extracting map data from the OSRS game cache
+- `data/` — SQLite database and cache dump output (gitignored)
 - `tests/` — pytest tests
 
 ## Scripts
@@ -41,12 +42,46 @@ Pipeline order (managed by `fetch_all.py`):
 14. `fetch_magic_teleports.py` — Parses all spellbook teleports (Standard, Ancient, Lunar) and item teleports (jewellery, etc.)
 15. `link_shop_locations.py` — Links shops to locations by matching location text
 16. `link_facilities.py` — Derives facility bitmasks on locations from nearest facility coordinates
-17. `compute_walkability.py` — Computes walkable connections via Voronoi edges and map tile collision data from the database. Supports `--threshold`, `--samples`, `--debug` flags.
+17. `compute_walkability.py` — Computes walkable connections via Voronoi edge flood fill and map tile collision data. Supports `--area-threshold`, `--edge-samples`, `--resolution`, `--debug` flags.
 
 ### Utility scripts
 
 - `import_map_squares.py` — Imports map square images from `data/map-squares.zip` into the `map_squares` table. One-time setup.
 18. `fetch_league_tasks.py` — Pulls league tasks (with `--league` flag)
+19. `fetch_npcs.py` — Pulls non-combat NPC data (name, version, location, options, region) from Category:Non-player characters
+
+## Cache Dump Tool
+
+Java tool in `tools/cache-dump/` that extracts map data directly from the OSRS game cache using RuneLite's cache library. Automatically downloads the latest cache from [OpenRS2](https://archive.openrs2.org/).
+
+Requires JDK 21+. Run from `tools/cache-dump/`:
+
+```sh
+# Dump collision maps (red = blocked, white = walkable)
+./gradlew dumpCollision [--args="--plane 0 --output ../../data/cache-dump/collision"]
+
+# Dump water masks (blue = water, transparent = land)
+./gradlew dumpWater [--args="--plane 0 --output ../../data/cache-dump/water"]
+
+# Dump rendered map tiles (terrain + walls, no objects/icons)
+./gradlew dumpMapTiles [--args="--objects --icons --no-walls"]
+```
+
+Output: `data/cache-dump/{collision,water,map-tiles}/{plane}_{rx}_{ry}.png`
+
+### DumpMapTiles flags
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--walls` / `--no-walls` | on | Wall outlines |
+| `--overlays` / `--no-overlays` | on | Overlay textures (paths, floors) |
+| `--objects` / `--no-objects` | off | Trees, rocks, buildings, scenery |
+| `--icons` / `--no-icons` | off | Map icons (bank, altar, etc.) |
+| `--labels` / `--no-labels` | off | Text labels |
+| `--transparent` | off | Transparent background |
+| `--plane N` | 0 | Which plane to render |
+
+All tools accept `--cache <path>` to use a local cache directory instead of downloading.
 
 ### release.py
 
@@ -301,7 +336,21 @@ find_path(conn, src, dst, allowed_types=set(MapLinkType) - {MapLinkType.TELEPORT
 render_path(conn, path, "output.png", padding=200, dpi=200)
 ```
 
-Pathfinding uses A* with Chebyshev heuristic. Zero cost for instant transitions (teleports, fairy rings, entrances). Walkable edges cost Chebyshev distance. Path rendering chains arrows end-to-end, inserts implicit walk segments, and shows cross-panel labels for underground transitions.
+Pathfinding uses A* with Chebyshev heuristic. Zero cost for instant transitions (teleports, fairy rings, entrances). Walkable edges cost Chebyshev distance. Path rendering chains arrows end-to-end, snaps same-location coords, and splits into panels when jumps exceed 384 tiles (6 regions) with departure/arrival markers.
+
+### Npc (`src/clogger/npc.py`)
+
+```python
+from clogger.npc import Npc
+
+Npc.all(conn, region?) -> list[Npc]
+Npc.by_name(conn, name) -> list[Npc]              # multiple versions possible
+Npc.search(conn, name) -> list[Npc]                # partial name match
+Npc.with_option(conn, option, region?) -> list[Npc] # e.g. "Travel", "Teleport"
+Npc.at_location(conn, location) -> list[Npc]
+npc.has_option(option) -> bool
+npc.option_list() -> list[str]
+```
 
 ### Monster (`src/clogger/monster.py`)
 
@@ -382,7 +431,7 @@ throttle()                                                                 # rat
 - `ShopType(str, Enum)` — 36 shop types (General, Gem, Fishing, Magic, etc.) with `from_label` fuzzy matching
 - `Facility(int, Enum)` — Bank, Furnace, Anvil, Range, Altar, Spinning wheel, Loom with `mask`, `label` properties
 - `Immunity(int, Enum)` — Poison, Venom, Cannon, Thrall, Burn with `mask`, `label` properties
-- `MapLinkType(str, Enum)` — entrance, exit, fairy_ring, charter_ship, spirit_tree, gnome_glider, canoe, teleport, minecart, ship, quetzal, walkable
+- `MapLinkType(str, Enum)` — entrance, exit, fairy_ring, charter_ship, spirit_tree, gnome_glider, canoe, teleport, minecart, ship, quetzal, walkable, npc_transport
 - `MAP_LINK_ANYWHERE` — constant `"ANYWHERE"` for teleport from_location (castable from any location)
 - `ALL_SKILLS_MASK`, `ALL_REGIONS_MASK` — bitmask constants for "all"
 
