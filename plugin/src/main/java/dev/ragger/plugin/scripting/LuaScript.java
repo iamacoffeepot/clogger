@@ -1,12 +1,9 @@
 package dev.ragger.plugin.scripting;
 
-import net.runelite.api.ChatMessageType;
 import net.runelite.client.chat.ChatMessageManager;
-import net.runelite.client.chat.QueuedMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import party.iroiro.luajava.Lua;
-import party.iroiro.luajava.LuaException;
 import party.iroiro.luajava.luaj.LuaJ;
 
 /**
@@ -39,7 +36,7 @@ public class LuaScript {
             lua.openLibrary("table");
             lua.openLibrary("math");
 
-            bindChatApi();
+            lua.set("chat", new ChatApi(chatMessageManager));
 
             lua.run(source);
             running = true;
@@ -48,38 +45,6 @@ public class LuaScript {
             log.error("Failed to start script: {}", name, e);
             stop();
         }
-    }
-
-    private void bindChatApi() {
-        lua.createTable(0, 2);
-
-        // chat.game(message) — send a game message
-        lua.push((Lua L) -> {
-            String msg = L.toString(1);
-            if (msg != null && chatMessageManager != null) {
-                chatMessageManager.queue(QueuedMessage.builder()
-                    .type(ChatMessageType.GAMEMESSAGE)
-                    .value(msg)
-                    .build());
-            }
-            return 0;
-        });
-        lua.setField(-2, "game");
-
-        // chat.console(message) — send a console message
-        lua.push((Lua L) -> {
-            String msg = L.toString(1);
-            if (msg != null && chatMessageManager != null) {
-                chatMessageManager.queue(QueuedMessage.builder()
-                    .type(ChatMessageType.CONSOLE)
-                    .value(msg)
-                    .build());
-            }
-            return 0;
-        });
-        lua.setField(-2, "console");
-
-        lua.setGlobal("chat");
     }
 
     public void stop() {

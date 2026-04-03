@@ -27,20 +27,20 @@ Standard Lua libraries: `base`, `string`, `table`, `math`. No `io`, `os`, or `de
 Send messages to the RuneLite chat box.
 
 ```lua
-chat.game("message")     -- send a game message (appears as a system message)
-chat.console("message")  -- send a console message (appears in the plugin console)
+chat:game("message")     -- send a game message (appears as a system message)
+chat:console("message")  -- send a console message (appears in the plugin console)
 ```
 
 ### Examples
 
 Simple game message:
 ```lua
-chat.game("Hello from Ragger!")
+chat:game("Hello from Ragger!")
 ```
 
 Formatted message:
 ```lua
-chat.game("Your quest points: " .. tostring(42))
+chat:game("Your quest points: " .. tostring(42))
 ```
 
 ### Script Rules
