@@ -27,11 +27,15 @@ public class ClaudeClient {
 
     private final String claudePath;
     private final String model;
+    private final int bridgePort;
+    private final String bridgeToken;
     private String sessionId;
 
-    public ClaudeClient(String claudePath, String model) {
+    public ClaudeClient(String claudePath, String model, int bridgePort, String bridgeToken) {
         this.claudePath = claudePath;
         this.model = model;
+        this.bridgePort = bridgePort;
+        this.bridgeToken = bridgeToken;
     }
 
     /**
@@ -64,6 +68,7 @@ public class ClaudeClient {
         command.add("Glob");
         command.add("Grep");
         command.add("mcp__ragger__RaggerRun");
+        command.add("mcp__ragger__RaggerEval");
 
         // Load Ragger MCP tools only for plugin sessions
         command.add("--mcp-config");
@@ -80,12 +85,13 @@ public class ClaudeClient {
             command.add(sessionId);
         }
 
-        log.info("Claude CLI command args: {}", command.size());
         ProcessBuilder pb = new ProcessBuilder(command);
         String projectRoot = System.getenv("RAGGER_PROJECT_ROOT");
         if (projectRoot != null) {
             pb.directory(new java.io.File(projectRoot));
         }
+        pb.environment().put("RAGGER_BRIDGE_PORT", String.valueOf(bridgePort));
+        pb.environment().put("RAGGER_BRIDGE_TOKEN", bridgeToken);
         pb.redirectErrorStream(true);
         pb.redirectInput(ProcessBuilder.Redirect.from(new java.io.File("/dev/null")));
         Process process = pb.start();
