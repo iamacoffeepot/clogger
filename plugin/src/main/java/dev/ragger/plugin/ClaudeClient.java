@@ -105,6 +105,9 @@ public class ClaudeClient {
         command.add("mcp__ragger__RaggerScriptSource");
         command.add("mcp__ragger__RaggerTemplateList");
         command.add("mcp__ragger__RaggerTemplateSource");
+        command.add("mcp__ragger__RaggerMailSend");
+        command.add("mcp__ragger__RaggerMailRecvAsync");
+        command.add("mcp__ragger__RaggerMailRecvSync");
 
         if (devMode) {
             command.add("Edit(/**/*)");

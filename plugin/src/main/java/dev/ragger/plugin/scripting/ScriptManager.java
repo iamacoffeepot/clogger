@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
@@ -30,6 +31,9 @@ public class ScriptManager {
     private final ConcurrentHashMap<String, LuaScript> scripts = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, String> templates = new ConcurrentHashMap<>();
     private final CopyOnWriteArrayList<Runnable> changeListeners = new CopyOnWriteArrayList<>();
+
+    private final ConcurrentLinkedQueue<MailMessage> mailQueue = new ConcurrentLinkedQueue<>();
+    private final ConcurrentLinkedQueue<MailMessage> claudeMailbox = new ConcurrentLinkedQueue<>();
 
     private int maxDepth = 3;
     private int maxChildren = 50;
@@ -121,6 +125,93 @@ public class ScriptManager {
     /**
      * Called every game tick — dispatches to all active scripts with hooks.
      */
+    /**
+     * Enqueue a mail message for delivery on the next drain.
+     */
+    public void enqueueMail(String from, String to, Map<String, Object> data) {
+        mailQueue.add(new MailMessage(from, to, data));
+    }
+
+    /**
+     * Drain the mail queue and deliver messages to recipients.
+     * Uses snapshot pattern — messages sent during delivery queue for next drain.
+     */
+    public void drainMail() {
+        List<MailMessage> batch = new ArrayList<>();
+        MailMessage msg;
+        while ((msg = mailQueue.poll()) != null) {
+            batch.add(msg);
+        }
+
+        for (MailMessage m : batch) {
+            if ("claude".equals(m.to())) {
+                claudeMailbox.add(m);
+                continue;
+            }
+            LuaScript target = scripts.get(m.to());
+            if (target == null || !target.isRunning()) {
+                log.debug("Mail dropped: target '{}' not found or not running", m.to());
+                continue;
+            }
+            if (!target.deliverMail(m.from(), m.data())) {
+                target.stop();
+                scripts.remove(m.to());
+                log.info("Script '{}' self-stopped via on_mail", m.to());
+                fireChange();
+            }
+        }
+    }
+
+    /**
+     * Drain all messages addressed to "claude" and return them.
+     */
+    public List<MailMessage> drainClaudeMailbox() {
+        List<MailMessage> messages = new ArrayList<>();
+        MailMessage msg;
+        while ((msg = claudeMailbox.poll()) != null) {
+            messages.add(msg);
+        }
+        return messages;
+    }
+
+    /**
+     * Drain up to {@code limit} messages from the claude mailbox, optionally filtered by sender.
+     * If limit <= 0, drains all matching messages.
+     */
+    public List<MailMessage> drainClaudeMailbox(int limit, String fromFilter) {
+        List<MailMessage> matched = new ArrayList<>();
+        List<MailMessage> skipped = new ArrayList<>();
+
+        MailMessage msg;
+        while ((msg = claudeMailbox.poll()) != null) {
+            boolean matches = (fromFilter == null || fromFilter.isEmpty() || fromFilter.equals(msg.from()));
+            if (matches && (limit <= 0 || matched.size() < limit)) {
+                matched.add(msg);
+            } else {
+                skipped.add(msg);
+            }
+        }
+
+        // Put non-matching messages back
+        for (MailMessage s : skipped) {
+            claudeMailbox.add(s);
+        }
+        return matched;
+    }
+
+    /**
+     * Count how many claude mailbox messages match the given filter, without consuming them.
+     */
+    public int countClaudeMailbox(String fromFilter) {
+        int count = 0;
+        for (MailMessage msg : claudeMailbox) {
+            if (fromFilter == null || fromFilter.isEmpty() || fromFilter.equals(msg.from())) {
+                count++;
+            }
+        }
+        return count;
+    }
+
     public void tick() {
         var it = scripts.entrySet().iterator();
         while (it.hasNext()) {

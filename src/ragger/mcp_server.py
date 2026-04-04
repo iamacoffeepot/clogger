@@ -121,5 +121,84 @@ def ragger_template_source(name: str) -> str:
         return json.dumps({"error": "Bridge server not running"})
 
 
+@mcp.tool(name="RaggerMailRecvAsync")
+def ragger_recv_async(limit: int = 0, from_script: str = "") -> str:
+    """Pop messages from the claude mailbox without blocking.
+
+    Returns immediately with up to `limit` messages (0 = all available).
+    Optionally filter by sender script name.
+
+    Args:
+        limit: Max messages to return. 0 returns all available.
+        from_script: Only return messages from this script. Empty string = any script.
+    """
+    try:
+        params = {}
+        if limit > 0:
+            params["limit"] = limit
+        if from_script:
+            params["from"] = from_script
+        resp = requests.get(
+            f"{BRIDGE_URL}/mail-recv",
+            params=params,
+            headers=BRIDGE_HEADERS,
+            timeout=10,
+        )
+        return resp.text
+    except requests.ConnectionError:
+        return json.dumps({"error": "Bridge server not running"})
+
+
+@mcp.tool(name="RaggerMailRecvSync")
+def ragger_recv_sync(count: int = 1, from_script: str = "", timeout: int = 30) -> str:
+    """Block until exactly `count` messages arrive, then return them.
+
+    Waits for the specified number of messages to accumulate in the claude
+    mailbox before returning. Returns early with whatever was collected if
+    the timeout is reached.
+
+    Args:
+        count: Exact number of messages to wait for (minimum 1).
+        from_script: Only match messages from this script. Empty string = any script.
+        timeout: Max seconds to wait (1-300, default 30).
+    """
+    try:
+        params = {"count": max(1, count), "timeout": min(300, max(1, timeout))}
+        if from_script:
+            params["from"] = from_script
+        resp = requests.get(
+            f"{BRIDGE_URL}/mail-recv-block",
+            params=params,
+            headers=BRIDGE_HEADERS,
+            timeout=timeout + 10,
+        )
+        return resp.text
+    except requests.ConnectionError:
+        return json.dumps({"error": "Bridge server not running"})
+
+
+@mcp.tool(name="RaggerMailSend")
+def ragger_mail(target: str, data: dict) -> str:
+    """Send a message to a running Lua script's on_mail hook.
+
+    The script receives on_mail(from, data) where from is "claude"
+    and data is the table you provide here.
+
+    Args:
+        target: The script name to send to (e.g. "tile-marker", "npc-highlighter")
+        data: Key-value table to deliver (string/number/boolean values)
+    """
+    try:
+        resp = requests.post(
+            f"{BRIDGE_URL}/mail",
+            json={"target": target, "data": data},
+            headers=BRIDGE_HEADERS,
+            timeout=10,
+        )
+        return resp.text
+    except requests.ConnectionError:
+        return json.dumps({"error": "Bridge server not running"})
+
+
 if __name__ == "__main__":
     mcp.run()

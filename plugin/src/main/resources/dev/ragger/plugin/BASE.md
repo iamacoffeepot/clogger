@@ -46,6 +46,52 @@ RaggerTemplateList()                       → {templates: ["tile-marker", "coun
 RaggerTemplateSource("tile-marker")        → {name: "tile-marker", source: "local color = ..."}
 ```
 
+## Sending Messages to Scripts
+
+Use `RaggerMailSend` to send data to a running script's `on_mail` hook. This lets you control long-lived scripts without restarting them.
+
+```
+RaggerMailSend("tile-marker", { action = "add", x = 3200, y = 3400, color = 0xFF0000 })
+RaggerMailSend("npc-highlighter", { action = "clear" })
+```
+
+The script receives the message in its `on_mail(from, data)` hook:
+
+```lua
+return {
+    on_mail = function(from, data)
+        if data.action == "add" then
+            -- handle add
+        end
+    end
+}
+```
+
+Scripts can send messages back to Claude using `mail:send("claude", data)`. Two tools for receiving:
+
+**`RaggerMailRecvAsync`** — non-blocking, pops messages immediately:
+
+```
+RaggerMailRecvAsync()                          → all pending messages
+RaggerMailRecvAsync(limit=5)                   → up to 5 messages
+RaggerMailRecvAsync(from_script="loot-scout")  → only from loot-scout
+RaggerMailRecvAsync(limit=1, from_script="x")  → one message from "x"
+```
+
+**`RaggerMailRecvSync`** — blocks until exactly N messages arrive:
+
+```
+RaggerMailRecvSync(count=1)                              → wait for 1 message (any script)
+RaggerMailRecvSync(count=3, from_script="tick-counter")  → wait for 3 messages from tick-counter
+RaggerMailRecvSync(count=1, timeout=60)                  → wait up to 60s for 1 message
+```
+
+Sync returns early with whatever was collected if the timeout is reached. Use async for polling, sync for request-response patterns and background agents that await script events.
+
+Messages are consumed on read — subsequent calls return only new messages.
+
+Prefer `RaggerMailSend` over rewriting a script when you just need to update its state.
+
 ## Lua Scripting
 
 To execute code in the RuneLite client, call the `RaggerRun` MCP tool with a Lua script string. The script runs in a sandboxed LuaJ runtime with the following globals available.
@@ -533,9 +579,43 @@ return {
 - `on_start` — called once when the script is loaded
 - `on_tick` — called every game tick (600ms)
 - `on_render` — called every render frame (use overlay API here)
+- `on_mail(from, data)` — called when another script sends mail to this script
 - `on_stop` — called when the script is unloaded
 
 If a script does not return a table, it runs once top-to-bottom (one-shot mode). Locals defined in the script body are captured by hook closures and persist for the script's lifetime.
+
+### API: `mail`
+
+Send messages between scripts. Mail is asynchronous — messages sent during one tick are delivered at the start of the next tick.
+
+```lua
+-- Send a message to another script
+mail:send("target-script-name", { key = "value", count = 42 })
+```
+
+Receive messages via the `on_mail` lifecycle hook:
+
+```lua
+return {
+    on_mail = function(from, data)
+        -- from: sender's script name (string)
+        -- data: the table that was sent
+        chat:game("Got mail from " .. from .. ": " .. tostring(data.key))
+    end,
+
+    on_tick = function()
+        mail:send("other-script", { ping = true })
+    end
+}
+```
+
+**Delivery rules:**
+- FIFO order — messages delivered in the order they were sent
+- Mail sent during tick N is delivered at the start of tick N+1
+- `on_mail` can call `mail:send()` safely — those messages queue for the next tick
+- If the target script doesn't exist or has no `on_mail` hook, the message is silently dropped
+- Self-send is allowed (delivered next tick)
+- Data is flat tables only (string, number, boolean values). Nested tables are not supported.
 
 ### API: `scripts`
 
