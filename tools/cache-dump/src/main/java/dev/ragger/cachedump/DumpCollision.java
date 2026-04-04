@@ -96,21 +96,7 @@ public class DumpCollision {
 
         for (Location loc : region.getLocations()) {
             if (loc.getPosition().getZ() != plane) {
-                // Check bridge push-down: object on plane+1 with tile flag 0x8
-                if (loc.getPosition().getZ() == plane + 1) {
-                    int lx = loc.getPosition().getX() - baseX;
-                    int ly = loc.getPosition().getY() - baseY;
-                    if (lx >= 0 && lx < REGION_SIZE && ly >= 0 && ly < REGION_SIZE) {
-                        if ((region.getTileSetting(plane + 1, lx, ly) & 0x8) == 0) {
-                            continue;
-                        }
-                        // Fall through — apply to current plane
-                    } else {
-                        continue;
-                    }
-                } else {
-                    continue;
-                }
+                continue; // Only process objects on the target plane
             }
 
             ObjectDefinition def = objectManager.getObject(loc.getId());
@@ -123,6 +109,12 @@ public class DumpCollision {
             int orientation = loc.getOrientation();
             int lx = loc.getPosition().getX() - baseX;
             int ly = loc.getPosition().getY() - baseY;
+
+            // Skip objects on bridge tiles — bridge surface overrides collision
+            if (plane == 0 && lx >= 0 && lx < REGION_SIZE && ly >= 0 && ly < REGION_SIZE
+                && (region.getTileSetting(1, lx, ly) & 0x2) != 0) {
+                continue;
+            }
 
             if (type >= 0 && type <= 3) {
                 // Wall types — directional blocking
