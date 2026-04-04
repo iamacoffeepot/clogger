@@ -232,7 +232,7 @@ public class ConsoleOverlay extends Overlay {
             if (!text.isEmpty()) {
                 inputBuffer.setLength(0);
                 cursorPos = 0;
-                if (busy) {
+                if (busy && !text.startsWith("/")) {
                     messageQueue.add(text);
                 } else {
                     onMessage.accept(text);
