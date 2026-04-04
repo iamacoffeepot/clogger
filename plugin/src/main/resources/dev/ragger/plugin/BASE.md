@@ -75,6 +75,7 @@ Scripts can send messages back to Claude using `mail:send("claude", data)`. Two 
 RaggerMailRecvAsync()                          → all pending messages
 RaggerMailRecvAsync(limit=5)                   → up to 5 messages
 RaggerMailRecvAsync(from_script="loot-scout")  → only from loot-scout
+RaggerMailRecvAsync(from_script="loot-.*")     → regex: any script starting with "loot-"
 RaggerMailRecvAsync(limit=1, from_script="x")  → one message from "x"
 ```
 

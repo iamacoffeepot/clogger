@@ -130,7 +130,7 @@ def ragger_recv_async(limit: int = 0, from_script: str = "") -> str:
 
     Args:
         limit: Max messages to return. 0 returns all available.
-        from_script: Only return messages from this script. Empty string = any script.
+        from_script: Regex pattern to match sender script names (e.g. "loot-.*", "quest-guide/.*"). Empty string = any script.
     """
     try:
         params = {}
@@ -159,7 +159,7 @@ def ragger_recv_sync(count: int = 1, from_script: str = "", timeout: int = 30) -
 
     Args:
         count: Exact number of messages to wait for (minimum 1).
-        from_script: Only match messages from this script. Empty string = any script.
+        from_script: Regex pattern to match sender script names (e.g. "loot-.*", "quest-guide/.*"). Empty string = any script.
         timeout: Max seconds to wait (1-300, default 30).
     """
     try:

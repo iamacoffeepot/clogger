@@ -176,15 +176,17 @@ public class ScriptManager {
 
     /**
      * Drain up to {@code limit} messages from the claude mailbox, optionally filtered by sender.
-     * If limit <= 0, drains all matching messages.
+     * If limit <= 0, drains all matching messages. The fromFilter is a regex pattern
+     * (e.g. "loot-.*", "quest-guide/.*", or an exact name like "ping").
      */
     public List<MailMessage> drainClaudeMailbox(int limit, String fromFilter) {
+        java.util.regex.Pattern pattern = compileFromFilter(fromFilter);
         List<MailMessage> matched = new ArrayList<>();
         List<MailMessage> skipped = new ArrayList<>();
 
         MailMessage msg;
         while ((msg = claudeMailbox.poll()) != null) {
-            boolean matches = (fromFilter == null || fromFilter.isEmpty() || fromFilter.equals(msg.from()));
+            boolean matches = (pattern == null || pattern.matcher(msg.from()).matches());
             if (matches && (limit <= 0 || matched.size() < limit)) {
                 matched.add(msg);
             } else {
@@ -203,13 +205,26 @@ public class ScriptManager {
      * Count how many claude mailbox messages match the given filter, without consuming them.
      */
     public int countClaudeMailbox(String fromFilter) {
+        java.util.regex.Pattern pattern = compileFromFilter(fromFilter);
         int count = 0;
         for (MailMessage msg : claudeMailbox) {
-            if (fromFilter == null || fromFilter.isEmpty() || fromFilter.equals(msg.from())) {
+            if (pattern == null || pattern.matcher(msg.from()).matches()) {
                 count++;
             }
         }
         return count;
+    }
+
+    private static java.util.regex.Pattern compileFromFilter(String fromFilter) {
+        if (fromFilter == null || fromFilter.isEmpty()) {
+            return null;
+        }
+        try {
+            return java.util.regex.Pattern.compile(fromFilter);
+        } catch (java.util.regex.PatternSyntaxException e) {
+            // Fall back to literal match if not a valid regex
+            return java.util.regex.Pattern.compile(java.util.regex.Pattern.quote(fromFilter));
+        }
     }
 
     public void tick() {
