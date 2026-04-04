@@ -84,8 +84,8 @@ public class ClaudeClient {
         command.add("mcp__ragger__RaggerEval");
 
         if (devMode) {
-            command.add("Edit(/**)");
-            command.add("Write(/**)");
+            command.add("Edit(/**/*)");
+            command.add("Write(/**/*)");
         }
 
         if (extraTools != null && !extraTools.isBlank()) {
