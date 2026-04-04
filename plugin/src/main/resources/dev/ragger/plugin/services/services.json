@@ -4,6 +4,7 @@
     { "name": "npcs",   "template": "npc-highlighter" },
     { "name": "timers", "template": "timer" },
     { "name": "loot",   "template": "loot-tracker" },
-    { "name": "stats",  "template": "stat-monitor" }
+    { "name": "stats",  "template": "stat-monitor" },
+    { "name": "radar", "template": "radar" }
   ]
 }
