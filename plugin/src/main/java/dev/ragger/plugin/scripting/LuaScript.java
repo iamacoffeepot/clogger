@@ -55,6 +55,7 @@ public class LuaScript {
         new CoordsApi(client).register(lua);
         new ItemsApi(itemManager).register(lua);
         new InventoryApi(client, itemManager).register(lua);
+        new CombatApi(client).register(lua);
     }
 
     public void start() {
