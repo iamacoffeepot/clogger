@@ -55,5 +55,71 @@ def ragger_eval(script: str) -> str:
         return json.dumps({"error": "Bridge server not running"})
 
 
+@mcp.tool(name="RaggerScriptList")
+def ragger_script_list() -> str:
+    """List all currently running Lua scripts by name."""
+    try:
+        resp = requests.get(
+            f"{BRIDGE_URL}/list",
+            headers=BRIDGE_HEADERS,
+            timeout=10,
+        )
+        return resp.text
+    except requests.ConnectionError:
+        return json.dumps({"error": "Bridge server not running"})
+
+
+@mcp.tool(name="RaggerScriptSource")
+def ragger_script_source(name: str) -> str:
+    """Retrieve the Lua source code of a running script by name.
+
+    Args:
+        name: The script name (e.g. "tick-counter", "npc-highlighter")
+    """
+    try:
+        resp = requests.post(
+            f"{BRIDGE_URL}/source",
+            json={"name": name},
+            headers=BRIDGE_HEADERS,
+            timeout=10,
+        )
+        return resp.text
+    except requests.ConnectionError:
+        return json.dumps({"error": "Bridge server not running"})
+
+
+@mcp.tool(name="RaggerTemplateList")
+def ragger_template_list() -> str:
+    """List all registered Lua script templates by name."""
+    try:
+        resp = requests.get(
+            f"{BRIDGE_URL}/templates",
+            headers=BRIDGE_HEADERS,
+            timeout=10,
+        )
+        return resp.text
+    except requests.ConnectionError:
+        return json.dumps({"error": "Bridge server not running"})
+
+
+@mcp.tool(name="RaggerTemplateSource")
+def ragger_template_source(name: str) -> str:
+    """Retrieve the Lua source code of a registered template by name.
+
+    Args:
+        name: The template name (e.g. "tile-marker", "counter-display")
+    """
+    try:
+        resp = requests.post(
+            f"{BRIDGE_URL}/template-source",
+            json={"name": name},
+            headers=BRIDGE_HEADERS,
+            timeout=10,
+        )
+        return resp.text
+    except requests.ConnectionError:
+        return json.dumps({"error": "Bridge server not running"})
+
+
 if __name__ == "__main__":
     mcp.run()

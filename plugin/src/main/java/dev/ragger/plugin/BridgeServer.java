@@ -56,6 +56,34 @@ public class BridgeServer {
             }
             handleRun(exchange);
         });
+        server.createContext("/list", exchange -> {
+            if (!authenticate(exchange)) {
+                respond(exchange, 401, "{\"error\":\"unauthorized\"}");
+                return;
+            }
+            handleList(exchange);
+        });
+        server.createContext("/source", exchange -> {
+            if (!authenticate(exchange)) {
+                respond(exchange, 401, "{\"error\":\"unauthorized\"}");
+                return;
+            }
+            handleSource(exchange);
+        });
+        server.createContext("/templates", exchange -> {
+            if (!authenticate(exchange)) {
+                respond(exchange, 401, "{\"error\":\"unauthorized\"}");
+                return;
+            }
+            handleTemplates(exchange);
+        });
+        server.createContext("/template-source", exchange -> {
+            if (!authenticate(exchange)) {
+                respond(exchange, 401, "{\"error\":\"unauthorized\"}");
+                return;
+            }
+            handleTemplateSource(exchange);
+        });
         server.createContext("/health", exchange -> {
             respond(exchange, 200, "{\"status\":\"ok\"}");
         });
@@ -141,6 +169,86 @@ public class BridgeServer {
 
             String result = future.get(5, TimeUnit.SECONDS);
             respond(exchange, 200, result);
+        } catch (Exception e) {
+            respond(exchange, 500, "{\"error\":\"" + e.getMessage().replace("\"", "'") + "\"}");
+        }
+    }
+
+    private void handleList(HttpExchange exchange) throws IOException {
+        if (!"GET".equals(exchange.getRequestMethod())) {
+            respond(exchange, 405, "{\"error\":\"GET required\"}");
+            return;
+        }
+
+        var names = scriptManager.list();
+        var arr = new com.google.gson.JsonArray();
+        for (String name : names) {
+            arr.add(name);
+        }
+        JsonObject result = new JsonObject();
+        result.add("scripts", arr);
+        respond(exchange, 200, result.toString());
+    }
+
+    private void handleSource(HttpExchange exchange) throws IOException {
+        if (!"POST".equals(exchange.getRequestMethod())) {
+            respond(exchange, 405, "{\"error\":\"POST required\"}");
+            return;
+        }
+
+        String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+        try {
+            JsonObject json = new JsonParser().parse(body).getAsJsonObject();
+            String name = json.get("name").getAsString();
+            String source = scriptManager.getSource(name);
+            if (source == null) {
+                respond(exchange, 404, "{\"error\":\"script not found\"}");
+            } else {
+                JsonObject result = new JsonObject();
+                result.addProperty("name", name);
+                result.addProperty("source", source);
+                respond(exchange, 200, result.toString());
+            }
+        } catch (Exception e) {
+            respond(exchange, 500, "{\"error\":\"" + e.getMessage().replace("\"", "'") + "\"}");
+        }
+    }
+
+    private void handleTemplates(HttpExchange exchange) throws IOException {
+        if (!"GET".equals(exchange.getRequestMethod())) {
+            respond(exchange, 405, "{\"error\":\"GET required\"}");
+            return;
+        }
+
+        var names = scriptManager.listTemplates();
+        var arr = new com.google.gson.JsonArray();
+        for (String name : names) {
+            arr.add(name);
+        }
+        JsonObject result = new JsonObject();
+        result.add("templates", arr);
+        respond(exchange, 200, result.toString());
+    }
+
+    private void handleTemplateSource(HttpExchange exchange) throws IOException {
+        if (!"POST".equals(exchange.getRequestMethod())) {
+            respond(exchange, 405, "{\"error\":\"POST required\"}");
+            return;
+        }
+
+        String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+        try {
+            JsonObject json = new JsonParser().parse(body).getAsJsonObject();
+            String name = json.get("name").getAsString();
+            String source = scriptManager.getTemplate(name);
+            if (source == null) {
+                respond(exchange, 404, "{\"error\":\"template not found\"}");
+            } else {
+                JsonObject result = new JsonObject();
+                result.addProperty("name", name);
+                result.addProperty("source", source);
+                respond(exchange, 200, result.toString());
+            }
         } catch (Exception e) {
             respond(exchange, 500, "{\"error\":\"" + e.getMessage().replace("\"", "'") + "\"}");
         }
