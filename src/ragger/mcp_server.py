@@ -14,7 +14,7 @@ BRIDGE_HEADERS = {"Authorization": f"Bearer {BRIDGE_TOKEN}"}
 
 
 @mcp.tool(name="RaggerActorSpawn")
-def ragger_spawn(name: str, script: str) -> str:
+def ragger_actor_spawn(name: str, script: str) -> str:
     """Spawn a Lua actor in the RuneLite client.
 
     Args:
@@ -122,7 +122,7 @@ def ragger_template_source(name: str) -> str:
 
 
 @mcp.tool(name="RaggerMailRecvAsync")
-def ragger_recv_async(limit: int = 0, from_actor: str = "") -> str:
+def ragger_mail_recv_async(limit: int = 0, from_actor: str = "") -> str:
     """Pop messages from the claude mailbox without blocking.
 
     Returns immediately with up to `limit` messages (0 = all available).
@@ -150,7 +150,7 @@ def ragger_recv_async(limit: int = 0, from_actor: str = "") -> str:
 
 
 @mcp.tool(name="RaggerMailRecvSync")
-def ragger_recv_sync(count: int = 1, from_actor: str = "", timeout: int = 30) -> str:
+def ragger_mail_recv_sync(count: int = 1, from_actor: str = "", timeout: int = 30) -> str:
     """Block until exactly `count` messages arrive, then return them.
 
     Waits for the specified number of messages to accumulate in the claude
@@ -178,7 +178,7 @@ def ragger_recv_sync(count: int = 1, from_actor: str = "", timeout: int = 30) ->
 
 
 @mcp.tool(name="RaggerMailSend")
-def ragger_mail(target: str, data: dict) -> str:
+def ragger_mail_send(target: str, data: dict) -> str:
     """Send a message to a running Lua actor's on_mail hook.
 
     The actor receives on_mail(from, data) where from is "claude"
