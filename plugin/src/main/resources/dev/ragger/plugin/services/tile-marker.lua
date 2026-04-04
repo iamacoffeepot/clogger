@@ -1,10 +1,10 @@
--- tile-marker: highlight world tiles with colored outlines
+-- tile-marker: highlight world tiles with colored outlines and optional labels
 --
 -- Mail API:
---   {action="add", x=N, y=N, color=0xRRGGBB}
+--   {action="add", x=N, y=N, color=0xRRGGBB, label="text"}
 --   {action="remove", x=N, y=N}
 --   {action="clear"}
---   {action="list"}  -> mails back {tiles={{x,y,color},...}}
+--   {action="list"}  -> mails back {tiles={{x,y,color,label},...}}
 
 local tiles = {}
 
@@ -15,7 +15,8 @@ return {
         if data.action == "add" and data.x and data.y then
             tiles[key(data.x, data.y)] = {
                 x = data.x, y = data.y,
-                color = data.color or 0xFFFFFF
+                color = data.color or 0xFFFFFF,
+                label = data.label
             }
         elseif data.action == "remove" and data.x and data.y then
             tiles[key(data.x, data.y)] = nil
@@ -39,6 +40,12 @@ return {
                 for j = 1, #poly do
                     local nxt = j < #poly and j + 1 or 1
                     g:line(poly[j].x, poly[j].y, poly[nxt].x, poly[nxt].y, t.color)
+                end
+                if t.label then
+                    local tx, ty = coords:world_text_pos(t.x, t.y, 150)
+                    if tx then
+                        g:text(tx, ty, t.label, t.color)
+                    end
                 end
             end
         end
