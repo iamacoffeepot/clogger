@@ -8,6 +8,8 @@ import org.slf4j.LoggerFactory;
 import party.iroiro.luajava.Lua;
 import party.iroiro.luajava.luaj.LuaJ;
 
+import java.util.Map;
+
 /**
  * A single Lua script instance executed via LuaJ.
  *
@@ -23,18 +25,22 @@ public class LuaScript {
     private final Client client;
     private final ChatMessageManager chatMessageManager;
     private final ItemManager itemManager;
+    private final ScriptManager scriptManager;
+    private final Map<String, Object> args;
     private final OverlayApi overlayApi = new OverlayApi();
     private Lua lua;
     private boolean running = false;
     private boolean hasHooks = false;
     private boolean requestStop = false;
 
-    public LuaScript(String name, String source, Client client, ChatMessageManager chatMessageManager, ItemManager itemManager) {
+    public LuaScript(String name, String source, Client client, ChatMessageManager chatMessageManager, ItemManager itemManager, ScriptManager scriptManager, Map<String, Object> args) {
         this.name = name;
         this.source = source;
         this.client = client;
         this.chatMessageManager = chatMessageManager;
         this.itemManager = itemManager;
+        this.scriptManager = scriptManager;
+        this.args = args;
     }
 
     private void initLua() {
@@ -57,6 +63,13 @@ public class LuaScript {
         new InventoryApi(client, itemManager).register(lua);
         new CombatApi(client).register(lua);
         lua.set("prayer", new PrayerApi());
+        new ScriptsApi(name, scriptManager).register(lua);
+
+        // Inject args table if provided
+        if (args != null && !args.isEmpty()) {
+            pushArgsTable(lua, args);
+            lua.setGlobal("args");
+        }
     }
 
     public void start() {
@@ -212,5 +225,34 @@ public class LuaScript {
 
     public boolean hasHooks() {
         return hasHooks;
+    }
+
+    public String getSource() {
+        return source;
+    }
+
+    /**
+     * Manually push a Map as a Lua table onto the stack.
+     * Handles String, Number, and Boolean values.
+     */
+    private static void pushArgsTable(Lua lua, Map<String, Object> map) {
+        lua.createTable(0, map.size());
+        for (Map.Entry<String, Object> entry : map.entrySet()) {
+            Object value = entry.getValue();
+            if (value instanceof String) {
+                lua.push((String) value);
+            } else if (value instanceof Integer) {
+                lua.push((int) value);
+            } else if (value instanceof Double) {
+                lua.push((double) value);
+            } else if (value instanceof Boolean) {
+                lua.push((boolean) value);
+            } else if (value instanceof Number) {
+                lua.push(((Number) value).doubleValue());
+            } else {
+                lua.push(String.valueOf(value));
+            }
+            lua.setField(-2, entry.getKey());
+        }
     }
 }

@@ -56,4 +56,24 @@ public interface RaggerConfig extends Config {
     default String extraTools() {
         return "";
     }
+
+    @ConfigItem(
+        keyName = "scriptMaxDepth",
+        name = "Script Max Depth",
+        description = "Maximum nesting depth for child scripts",
+        position = 5
+    )
+    default int scriptMaxDepth() {
+        return 3;
+    }
+
+    @ConfigItem(
+        keyName = "scriptMaxChildren",
+        name = "Script Max Children",
+        description = "Maximum number of direct children per parent script",
+        position = 6
+    )
+    default int scriptMaxChildren() {
+        return 50;
+    }
 }

@@ -6,11 +6,19 @@ import net.runelite.client.game.ItemManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * Manages Lua script lifecycles. Each script gets its own LuaJ runtime
  * with API bindings injected.
+ *
+ * Scripts are stored in a flat map with "/" namespacing for parent-child
+ * relationships. A script "foo" that spawns "bar" creates "foo/bar".
+ * Stopping a parent cascade-stops all children.
  */
 public class ScriptManager {
 
@@ -20,6 +28,11 @@ public class ScriptManager {
     private final ChatMessageManager chatMessageManager;
     private final ItemManager itemManager;
     private final ConcurrentHashMap<String, LuaScript> scripts = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, String> templates = new ConcurrentHashMap<>();
+    private final CopyOnWriteArrayList<Runnable> changeListeners = new CopyOnWriteArrayList<>();
+
+    private int maxDepth = 3;
+    private int maxChildren = 50;
 
     public ScriptManager(Client client, ChatMessageManager chatMessageManager, ItemManager itemManager) {
         this.client = client;
@@ -28,18 +41,80 @@ public class ScriptManager {
     }
 
     /**
-     * Load and start a Lua script from source.
+     * Update script limits from config.
+     */
+    public void setLimits(int maxDepth, int maxChildren) {
+        this.maxDepth = maxDepth;
+        this.maxChildren = maxChildren;
+    }
+
+    /**
+     * Register a listener that is called whenever scripts or templates change.
+     */
+    public void addChangeListener(Runnable listener) {
+        changeListeners.add(listener);
+    }
+
+    private void fireChange() {
+        for (Runnable listener : changeListeners) {
+            try {
+                listener.run();
+            } catch (Exception e) {
+                log.warn("Change listener error", e);
+            }
+        }
+    }
+
+    /**
+     * Load and start a Lua script from source (top-level, no parent).
      */
     public String load(String name, String source) {
+        return load(name, source, null);
+    }
+
+    /**
+     * Load and start a Lua script from source with optional args table.
+     */
+    /**
+     * Thrown when a script cannot be loaded due to a limit violation.
+     */
+    public static class ScriptLimitException extends RuntimeException {
+        public ScriptLimitException(String message) {
+            super(message);
+        }
+    }
+
+    public String load(String name, String source, Map<String, Object> args) {
+        // Check depth limit
+        long depth = name.chars().filter(c -> c == '/').count();
+        if (depth >= maxDepth) {
+            throw new ScriptLimitException("depth limit reached (max " + maxDepth + ")");
+        }
+
+        // Check children limit for the parent
+        int lastSlash = name.lastIndexOf('/');
+        if (lastSlash > 0) {
+            String parent = name.substring(0, lastSlash);
+            long childCount = scripts.keySet().stream()
+                .filter(k -> k.startsWith(parent + "/"))
+                .filter(k -> k.indexOf('/', parent.length() + 1) == -1)
+                .filter(k -> !k.equals(name)) // don't count replacement
+                .count();
+            if (childCount >= maxChildren) {
+                throw new ScriptLimitException("child limit reached for " + parent + " (max " + maxChildren + ")");
+            }
+        }
+
         LuaScript existing = scripts.get(name);
         if (existing != null) {
             existing.stop();
         }
 
-        LuaScript script = new LuaScript(name, source, client, chatMessageManager, itemManager);
+        LuaScript script = new LuaScript(name, source, client, chatMessageManager, itemManager, this, args);
         scripts.put(name, script);
         script.start();
         log.info("Loaded script: {}", name);
+        fireChange();
         return name;
     }
 
@@ -56,6 +131,7 @@ public class ScriptManager {
                 script.stop();
                 it.remove();
                 log.info("Script self-stopped: {}", entry.getKey());
+                fireChange();
             }
         }
     }
@@ -65,7 +141,7 @@ public class ScriptManager {
      * Runs in a temporary LuaJ runtime with all API bindings.
      */
     public String eval(String script) {
-        LuaScript temp = new LuaScript("__eval", "return " + script, client, chatMessageManager, itemManager);
+        LuaScript temp = new LuaScript("__eval", "return " + script, client, chatMessageManager, itemManager, this, null);
         try {
             return temp.evalAndReturn();
         } finally {
@@ -74,14 +150,76 @@ public class ScriptManager {
     }
 
     /**
-     * Unload and stop a script.
+     * Unload and stop a script and all its children.
      */
     public void unload(String name) {
+        // Stop children first
+        String prefix = name + "/";
+        var it = scripts.entrySet().iterator();
+        while (it.hasNext()) {
+            var entry = it.next();
+            if (entry.getKey().startsWith(prefix)) {
+                entry.getValue().stop();
+                it.remove();
+                log.info("Cascade-unloaded script: {}", entry.getKey());
+            }
+        }
+
+        // Stop the script itself
         LuaScript script = scripts.remove(name);
         if (script != null) {
             script.stop();
             log.info("Unloaded script: {}", name);
         }
+        fireChange();
+    }
+
+    /**
+     * Resolve a child name relative to a parent.
+     */
+    public String childName(String parent, String child) {
+        return parent + "/" + child;
+    }
+
+    /**
+     * List direct children of a parent script.
+     */
+    public List<String> listChildren(String parent) {
+        String prefix = parent + "/";
+        List<String> result = new ArrayList<>();
+        for (String key : scripts.keySet()) {
+            if (key.startsWith(prefix)) {
+                // Only direct children (no further slashes after prefix)
+                String rest = key.substring(prefix.length());
+                if (!rest.contains("/")) {
+                    result.add(rest);
+                }
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Register a template (script blueprint).
+     */
+    public void defineTemplate(String name, String source) {
+        templates.put(name, source);
+        log.info("Defined template: {}", name);
+        fireChange();
+    }
+
+    /**
+     * Get a template's source by name.
+     */
+    public String getTemplate(String name) {
+        return templates.get(name);
+    }
+
+    /**
+     * List all registered template names.
+     */
+    public List<String> listTemplates() {
+        return new ArrayList<>(templates.keySet());
     }
 
     /**
@@ -96,17 +234,35 @@ public class ScriptManager {
     /**
      * List all active script names.
      */
-    public java.util.List<String> list() {
-        return new java.util.ArrayList<>(scripts.keySet());
+    public List<String> list() {
+        return new ArrayList<>(scripts.keySet());
     }
 
     /**
-     * Shut down all scripts.
+     * Get the source code of a running script by name.
+     */
+    public String getSource(String name) {
+        LuaScript script = scripts.get(name);
+        return script != null ? script.getSource() : null;
+    }
+
+    /**
+     * Check if a script is running.
+     */
+    public boolean isRunning(String name) {
+        LuaScript script = scripts.get(name);
+        return script != null && script.isRunning();
+    }
+
+    /**
+     * Shut down all scripts and clear templates.
      */
     public void shutdown() {
         for (LuaScript script : scripts.values()) {
             script.stop();
         }
         scripts.clear();
+        templates.clear();
+        fireChange();
     }
 }

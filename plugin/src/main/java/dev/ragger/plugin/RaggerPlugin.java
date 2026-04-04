@@ -78,6 +78,7 @@ public class RaggerPlugin extends Plugin {
     @Override
     protected void startUp() {
         scriptManager = new ScriptManager(client, chatMessageManager, itemManager);
+        scriptManager.setLimits(config.scriptMaxDepth(), config.scriptMaxChildren());
         scriptOverlay = new ScriptOverlay(scriptManager);
         overlayManager.add(scriptOverlay);
 
