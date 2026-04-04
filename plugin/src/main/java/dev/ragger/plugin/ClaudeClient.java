@@ -14,10 +14,11 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 
 /**
  * Manages communication with the Claude CLI with persistent sessions.
- * Uses stream-json output to capture both chat text and tool calls.
+ * Streams text as it arrives via a callback.
  */
 public class ClaudeClient {
 
@@ -27,30 +28,44 @@ public class ClaudeClient {
     private final String model;
     private final int bridgePort;
     private final String bridgeToken;
+    private final boolean devMode;
+    private final String extraTools;
     private String sessionId;
 
-    public ClaudeClient(String claudePath, String model, int bridgePort, String bridgeToken) {
+    public ClaudeClient(String claudePath, String model, int bridgePort, String bridgeToken, boolean devMode, String extraTools) {
         this.claudePath = claudePath;
         this.model = model;
         this.bridgePort = bridgePort;
         this.bridgeToken = bridgeToken;
+        this.devMode = devMode;
+        this.extraTools = extraTools;
     }
 
     /**
-     * Send a message to Claude asynchronously with the given behavior profiles.
+     * Callback interface for streaming events.
      */
-    public CompletableFuture<ClaudeResponse> send(String message, String... behaviors) {
-        return CompletableFuture.supplyAsync(() -> {
+    public interface StreamListener {
+        void onText(String text);
+        void onToolUse(String toolLog);
+        void onComplete(String finalText);
+        void onError(String error);
+    }
+
+    /**
+     * Send a message to Claude, streaming responses via the listener.
+     */
+    public void send(String message, StreamListener listener, String... behaviors) {
+        CompletableFuture.runAsync(() -> {
             try {
-                return execute(message, behaviors);
+                execute(message, listener, behaviors);
             } catch (Exception e) {
                 log.error("Claude CLI error", e);
-                return new ClaudeResponse("Error: " + e.getMessage(), List.of());
+                listener.onError("Error: " + e.getMessage());
             }
         });
     }
 
-    private ClaudeResponse execute(String message, String... behaviors) throws IOException, InterruptedException {
+    private void execute(String message, StreamListener listener, String... behaviors) throws IOException, InterruptedException {
         List<String> command = new ArrayList<>();
         command.add(claudePath);
         command.add("-p");
@@ -68,7 +83,20 @@ public class ClaudeClient {
         command.add("mcp__ragger__RaggerRun");
         command.add("mcp__ragger__RaggerEval");
 
-        // Load Ragger MCP tools only for plugin sessions
+        if (devMode) {
+            command.add("Edit");
+            command.add("Write");
+        }
+
+        if (extraTools != null && !extraTools.isBlank()) {
+            for (String tool : extraTools.split(",")) {
+                String trimmed = tool.strip();
+                if (!trimmed.isEmpty()) {
+                    command.add(trimmed);
+                }
+            }
+        }
+
         command.add("--mcp-config");
         command.add("{\"mcpServers\":{\"ragger\":{\"type\":\"stdio\",\"command\":\"uv\",\"args\":[\"run\",\"python\",\"src/ragger/mcp_server.py\"]}}}");
 
@@ -94,14 +122,62 @@ public class ClaudeClient {
         pb.redirectInput(ProcessBuilder.Redirect.from(new java.io.File("/dev/null")));
         Process process = pb.start();
 
-        StringBuilder resultText = new StringBuilder();
-        List<String> toolLog = new ArrayList<>();
+        // Track the last text we've seen to detect new content
+        StringBuilder lastSeenText = new StringBuilder();
+        String finalResult = null;
 
         try (BufferedReader reader = new BufferedReader(
                 new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
             String line;
             while ((line = reader.readLine()) != null) {
-                processStreamLine(line, resultText, toolLog);
+                if (line.isBlank()) continue;
+
+                try {
+                    JsonObject event = new JsonParser().parse(line).getAsJsonObject();
+
+                    if (event.has("session_id")) {
+                        sessionId = event.get("session_id").getAsString();
+                    }
+
+                    if (event.has("result")) {
+                        finalResult = event.get("result").getAsString();
+                    }
+
+                    // Stream text content from assistant messages
+                    if (event.has("type") && "assistant".equals(event.get("type").getAsString())) {
+                        if (event.has("message")) {
+                            JsonObject msg = event.getAsJsonObject("message");
+                            if (msg.has("content")) {
+                                for (JsonElement el : msg.getAsJsonArray("content")) {
+                                    JsonObject block = el.getAsJsonObject();
+                                    String blockType = block.get("type").getAsString();
+
+                                    if ("text".equals(blockType) && block.has("text")) {
+                                        String fullText = block.get("text").getAsString();
+                                        // Only emit the new portion
+                                        if (fullText.length() > lastSeenText.length()) {
+                                            String newPart = fullText.substring(lastSeenText.length());
+                                            lastSeenText.setLength(0);
+                                            lastSeenText.append(fullText);
+                                            listener.onText(newPart);
+                                        }
+                                    } else if ("tool_use".equals(blockType)) {
+                                        String toolName = block.get("name").getAsString();
+                                        JsonObject input = block.has("input") ? block.getAsJsonObject("input") : null;
+                                        // Finalize current stream before tool message
+                                        if (!lastSeenText.isEmpty()) {
+                                            listener.onComplete(lastSeenText.toString());
+                                            lastSeenText.setLength(0);
+                                        }
+                                        listener.onToolUse(formatToolLog(toolName, input));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    log.debug("Non-JSON stream line: {}", line);
+                }
             }
         }
 
@@ -109,75 +185,19 @@ public class ClaudeClient {
         if (!finished) {
             log.warn("Claude CLI timed out after 120s, killing process");
             process.destroyForcibly();
-            if (resultText.isEmpty()) {
-                resultText.append("Request timed out. Try again or /reset the session.");
-            }
+            listener.onError("Request timed out. Try again or /reset the session.");
         } else if (process.exitValue() != 0) {
             log.warn("Claude CLI exited with code {}", process.exitValue());
         }
 
-        return new ClaudeResponse(resultText.toString(), toolLog);
-    }
-
-    private void processStreamLine(String line, StringBuilder resultText, List<String> toolLog) {
-        if (line.isBlank()) return;
-
-        try {
-            JsonObject event = new JsonParser().parse(line).getAsJsonObject();
-
-            // Capture session ID from result event
-            if (event.has("session_id")) {
-                sessionId = event.get("session_id").getAsString();
-                log.info("Session ID: {}", sessionId);
-            }
-
-            // Final result text
-            if (event.has("result")) {
-                resultText.append(event.get("result").getAsString());
-            }
-
-            // Process assistant messages for tool use
-            if (event.has("type") && "assistant".equals(event.get("type").getAsString())) {
-                if (event.has("message")) {
-                    processToolUse(event.getAsJsonObject("message"), toolLog);
-                }
-            }
-        } catch (Exception e) {
-            // Not all lines are JSON (e.g. stderr), log for debugging
-            log.debug("Non-JSON stream line: {}", line);
-        }
-    }
-
-    private void processToolUse(JsonObject event, List<String> toolLog) {
-        try {
-            if (event.has("content")) {
-                for (JsonElement element : event.getAsJsonArray("content")) {
-                    JsonObject block = element.getAsJsonObject();
-                    if (!"tool_use".equals(block.get("type").getAsString())) continue;
-
-                    String toolName = block.get("name").getAsString();
-                    JsonObject input = block.has("input") ? block.getAsJsonObject("input") : null;
-                    toolLog.add(formatToolLog(toolName, input));
-                }
-            }
-
-            if (event.has("name")) {
-                String toolName = event.get("name").getAsString();
-                JsonObject input = event.has("input") ? event.getAsJsonObject("input") : null;
-                toolLog.add(formatToolLog(toolName, input));
-            }
-        } catch (Exception e) {
-            log.debug("Error processing tool use event", e);
-        }
+        listener.onComplete(finalResult != null ? finalResult : lastSeenText.toString());
     }
 
     private String formatToolLog(String toolName, JsonObject input) {
-        // Strip mcp__ prefix for display
         String displayName = toolName.replaceFirst("^mcp__\\w+__", "");
 
         if (input == null) return displayName + "()";
 
-        // Format like Claude Code: Tool(arg1, arg2, ...)
         if (input.has("command")) {
             return displayName + "(" + truncate(input.get("command").getAsString(), 60) + ")";
         }
@@ -199,9 +219,6 @@ public class ClaudeClient {
         return s.substring(0, maxLen) + "...";
     }
 
-    /**
-     * Load behavior files from classpath resources and concatenate them.
-     */
     private String loadBehaviors(String... behaviors) {
         StringBuilder sb = new StringBuilder();
         for (String behavior : behaviors) {
@@ -214,9 +231,7 @@ public class ClaudeClient {
                 if (!sb.isEmpty()) {
                     sb.append("\n\n");
                 }
-                String content = new String(is.readAllBytes(), StandardCharsets.UTF_8);
-                sb.append(content);
-                log.info("Loaded behavior '{}': {} chars", behavior, content.length());
+                sb.append(new String(is.readAllBytes(), StandardCharsets.UTF_8));
             } catch (IOException e) {
                 log.error("Failed to load behavior: {}", behavior, e);
             }
@@ -224,9 +239,6 @@ public class ClaudeClient {
         return sb.toString();
     }
 
-    /**
-     * Reset the session — next message starts a fresh conversation.
-     */
     public void resetSession() {
         sessionId = null;
     }

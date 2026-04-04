@@ -87,7 +87,7 @@ public class RaggerPlugin extends Plugin {
             log.error("Failed to start bridge server", e);
         }
 
-        claude = new ClaudeClient(config.claudePath(), config.claudeModel(), config.bridgePort(), bridgeServer.getToken());
+        claude = new ClaudeClient(config.claudePath(), config.claudeModel(), config.bridgePort(), bridgeServer.getToken(), config.devMode(), config.extraTools());
         chatPanel = new ChatPanel();
         consoleOverlay = new ConsoleOverlay(client, this::onUserMessage);
         overlayManager.add(consoleOverlay);
@@ -187,16 +187,53 @@ public class RaggerPlugin extends Plugin {
 
         consoleOverlay.addMessage("You", message);
         consoleOverlay.addThinking();
-        claude.send(message, "BASE", "ASSISTANT").thenAccept(response -> {
-            consoleOverlay.removeThinking();
+        claude.send(message, new ClaudeClient.StreamListener() {
+            private boolean streaming = false;
+            private boolean senderShown = false;
 
-            for (String toolEntry : response.getToolLog()) {
-                consoleOverlay.addToolMessage(toolEntry);
+            @Override
+            public void onText(String text) {
+                consoleOverlay.removeThinking();
+                if (!streaming) {
+                    if (!senderShown) {
+                        consoleOverlay.beginStream("Claude");
+                        senderShown = true;
+                    } else {
+                        consoleOverlay.beginStreamContinuation();
+                    }
+                    streaming = true;
+                }
+                consoleOverlay.appendStream(text);
             }
 
-            if (!response.getText().isEmpty()) {
-                consoleOverlay.addMessage("Claude", response.getText());
+            @Override
+            public void onToolUse(String toolLog) {
+                consoleOverlay.removeThinking();
+                if (streaming) {
+                    consoleOverlay.endStream();
+                    streaming = false;
+                }
+                consoleOverlay.addToolMessage(toolLog);
             }
-        });
+
+            @Override
+            public void onComplete(String finalText) {
+                consoleOverlay.removeThinking();
+                if (streaming) {
+                    consoleOverlay.endStream();
+                    streaming = false;
+                }
+            }
+
+            @Override
+            public void onError(String error) {
+                consoleOverlay.removeThinking();
+                if (streaming) {
+                    consoleOverlay.endStream();
+                    streaming = false;
+                }
+                consoleOverlay.addMessage("Claude", error);
+            }
+        }, "BASE", "ASSISTANT");
     }
 }
