@@ -49,6 +49,8 @@ public class ConsoleOverlay extends Overlay {
     private int scrollOffset = 0;
     private boolean cursorBlink = true;
     private long lastBlink = 0;
+    private int streamStartIndex = -1;
+    private StringBuilder streamBuffer;
 
     public ConsoleOverlay(Client client, Consumer<String> onMessage) {
         this.client = client;
@@ -68,9 +70,11 @@ public class ConsoleOverlay extends Overlay {
 
     public void addMessage(String sender, String message) {
         lines.add(new ConsoleLine(sender, LineType.SENDER));
+        parseMessageLines(message.strip());
+        scrollToBottom();
+    }
 
-        message = message.strip();
-
+    private void parseMessageLines(String message) {
         boolean inCodeBlock = false;
         boolean seenTableHeader = false;
         for (String rawLine : message.split("\n")) {
@@ -109,7 +113,7 @@ public class ConsoleOverlay extends Overlay {
             } else if (rawLine.contains("|") && rawLine.strip().startsWith("|")) {
                 String trimmed = rawLine.strip();
                 if (trimmed.matches("\\|[\\s\\-:|]+\\|")) {
-                    continue; // skip separator row
+                    continue;
                 }
                 String[] cells = parseCells(trimmed);
                 if (!seenTableHeader) {
@@ -126,7 +130,47 @@ public class ConsoleOverlay extends Overlay {
                 lines.add(new ConsoleLine(rawLine, LineType.TEXT));
             }
         }
+    }
+
+    /**
+     * Begin a streaming message — shows the sender and prepares for text chunks.
+     */
+    public void beginStream(String sender) {
+        lines.add(new ConsoleLine(sender, LineType.SENDER));
+        streamStartIndex = lines.size();
+        streamBuffer = new StringBuilder();
         scrollToBottom();
+    }
+
+    /**
+     * Continue streaming after a tool call — no sender header.
+     */
+    public void beginStreamContinuation() {
+        streamStartIndex = lines.size();
+        streamBuffer = new StringBuilder();
+    }
+
+    /**
+     * Append a text chunk to the current streaming message.
+     */
+    public void appendStream(String text) {
+        if (streamBuffer == null) return;
+        streamBuffer.append(text);
+
+        // Re-parse the full buffer and replace lines from streamStartIndex
+        while (lines.size() > streamStartIndex) {
+            lines.remove(lines.size() - 1);
+        }
+        parseMessageLines(streamBuffer.toString().strip());
+        scrollToBottom();
+    }
+
+    /**
+     * End the streaming message.
+     */
+    public void endStream() {
+        streamBuffer = null;
+        streamStartIndex = -1;
     }
 
     public void addToolMessage(String message) {
@@ -249,12 +293,13 @@ public class ConsoleOverlay extends Overlay {
         g.setFont(FONT);
         g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
 
-        // Input area — wraps if text exceeds width
+        // Input area
         g.setFont(FONT);
         FontMetrics fm = g.getFontMetrics();
         String inputText = inputBuffer.toString();
+        int inputInset = PADDING + 4;
         int promptWidth = fm.stringWidth("\u276F") + 8;
-        int inputTextWidth = width - PADDING * 2 - promptWidth - 4;
+        int inputTextWidth = width - inputInset * 2 - promptWidth;
 
         // Character-accurate line wrapping for input
         List<String> inputLines = new ArrayList<>();
@@ -264,29 +309,31 @@ public class ConsoleOverlay extends Overlay {
             while (lineEnd < inputText.length() && fm.stringWidth(inputText.substring(lineStart, lineEnd + 1)) <= inputTextWidth) {
                 lineEnd++;
             }
-            if (lineEnd == lineStart) lineEnd = lineStart + 1; // at least one char
+            if (lineEnd == lineStart) lineEnd = lineStart + 1;
             inputLines.add(inputText.substring(lineStart, lineEnd));
             lineStart = lineEnd;
         }
         if (inputLines.isEmpty()) inputLines.add("");
 
         int inputLineCount = Math.min(inputLines.size(), 16);
-        int inputAreaHeight = inputLineCount * LINE_HEIGHT + 4;
+        int inputAreaHeight = inputLineCount * LINE_HEIGHT + LINE_HEIGHT;
         int inputY = consoleHeight - inputAreaHeight - PADDING;
 
-        g.setColor(INPUT_BG);
-        g.fillRect(PADDING, inputY, width - PADDING * 2, inputAreaHeight);
+        // Top line
         g.setColor(INPUT_BORDER);
-        g.drawRect(PADDING, inputY, width - PADDING * 2, inputAreaHeight);
+        g.drawLine(inputInset, inputY, width - inputInset, inputY);
 
-        // Prompt chevron — aligned to first line baseline
-        int baselineOffset = inputY + LINE_HEIGHT - 1;
+        // Bottom line
+        g.drawLine(inputInset, inputY + inputAreaHeight, width - inputInset, inputY + inputAreaHeight);
+
+        // Text vertically centered between the two lines
+        int baselineOffset = inputY + LINE_HEIGHT + (fm.getAscent() - fm.getDescent()) / 2;
         g.setColor(TOOL_COLOR);
-        g.drawString("\u276F", PADDING + 4, baselineOffset);
+        g.drawString("\u276F", inputInset + 4, baselineOffset);
 
-        // Input text lines — same baseline
+        // Input text lines — vertically centered between the lines
         g.setColor(TEXT_COLOR);
-        int textX = PADDING + promptWidth;
+        int textX = inputInset + promptWidth;
         for (int il = 0; il < inputLines.size(); il++) {
             g.drawString(inputLines.get(il), textX, baselineOffset + il * LINE_HEIGHT);
         }
@@ -306,11 +353,27 @@ public class ConsoleOverlay extends Overlay {
                 }
                 charsConsumed += lineLen;
             }
-            String beforeCursorOnLine = inputLines.get(cursorLine).substring(0, Math.min(cursorLineOffset, inputLines.get(cursorLine).length()));
+            String lineText = inputLines.get(cursorLine);
+            String beforeCursorOnLine = lineText.substring(0, Math.min(cursorLineOffset, lineText.length()));
             int cursorX = textX + fm.stringWidth(beforeCursorOnLine);
-            int cursorDrawY = baselineOffset + cursorLine * LINE_HEIGHT - LINE_HEIGHT + 5;
+            int cursorDrawY = baselineOffset + cursorLine * LINE_HEIGHT - fm.getAscent();
+
+            // Block cursor — covers the character cell
+            int charWidth;
+            if (cursorLineOffset < lineText.length()) {
+                charWidth = fm.charWidth(lineText.charAt(cursorLineOffset));
+            } else {
+                charWidth = fm.charWidth(' ');
+            }
+
             g.setColor(CURSOR_COLOR);
-            g.fillRect(cursorX, cursorDrawY, 2, LINE_HEIGHT - 2);
+            g.fillRect(cursorX, cursorDrawY, charWidth, fm.getAscent() + fm.getDescent());
+
+            // Draw the character under the cursor in the background color
+            if (cursorLineOffset < lineText.length()) {
+                g.setColor(BG_COLOR);
+                g.drawString(String.valueOf(lineText.charAt(cursorLineOffset)), cursorX, baselineOffset + cursorLine * LINE_HEIGHT);
+            }
         }
 
         // Chat lines — render bottom-up above input
@@ -327,7 +390,7 @@ public class ConsoleOverlay extends Overlay {
                 case SENDER -> {
                     g.setFont(FONT_BOLD);
                     g.setColor(SENDER_COLOR);
-                    g.drawString(line.text, PADDING + 4, y);
+                    g.drawString("\u2022 " + line.text, PADDING + 4, y);
                     y -= LINE_HEIGHT;
                 }
                 case TEXT -> {
@@ -369,15 +432,17 @@ public class ConsoleOverlay extends Overlay {
                 case LIST_ITEM -> {
                     int indentPx = PADDING + 4 + line.indent * 16;
                     g.setFont(FONT);
-                    g.setColor(LIST_BULLET_COLOR);
-                    g.drawString(line.bullet, indentPx, y);
                     int bulletWidth = g.getFontMetrics().stringWidth(line.bullet) + 6;
                     int listTextWidth = maxWidth - indentPx - bulletWidth + PADDING;
                     List<String> wrapped = wrapText(line.text, g.getFontMetrics(), listTextWidth);
+                    // Render wrapped text bottom-up
                     for (int w = wrapped.size() - 1; w >= 0 && y > PADDING; w--) {
                         drawStyledLine(g, wrapped.get(w), indentPx + bulletWidth, y, listTextWidth);
                         y -= LINE_HEIGHT;
                     }
+                    // Draw bullet aligned with the first line (which is now at y + LINE_HEIGHT)
+                    g.setColor(LIST_BULLET_COLOR);
+                    g.drawString(line.bullet, indentPx, y + LINE_HEIGHT);
                 }
                 case TABLE_HEADER -> {
                     drawTableRow(g, line.cells, PADDING + 4, y, maxWidth, true);
