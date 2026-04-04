@@ -286,8 +286,12 @@ public class ScriptManager {
 
     /**
      * Resolve a child name relative to a parent.
+     * Child names must not contain '/' or '..' to prevent namespace escaping.
      */
     public String childName(String parent, String child) {
+        if (child == null || child.isEmpty() || child.contains("/") || child.contains("..")) {
+            throw new IllegalArgumentException("invalid child name: must not be empty or contain '/' or '..'");
+        }
         return parent + "/" + child;
     }
 

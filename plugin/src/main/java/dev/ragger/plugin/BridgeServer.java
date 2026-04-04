@@ -429,7 +429,8 @@ public class BridgeServer {
             if (prim.isBoolean()) return prim.getAsBoolean();
             if (prim.isNumber()) {
                 double num = prim.getAsDouble();
-                if (num == Math.floor(num) && !Double.isInfinite(num)) {
+                if (num == Math.floor(num) && !Double.isInfinite(num)
+                        && num >= Integer.MIN_VALUE && num <= Integer.MAX_VALUE) {
                     return (int) num;
                 }
                 return num;
@@ -450,6 +451,10 @@ public class BridgeServer {
             JsonObject json = new JsonParser().parse(body).getAsJsonObject();
             String target = json.get("target").getAsString();
             JsonObject data = json.getAsJsonObject("data");
+            if (data == null) {
+                respond(exchange, 400, "{\"error\":\"missing data field\"}");
+                return;
+            }
 
             @SuppressWarnings("unchecked")
             java.util.Map<String, Object> map = (java.util.Map<String, Object>) fromJsonElement(data);

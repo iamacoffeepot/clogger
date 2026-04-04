@@ -80,7 +80,8 @@ public class JsonApi {
             if (prim.isBoolean()) return prim.getAsBoolean();
             if (prim.isNumber()) {
                 double num = prim.getAsDouble();
-                if (num == Math.floor(num) && !Double.isInfinite(num)) {
+                if (num == Math.floor(num) && !Double.isInfinite(num)
+                        && num >= Integer.MIN_VALUE && num <= Integer.MAX_VALUE) {
                     return (int) num;
                 }
                 return num;

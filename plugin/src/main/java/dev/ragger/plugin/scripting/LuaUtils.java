@@ -64,7 +64,8 @@ public final class LuaUtils {
                 return lua.toString(absIndex);
             case NUMBER:
                 double num = lua.toNumber(absIndex);
-                if (num == Math.floor(num) && !Double.isInfinite(num)) {
+                if (num == Math.floor(num) && !Double.isInfinite(num)
+                        && num >= Integer.MIN_VALUE && num <= Integer.MAX_VALUE) {
                     return (int) num;
                 }
                 return num;
