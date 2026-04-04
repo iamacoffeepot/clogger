@@ -27,6 +27,18 @@ public class BridgeServer {
 
     private static final Logger log = LoggerFactory.getLogger(BridgeServer.class);
 
+    /** Max seconds to wait for a game-tick eval or script load. */
+    private static final int GAME_TICK_TIMEOUT_SECONDS = 5;
+
+    /** Default timeout for blocking mail recv. */
+    private static final int MAIL_RECV_DEFAULT_TIMEOUT = 30;
+
+    /** Max allowed timeout for blocking mail recv. */
+    private static final int MAIL_RECV_MAX_TIMEOUT = 300;
+
+    /** Extra seconds added to the future timeout beyond the mail deadline. */
+    private static final int MAIL_RECV_BUFFER_SECONDS = 5;
+
     private final ScriptManager scriptManager;
     private final String token;
     private final ConcurrentLinkedQueue<PendingRequest> pendingRequests = new ConcurrentLinkedQueue<>();
@@ -199,8 +211,7 @@ public class BridgeServer {
             CompletableFuture<String> future = new CompletableFuture<>();
             pendingRequests.add(new PendingRequest(script, future));
 
-            // Wait for game tick to process it (max 5 seconds)
-            String result = future.get(5, TimeUnit.SECONDS);
+            String result = future.get(GAME_TICK_TIMEOUT_SECONDS, TimeUnit.SECONDS);
             respond(exchange, 200, result);
         } catch (Exception e) {
             respond(exchange, 500, "{\"error\":\"" + e.getMessage().replace("\"", "'") + "\"}");
@@ -222,7 +233,7 @@ public class BridgeServer {
             CompletableFuture<String> future = new CompletableFuture<>();
             pendingRuns.add(new PendingRun(name, script, future));
 
-            String result = future.get(5, TimeUnit.SECONDS);
+            String result = future.get(GAME_TICK_TIMEOUT_SECONDS, TimeUnit.SECONDS);
             respond(exchange, 200, result);
         } catch (Exception e) {
             respond(exchange, 500, "{\"error\":\"" + e.getMessage().replace("\"", "'") + "\"}");
@@ -341,10 +352,10 @@ public class BridgeServer {
         if (countStr != null) {
             try { count = Math.max(1, Integer.parseInt(countStr)); } catch (NumberFormatException ignored) {}
         }
-        int timeoutSec = 30;
+        int timeoutSec = MAIL_RECV_DEFAULT_TIMEOUT;
         String timeoutStr = params.get("timeout");
         if (timeoutStr != null) {
-            try { timeoutSec = Math.max(1, Math.min(300, Integer.parseInt(timeoutStr))); } catch (NumberFormatException ignored) {}
+            try { timeoutSec = Math.max(1, Math.min(MAIL_RECV_MAX_TIMEOUT, Integer.parseInt(timeoutStr))); } catch (NumberFormatException ignored) {}
         }
 
         CompletableFuture<String> future = new CompletableFuture<>();
@@ -352,7 +363,7 @@ public class BridgeServer {
         pendingMailRecvs.add(new PendingMailRecv(count, fromFilter, deadlineMs, future));
 
         try {
-            String result = future.get(timeoutSec + 5, TimeUnit.SECONDS);
+            String result = future.get(timeoutSec + MAIL_RECV_BUFFER_SECONDS, TimeUnit.SECONDS);
             respond(exchange, 200, result);
         } catch (Exception e) {
             respond(exchange, 504, "{\"error\":\"timeout\"}");

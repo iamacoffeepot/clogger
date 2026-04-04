@@ -36,6 +36,9 @@ public class ServiceManager {
     /** Max consecutive respawns before giving up on a service. */
     private static final int MAX_RESPAWN_ATTEMPTS = 5;
 
+    /** Ticks of sustained uptime before resetting the respawn counter. */
+    private static final int RESPAWN_RESET_UPTIME_TICKS = 100;
+
     private final ScriptManager scriptManager;
     private final List<ServiceEntry> services = new ArrayList<>();
     private final Map<String, String> templateSources = new HashMap<>();
@@ -116,7 +119,7 @@ public class ServiceManager {
                 spawnService(entry);
             } else {
                 // Running — reset respawn counter on sustained uptime
-                if (entry.ticksSinceCheck > 100) {
+                if (entry.ticksSinceCheck > RESPAWN_RESET_UPTIME_TICKS) {
                     entry.respawnAttempts = 0;
                 }
             }

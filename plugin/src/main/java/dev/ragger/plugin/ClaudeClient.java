@@ -24,6 +24,12 @@ public class ClaudeClient {
 
     private static final Logger log = LoggerFactory.getLogger(ClaudeClient.class);
 
+    /** Max seconds to wait for the CLI process to exit after stream ends. */
+    private static final int CLI_TIMEOUT_SECONDS = 120;
+
+    /** Max characters shown for a tool argument in the tool log. */
+    private static final int TOOL_LOG_TRUNCATE_LENGTH = 60;
+
     private final String claudePath;
     private final String model;
     private final int bridgePort;
@@ -61,8 +67,10 @@ public class ClaudeClient {
         cancelled = true;
         Process p = currentProcess;
         if (p != null) {
+            // Kill entire process tree (Claude CLI + MCP server subprocess)
+            p.descendants().forEach(ProcessHandle::destroyForcibly);
             p.destroyForcibly();
-            log.info("Claude CLI process cancelled");
+            log.info("Claude CLI process tree cancelled");
         }
     }
 
@@ -157,7 +165,7 @@ public class ClaudeClient {
         try (BufferedReader reader = new BufferedReader(
                 new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
             String line;
-            while ((line = reader.readLine()) != null) {
+            while (!cancelled && (line = reader.readLine()) != null) {
                 if (line.isBlank()) continue;
 
                 try {
@@ -213,9 +221,9 @@ public class ClaudeClient {
             return;
         }
 
-        boolean finished = process.waitFor(120, java.util.concurrent.TimeUnit.SECONDS);
+        boolean finished = process.waitFor(CLI_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS);
         if (!finished) {
-            log.warn("Claude CLI timed out after 120s, killing process");
+            log.warn("Claude CLI timed out after {}s, killing process", CLI_TIMEOUT_SECONDS);
             process.destroyForcibly();
             listener.onError("Request timed out. Try again or /reset the session.");
         } else if (process.exitValue() != 0) {
@@ -231,7 +239,7 @@ public class ClaudeClient {
         if (input == null) return displayName + "()";
 
         if (input.has("command")) {
-            return displayName + "(" + truncate(censorPath(input.get("command").getAsString()), 60) + ")";
+            return displayName + "(" + truncate(censorPath(input.get("command").getAsString()), TOOL_LOG_TRUNCATE_LENGTH) + ")";
         }
         if (input.has("pattern")) {
             return displayName + "(" + input.get("pattern").getAsString() + ")";
