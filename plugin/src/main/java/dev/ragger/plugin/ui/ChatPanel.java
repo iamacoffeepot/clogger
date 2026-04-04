@@ -107,7 +107,7 @@ public class ChatPanel extends PluginPanel {
         int indent = depth * 16;
         boolean hasChildren = !node.children.isEmpty();
         boolean isCollapsed = collapsed.contains(path);
-        String bullet = hasChildren ? (isCollapsed ? "&#9656;" : "&#9662;") : "&#9656;"; // ▸ or ▾
+        String bullet = hasChildren ? (isCollapsed ? "&#9656;" : "&#9662;") : "&#8226;"; // ▸ ▾ or •
         String nameColor = depth == 0
             ? RaggerTheme.hex(RaggerTheme.ACCENT)
             : RaggerTheme.hex(RaggerTheme.TEXT);
