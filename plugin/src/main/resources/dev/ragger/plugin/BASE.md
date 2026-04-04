@@ -634,6 +634,33 @@ return {
 - Self-send is allowed (delivered next tick)
 - Data tables support string, number, boolean values and nested tables (maps and arrays up to 8 levels deep).
 
+### API: `json`
+
+Encode and decode JSON strings.
+
+```lua
+-- Encode a Lua value (table, string, number, boolean, nil) to a JSON string
+local s = json.encode({ name = "Goblin", hp = 50, tags = {"monster", "green"} })
+-- '{"name":"Goblin","hp":50,"tags":["monster","green"]}'
+
+-- Decode a JSON string to a Lua value
+local t = json.decode('{"name":"Goblin","hp":50}')
+-- t.name == "Goblin", t.hp == 50
+
+-- Indexed tables encode as JSON arrays, string-keyed tables as objects
+json.encode({1, 2, 3})          -- '[1,2,3]'
+json.encode({a = 1, b = 2})     -- '{"a":1,"b":2}'
+```
+
+### API: `base64`
+
+Encode and decode Base64 strings.
+
+```lua
+local encoded = base64.encode("hello world")   -- "aGVsbG8gd29ybGQ="
+local decoded = base64.decode(encoded)          -- "hello world"
+```
+
 ### API: `scripts`
 
 Manage child scripts from within a script. All operations are scoped — a script can only manage its own children, not siblings or parents. Child names are automatically namespaced (e.g. parent `quest-guide` spawning `step-1` creates `quest-guide/step-1`). Stopping a parent cascade-stops all children. Max depth is 3 levels.

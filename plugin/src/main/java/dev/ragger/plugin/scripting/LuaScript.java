@@ -64,10 +64,13 @@ public class LuaScript {
         new CombatApi(client).register(lua);
         lua.set("prayer", new PrayerApi());
         new ScriptsApi(name, scriptManager).register(lua);
+        new MailApi(name, scriptManager).register(lua);
+        new JsonApi().register(lua);
+        new Base64Api().register(lua);
 
         // Inject args table if provided
         if (args != null && !args.isEmpty()) {
-            pushArgsTable(lua, args);
+            LuaUtils.pushArgsTable(lua, args);
             lua.setGlobal("args");
         }
     }
@@ -232,27 +235,33 @@ public class LuaScript {
     }
 
     /**
-     * Manually push a Map as a Lua table onto the stack.
-     * Handles String, Number, and Boolean values.
+     * Deliver a mail message to this script's on_mail hook.
+     * Called by ScriptManager.drainMail() on the game tick thread.
      */
-    private static void pushArgsTable(Lua lua, Map<String, Object> map) {
-        lua.createTable(0, map.size());
-        for (Map.Entry<String, Object> entry : map.entrySet()) {
-            Object value = entry.getValue();
-            if (value instanceof String) {
-                lua.push((String) value);
-            } else if (value instanceof Integer) {
-                lua.push((int) value);
-            } else if (value instanceof Double) {
-                lua.push((double) value);
-            } else if (value instanceof Boolean) {
-                lua.push((boolean) value);
-            } else if (value instanceof Number) {
-                lua.push(((Number) value).doubleValue());
+    /**
+     * Deliver a mail message to this script's on_mail hook.
+     * Returns false if the hook returned false (request stop).
+     */
+    public boolean deliverMail(String from, Map<String, Object> data) {
+        if (!running || !hasHooks || lua == null) return true;
+
+        try {
+            lua.getGlobal("__hooks");
+            lua.getField(-1, "on_mail");
+            if (lua.type(-1) == Lua.LuaType.FUNCTION) {
+                lua.push(from);
+                LuaUtils.pushArgsTable(lua, data);
+                lua.pCall(2, 1);
+                boolean keepRunning = lua.type(-1) != Lua.LuaType.BOOLEAN || lua.toBoolean(-1);
+                lua.pop(2); // pop return value + __hooks
+                return keepRunning;
             } else {
-                lua.push(String.valueOf(value));
+                lua.pop(2); // pop non-function + __hooks
+                return true;
             }
-            lua.setField(-2, entry.getKey());
+        } catch (Exception e) {
+            log.error("Script '{}' on_mail error: {}", name, e.getMessage());
+            return true;
         }
     }
 }

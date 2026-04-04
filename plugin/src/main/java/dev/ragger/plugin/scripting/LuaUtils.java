@@ -26,7 +26,7 @@ public final class LuaUtils {
      * Convert a negative Lua stack index to a positive (absolute) index.
      * Positive indices and pseudo-indices are returned unchanged.
      */
-    private static int abs(Lua lua, int index) {
+    static int abs(Lua lua, int index) {
         return index >= 0 ? index : lua.getTop() + index + 1;
     }
 
