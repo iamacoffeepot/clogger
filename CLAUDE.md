@@ -475,6 +475,7 @@ JAVA_HOME="$(brew --prefix openjdk@21)/libexec/openjdk.jdk/Contents/Home" ./grad
 - `scripting/InventoryApi.java` — Lua `inventory` API (inventory items, equipment)
 - `scripting/CombatApi.java` — Lua `combat` API (spec, prayers, attack style, target)
 - `scripting/PrayerApi.java` — Lua `prayer` enum constants
+- `scripting/WidgetApi.java` — Lua `widget` API (game interface/widget state, InterfaceID constants)
 - `scripting/OverlayApi.java` — Lua overlay drawing context (text, shapes, fonts)
 - `scripting/MailApi.java` — Lua `mail` API (inter-actor messaging)
 - `scripting/MailMessage.java` — mail message data object
