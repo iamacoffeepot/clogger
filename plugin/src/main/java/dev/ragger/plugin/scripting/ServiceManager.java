@@ -26,7 +26,7 @@ import java.util.Map;
 public class ServiceManager {
 
     private static final Logger log = LoggerFactory.getLogger(ServiceManager.class);
-    private static final String RESOURCE_BASE = "services/";
+    private static final String RESOURCE_BASE = "/dev/ragger/plugin/services/";
     private static final String MANIFEST = RESOURCE_BASE + "services.json";
     private static final String SERVICE_PREFIX = "svc/";
 
