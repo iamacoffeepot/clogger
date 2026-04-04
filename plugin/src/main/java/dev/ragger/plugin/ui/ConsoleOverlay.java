@@ -31,21 +31,48 @@ public class ConsoleOverlay extends Overlay {
     private static final Color INPUT_BG = new Color(0x22, 0x22, 0x2A, 0xEE);
     private static final Color INPUT_BORDER = new Color(0x55, 0x55, 0x66);
     private static final Color CURSOR_COLOR = new Color(0xFF, 0xB3, 0x47);
-    private static final String FONT_FAMILY = "Menlo";
-    private static final Font FONT = new Font(FONT_FAMILY, Font.PLAIN, 12);
-    private static final Font FONT_BOLD = new Font(FONT_FAMILY, Font.BOLD, 12);
-    private static final Font FONT_ITALIC = new Font(FONT_FAMILY, Font.ITALIC, 12);
-    private static final Font FONT_BOLD_ITALIC = new Font(FONT_FAMILY, Font.BOLD | Font.ITALIC, 12);
-    private static final Font FONT_HEADER = new Font(FONT_FAMILY, Font.BOLD, 14);
+    private static final Font FONT;
+    private static final Font FONT_BOLD;
+    private static final Font FONT_ITALIC;
+    private static final Font FONT_BOLD_ITALIC;
+    private static final Font FONT_HEADER;
+
+    static {
+        Font regular = loadFont("fonts/MesloLGS-Regular.ttf", Font.PLAIN);
+        Font bold = loadFont("fonts/MesloLGS-Bold.ttf", Font.BOLD);
+        Font italic = loadFont("fonts/MesloLGS-Italic.ttf", Font.ITALIC);
+        Font boldItalic = loadFont("fonts/MesloLGS-BoldItalic.ttf", Font.BOLD | Font.ITALIC);
+
+        FONT = regular.deriveFont(12f);
+        FONT_BOLD = bold.deriveFont(12f);
+        FONT_ITALIC = italic.deriveFont(12f);
+        FONT_BOLD_ITALIC = boldItalic.deriveFont(12f);
+        FONT_HEADER = bold.deriveFont(14f);
+    }
+
+    private static Font loadFont(String resource, int fallbackStyle) {
+        try (var is = ConsoleOverlay.class.getResourceAsStream(resource)) {
+            if (is != null) {
+                Font font = Font.createFont(Font.TRUETYPE_FONT, is);
+                GraphicsEnvironment.getLocalGraphicsEnvironment().registerFont(font);
+                return font;
+            }
+        } catch (Exception e) {
+            // fall through
+        }
+        return new Font(Font.MONOSPACED, fallbackStyle, 12);
+    }
     private static final int PADDING = 12;
     private static final int LINE_HEIGHT = 16;
 
     private final Client client;
     private final Consumer<String> onMessage;
     private final List<ConsoleLine> lines = new ArrayList<>();
+    private final List<String> messageQueue = new ArrayList<>();
     private StringBuilder inputBuffer = new StringBuilder();
     private int cursorPos = 0;
     private boolean visible = false;
+    private boolean busy = false;
     private int scrollOffset = 0;
     private boolean cursorBlink = true;
     private long lastBlink = 0;
@@ -192,6 +219,18 @@ public class ConsoleOverlay extends Overlay {
         scrollOffset = 0;
     }
 
+    public void setBusy(boolean busy) {
+        this.busy = busy;
+    }
+
+    /**
+     * Remove and return the next queued message, or null if empty.
+     */
+    public String pollQueue() {
+        if (messageQueue.isEmpty()) return null;
+        return messageQueue.remove(0);
+    }
+
     public void handleKeyTyped(KeyEvent e) {
         if (!visible) return;
 
@@ -206,7 +245,11 @@ public class ConsoleOverlay extends Overlay {
             if (!text.isEmpty()) {
                 inputBuffer.setLength(0);
                 cursorPos = 0;
-                onMessage.accept(text);
+                if (busy) {
+                    messageQueue.add(text);
+                } else {
+                    onMessage.accept(text);
+                }
             }
         } else if (c != KeyEvent.CHAR_UNDEFINED && c >= 32) {
             inputBuffer.insert(cursorPos, c);
@@ -317,7 +360,26 @@ public class ConsoleOverlay extends Overlay {
 
         int inputLineCount = Math.min(inputLines.size(), 16);
         int inputAreaHeight = inputLineCount * LINE_HEIGHT + LINE_HEIGHT;
-        int inputY = consoleHeight - inputAreaHeight - PADDING;
+        int queueHeight = messageQueue.size() * LINE_HEIGHT;
+        int inputY = consoleHeight - inputAreaHeight - queueHeight - PADDING;
+
+        // Queued messages — rendered below input box in tool style
+        if (!messageQueue.isEmpty()) {
+            g.setFont(FONT);
+            g.setColor(TOOL_COLOR);
+            int queueY = inputY + inputAreaHeight + LINE_HEIGHT;
+            for (int qi = 0; qi < messageQueue.size(); qi++) {
+                String qMsg = messageQueue.get(qi);
+                // Truncate if too wide
+                if (fm.stringWidth(qMsg) > inputTextWidth) {
+                    while (qMsg.length() > 1 && fm.stringWidth(qMsg + "...") > inputTextWidth) {
+                        qMsg = qMsg.substring(0, qMsg.length() - 1);
+                    }
+                    qMsg = qMsg + "...";
+                }
+                g.drawString("\u25B8 " + qMsg, inputInset + 4, queueY + qi * LINE_HEIGHT);
+            }
+        }
 
         // Top line
         g.setColor(INPUT_BORDER);
