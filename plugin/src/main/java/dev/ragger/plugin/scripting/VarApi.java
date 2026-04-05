@@ -3,12 +3,17 @@ package dev.ragger.plugin.scripting;
 import net.runelite.api.Client;
 import party.iroiro.luajava.Lua;
 
+import java.util.Map;
+
 /**
  * Lua bindings for reading game variables.
  *
  * Registers two globals:
  *   varp — player variables (varps and varbits)
  *   varc — client variables (integers and strings)
+ *
+ * Named constants are resolved lazily via __index metatables backed by
+ * static HashMaps in VarpConstants and VarcConstants.
  */
 public class VarApi {
 
@@ -28,6 +33,7 @@ public class VarApi {
         lua.push(this::varpBit);
         lua.setField(-2, "bit");
 
+        setConstantMetatable(lua, VarpConstants.CONSTANTS);
         lua.setGlobal("varp");
 
         // varc: client variables
@@ -39,7 +45,28 @@ public class VarApi {
         lua.push(this::varcStr);
         lua.setField(-2, "str");
 
+        setConstantMetatable(lua, VarcConstants.CONSTANTS);
         lua.setGlobal("varc");
+    }
+
+    /**
+     * Attach an __index metatable that resolves named constants from a map.
+     * The target table must be on the top of the stack.
+     */
+    private void setConstantMetatable(Lua lua, Map<String, Integer> constants) {
+        lua.createTable(0, 1);
+        lua.push((Lua l) -> {
+            String key = l.toString(2);
+            Integer value = constants.get(key);
+            if (value != null) {
+                l.push((int) value);
+            } else {
+                l.pushNil();
+            }
+            return 1;
+        });
+        lua.setField(-2, "__index");
+        lua.setMetatable(-2);
     }
 
     /**
