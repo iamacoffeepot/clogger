@@ -410,6 +410,43 @@ class ShopType(str, Enum):
         return cls.OTHER
 
 
+class ContentCategory(str, Enum):
+    QUEST = "quest"
+    SKILL = "skill"
+    NPC = "npc"
+    LOCATION = "location"
+    ITEM = "item"
+    MINIGAME = "minigame"
+    ACTIVITY = "activity"
+
+    @classmethod
+    def from_label(cls, label: str) -> "ContentCategory":
+        cleaned = label.strip().lower()
+        for member in cls:
+            if member.value == cleaned:
+                return member
+        raise ValueError(f"Unknown content category: {label}")
+
+
+class FunctionalTag(str, Enum):
+    PROGRESS = "progress"
+    TOGGLE = "toggle"
+    COUNTER = "counter"
+    UI = "ui"
+    CONFIG = "config"
+    STORAGE = "storage"
+    TIMER = "timer"
+    COSMETIC = "cosmetic"
+
+    @classmethod
+    def from_label(cls, label: str) -> "FunctionalTag":
+        cleaned = label.strip().lower()
+        for member in cls:
+            if member.value == cleaned:
+                return member
+        raise ValueError(f"Unknown functional tag: {label}")
+
+
 class ActivityType(str, Enum):
     MINIGAME = "Minigame"
     RANDOM_EVENT = "Random event"

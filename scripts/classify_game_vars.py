@@ -19,20 +19,16 @@ import time
 from pathlib import Path
 
 from ragger.db import get_connection
+from ragger.enums import ContentCategory, FunctionalTag, Skill
 
 # ---------------------------------------------------------------------------
-# Tag taxonomy
+# Tag taxonomy (derived from enums)
 # ---------------------------------------------------------------------------
 
-CONTENT_CATEGORIES = {"quest", "skill", "minigame", "item", "npc", "location", "activity"}
-FUNCTIONAL_CATEGORIES = {"progress", "toggle", "counter", "ui", "config", "storage", "timer", "cosmetic"}
+CONTENT_CATEGORIES = {c.value for c in ContentCategory}
+FUNCTIONAL_CATEGORIES = {f.value for f in FunctionalTag}
 
-VALID_SKILLS = [
-    "attack", "strength", "defence", "ranged", "prayer", "magic", "runecraft",
-    "construction", "hitpoints", "agility", "herblore", "thieving", "crafting",
-    "fletching", "slayer", "hunter", "mining", "smithing", "fishing", "cooking",
-    "firemaking", "woodcutting", "farming", "sailing",
-]
+VALID_SKILLS = [s.label.lower() for s in Skill] + ["sailing"]
 
 # System-level activity names that don't come from the activities table
 SYSTEM_ACTIVITIES = {
