@@ -410,6 +410,21 @@ class ShopType(str, Enum):
         return cls.OTHER
 
 
+class VariableType(str, Enum):
+    VARP = "varp"
+    VARBIT = "varbit"
+    VARC_INT = "varc_int"
+    VARC_STR = "varc_str"
+
+    @classmethod
+    def from_label(cls, label: str) -> "VariableType":
+        cleaned = label.strip().lower()
+        for member in cls:
+            if member.value == cleaned:
+                return member
+        raise ValueError(f"Unknown variable type: {label}")
+
+
 class ContentCategory(str, Enum):
     QUEST = "quest"
     SKILL = "skill"
