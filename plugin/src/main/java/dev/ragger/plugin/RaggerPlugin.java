@@ -506,6 +506,7 @@ public class RaggerPlugin extends Plugin {
                     streaming = false;
                 }
                 consoleOverlay.addToolMessage("Request cancelled.");
+                consoleOverlay.clearQueue();
                 consoleOverlay.setBusy(false);
             }
         }, "BASE", "ASSISTANT");

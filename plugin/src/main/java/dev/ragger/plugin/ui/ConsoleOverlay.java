@@ -218,6 +218,10 @@ public class ConsoleOverlay extends Overlay {
         return messageQueue.remove(0);
     }
 
+    public void clearQueue() {
+        messageQueue.clear();
+    }
+
     public void handleKeyTyped(KeyEvent e) {
         if (!visible) return;
 
