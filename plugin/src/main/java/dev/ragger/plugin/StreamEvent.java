@@ -20,6 +20,7 @@ public class StreamEvent {
 
     private String result;
     private Message message;
+    private Event event;
 
     public String getType() {
         return type;
@@ -37,8 +38,16 @@ public class StreamEvent {
         return message;
     }
 
+    public Event getEvent() {
+        return event;
+    }
+
     public boolean isAssistant() {
         return "assistant".equals(type);
+    }
+
+    public boolean isStreamEvent() {
+        return "stream_event".equals(type);
     }
 
     public static StreamEvent parse(final String json) {
@@ -50,6 +59,40 @@ public class StreamEvent {
 
         public List<ContentBlock> getContent() {
             return content;
+        }
+    }
+
+    public static class Event {
+        private String type;
+        private Delta delta;
+
+        public String getType() {
+            return type;
+        }
+
+        public Delta getDelta() {
+            return delta;
+        }
+
+        public boolean isContentBlockDelta() {
+            return "content_block_delta".equals(type);
+        }
+    }
+
+    public static class Delta {
+        private String type;
+        private String text;
+
+        public String getType() {
+            return type;
+        }
+
+        public String getText() {
+            return text;
+        }
+
+        public boolean isTextDelta() {
+            return "text_delta".equals(type);
         }
     }
 

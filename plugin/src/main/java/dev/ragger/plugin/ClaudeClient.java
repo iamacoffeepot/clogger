@@ -194,6 +194,11 @@ public class ClaudeClient {
                         finalResult = event.getResult();
                     }
 
+                    if (event.isStreamEvent()) {
+                        processStreamEvent(event.getEvent(), lastSeenText, listener);
+                        continue;
+                    }
+
                     if (!event.isAssistant()) {
                         continue;
                     }
@@ -232,6 +237,24 @@ public class ClaudeClient {
         }
 
         listener.onComplete(finalResult != null ? finalResult : lastSeenText.toString());
+    }
+
+    private void processStreamEvent(
+        final StreamEvent.Event event,
+        final StringBuilder lastSeenText,
+        final StreamListener listener
+    ) {
+        if (event == null) {
+            return;
+        }
+
+        if (event.isContentBlockDelta()) {
+            final StreamEvent.Delta delta = event.getDelta();
+            if (delta != null && delta.isTextDelta() && delta.getText() != null) {
+                lastSeenText.append(delta.getText());
+                listener.onText(delta.getText());
+            }
+        }
     }
 
     private void processContentBlock(
