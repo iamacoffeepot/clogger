@@ -164,7 +164,9 @@ public class ClaudeClient {
                 new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
             String line;
             while (!cancelled && (line = reader.readLine()) != null) {
-                if (line.isBlank()) continue;
+                if (line.isBlank()) {
+                    continue;
+                }
 
                 try {
                     StreamEvent event = StreamEvent.parse(line);
@@ -172,29 +174,21 @@ public class ClaudeClient {
                     if (event.getSessionId() != null) {
                         sessionId = event.getSessionId();
                     }
-
                     if (event.getResult() != null) {
                         finalResult = event.getResult();
                     }
+                    if (!event.isAssistant()) {
+                        continue;
+                    }
+                    if (event.getMessage() == null) {
+                        continue;
+                    }
+                    if (event.getMessage().getContent() == null) {
+                        continue;
+                    }
 
-                    if (event.isAssistant() && event.getMessage() != null
-                            && event.getMessage().getContent() != null) {
-                        for (StreamEvent.ContentBlock block : event.getMessage().getContent()) {
-                            if (block.isText() && block.getText() != null) {
-                                String fullText = block.getText();
-                                // Only emit the new portion
-                                if (fullText.length() > lastSeenText.length()) {
-                                    String newPart = fullText.substring(lastSeenText.length());
-                                    lastSeenText.setLength(0);
-                                    lastSeenText.append(fullText);
-                                    listener.onText(newPart);
-                                }
-                            } else if (block.isToolUse()) {
-                                // Reset text tracking — onToolUse handles ending the stream
-                                lastSeenText.setLength(0);
-                                listener.onToolUse(formatToolLog(block.getName(), block.getInput()));
-                            }
-                        }
+                    for (StreamEvent.ContentBlock block : event.getMessage().getContent()) {
+                        processContentBlock(block, lastSeenText, listener);
                     }
                 } catch (Exception e) {
                     log.debug("Non-JSON stream line: {}", line);
@@ -221,10 +215,30 @@ public class ClaudeClient {
         listener.onComplete(finalResult != null ? finalResult : lastSeenText.toString());
     }
 
+    private void processContentBlock(StreamEvent.ContentBlock block, StringBuilder lastSeenText, StreamListener listener) {
+        if (block.isText() && block.getText() != null) {
+            String fullText = block.getText();
+            if (fullText.length() <= lastSeenText.length()) {
+                return;
+            }
+
+            String newPart = fullText.substring(lastSeenText.length());
+            lastSeenText.setLength(0);
+            lastSeenText.append(fullText);
+            listener.onText(newPart);
+        } else if (block.isToolUse()) {
+            // Reset text tracking — onToolUse handles ending the stream
+            lastSeenText.setLength(0);
+            listener.onToolUse(formatToolLog(block.getName(), block.getInput()));
+        }
+    }
+
     private String formatToolLog(String toolName, JsonObject input) {
         String displayName = toolName.replaceFirst("^mcp__\\w+__", "");
 
-        if (input == null) return displayName + "()";
+        if (input == null) {
+            return displayName + "()";
+        }
 
         if (input.has("command")) {
             return displayName + "(" + truncate(censorPath(input.get("command").getAsString()), TOOL_LOG_TRUNCATE_LENGTH) + ")";
@@ -243,7 +257,9 @@ public class ClaudeClient {
     }
 
     private static String truncate(String s, int maxLen) {
-        if (s.length() <= maxLen) return s;
+        if (s.length() <= maxLen) {
+            return s;
+        }
         return s.substring(0, maxLen) + "...";
     }
 
