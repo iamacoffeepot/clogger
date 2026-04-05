@@ -6,6 +6,7 @@ import net.runelite.client.game.ItemManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.awt.Graphics2D;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
@@ -13,6 +14,8 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
 
 /**
  * Manages Lua actor lifecycles. Each script gets its own LuaJ runtime
@@ -25,20 +28,11 @@ import java.util.concurrent.CopyOnWriteArrayList;
 public class ActorManager {
 
     private static final Logger log = LoggerFactory.getLogger(ActorManager.class);
-
-    private final Client client;
-    private final ChatMessageManager chatMessageManager;
-    private final ItemManager itemManager;
-    private final ConcurrentHashMap<String, LuaActor> scripts = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<String, String> templates = new ConcurrentHashMap<>();
-    private final CopyOnWriteArrayList<Runnable> changeListeners = new CopyOnWriteArrayList<>();
-
-    private final ConcurrentLinkedQueue<MailMessage> mailQueue = new ConcurrentLinkedQueue<>();
-    private final ConcurrentLinkedQueue<MailMessage> claudeMailbox = new ConcurrentLinkedQueue<>();
-    private final ConcurrentLinkedQueue<LuaEvent> eventQueue = new ConcurrentLinkedQueue<>();
+    private static final int MAX_FILTER_LENGTH = 200;
 
     /** Map from event type to Lua hook name. */
     private static final Map<LuaEvent.Type, String> HOOK_NAMES = new EnumMap<>(LuaEvent.Type.class);
+
     static {
         HOOK_NAMES.put(LuaEvent.Type.HITSPLAT, "on_hitsplat");
         HOOK_NAMES.put(LuaEvent.Type.PROJECTILE, "on_projectile");
@@ -65,19 +59,40 @@ public class ActorManager {
         HOOK_NAMES.put(LuaEvent.Type.MOUSE_CLICK, "on_mouse_click");
     }
 
+    private final Client client;
+    private final ChatMessageManager chatMessageManager;
+    private final ItemManager itemManager;
+    private final ConcurrentHashMap<String, LuaActor> scripts = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, String> templates = new ConcurrentHashMap<>();
+    private final CopyOnWriteArrayList<Runnable> changeListeners = new CopyOnWriteArrayList<>();
+
+    private final ConcurrentLinkedQueue<MailMessage> mailQueue = new ConcurrentLinkedQueue<>();
+    private final ConcurrentLinkedQueue<MailMessage> claudeMailbox = new ConcurrentLinkedQueue<>();
+    private final ConcurrentLinkedQueue<LuaEvent> eventQueue = new ConcurrentLinkedQueue<>();
+
     private int maxDepth = 3;
     private int maxChildren = 50;
 
-    public ActorManager(Client client, ChatMessageManager chatMessageManager, ItemManager itemManager) {
+    public ActorManager(final Client client, final ChatMessageManager chatMessageManager,
+                        final ItemManager itemManager) {
         this.client = client;
         this.chatMessageManager = chatMessageManager;
         this.itemManager = itemManager;
     }
 
     /**
+     * Thrown when an actor cannot be loaded due to a limit violation.
+     */
+    public static class ActorLimitException extends RuntimeException {
+        public ActorLimitException(final String message) {
+            super(message);
+        }
+    }
+
+    /**
      * Update script limits from config.
      */
-    public void setLimits(int maxDepth, int maxChildren) {
+    public void setLimits(final int maxDepth, final int maxChildren) {
         this.maxDepth = maxDepth;
         this.maxChildren = maxChildren;
     }
@@ -85,15 +100,15 @@ public class ActorManager {
     /**
      * Register a listener that is called whenever scripts or templates change.
      */
-    public void addChangeListener(Runnable listener) {
+    public void addChangeListener(final Runnable listener) {
         changeListeners.add(listener);
     }
 
     private void fireChange() {
-        for (Runnable listener : changeListeners) {
+        for (final Runnable listener : changeListeners) {
             try {
                 listener.run();
-            } catch (Exception e) {
+            } catch (final Exception e) {
                 log.warn("Change listener error", e);
             }
         }
@@ -102,63 +117,55 @@ public class ActorManager {
     /**
      * Load and start a Lua script from source (top-level, no parent).
      */
-    public String load(String name, String source) {
+    public String load(final String name, final String source) {
         return load(name, source, null);
     }
 
     /**
      * Load and start a Lua script from source with optional args table.
      */
-    /**
-     * Thrown when an actor cannot be loaded due to a limit violation.
-     */
-    public static class ActorLimitException extends RuntimeException {
-        public ActorLimitException(String message) {
-            super(message);
-        }
-    }
-
-    public String load(String name, String source, Map<String, Object> args) {
+    public String load(final String name, final String source, final Map<String, Object> args) {
         // Check depth limit
-        long depth = name.chars().filter(c -> c == '/').count();
+        final long depth = name.chars().filter(c -> c == '/').count();
         if (depth >= maxDepth) {
             throw new ActorLimitException("depth limit reached (max " + maxDepth + ")");
         }
 
         // Check children limit for the parent
-        int lastSlash = name.lastIndexOf('/');
+        final int lastSlash = name.lastIndexOf('/');
         if (lastSlash > 0) {
-            String parent = name.substring(0, lastSlash);
-            long childCount = scripts.keySet().stream()
-                .filter(k -> k.startsWith(parent + "/"))
+            final String parent = name.substring(0, lastSlash);
+            final String childPrefix = parent + "/";
+            final long childCount = scripts.keySet().stream()
+                .filter(k -> k.startsWith(childPrefix))
                 .filter(k -> k.indexOf('/', parent.length() + 1) == -1)
-                .filter(k -> !k.equals(name)) // don't count replacement
+                .filter(k -> !k.equals(name))
                 .count();
+
             if (childCount >= maxChildren) {
                 throw new ActorLimitException("child limit reached for " + parent + " (max " + maxChildren + ")");
             }
         }
 
-        LuaActor existing = scripts.get(name);
+        // Stop existing actor with the same name before replacing
+        final LuaActor existing = scripts.get(name);
         if (existing != null) {
             existing.stop();
         }
 
-        LuaActor script = new LuaActor(name, source, client, chatMessageManager, itemManager, this, args);
+        final LuaActor script = new LuaActor(name, source, client, chatMessageManager, itemManager, this, args);
         scripts.put(name, script);
         script.start();
         log.info("Loaded actor: {}", name);
         fireChange();
+
         return name;
     }
 
     /**
-     * Called every game tick — dispatches to all active scripts with hooks.
-     */
-    /**
      * Enqueue a mail message for delivery on the next drain.
      */
-    public void enqueueMail(String from, String to, Map<String, Object> data) {
+    public void enqueueMail(final String from, final String to, final Map<String, Object> data) {
         mailQueue.add(new MailMessage(from, to, data));
     }
 
@@ -167,22 +174,24 @@ public class ActorManager {
      * Uses snapshot pattern — messages sent during delivery queue for next drain.
      */
     public void drainMail() {
-        List<MailMessage> batch = new ArrayList<>();
+        final List<MailMessage> batch = new ArrayList<>();
         MailMessage msg;
         while ((msg = mailQueue.poll()) != null) {
             batch.add(msg);
         }
 
-        for (MailMessage m : batch) {
+        for (final MailMessage m : batch) {
             if ("claude".equals(m.to())) {
                 claudeMailbox.add(m);
                 continue;
             }
-            LuaActor target = scripts.get(m.to());
+
+            final LuaActor target = scripts.get(m.to());
             if (target == null || !target.isRunning()) {
                 log.debug("Mail dropped: target '{}' not found or not running", m.to());
                 continue;
             }
+
             if (!target.deliverMail(m.from(), m.data())) {
                 target.stop();
                 scripts.remove(m.to());
@@ -196,7 +205,7 @@ public class ActorManager {
      * Drain all messages addressed to "claude" and return them.
      */
     public List<MailMessage> drainClaudeMailbox() {
-        List<MailMessage> messages = new ArrayList<>();
+        final List<MailMessage> messages = new ArrayList<>();
         MailMessage msg;
         while ((msg = claudeMailbox.poll()) != null) {
             messages.add(msg);
@@ -209,15 +218,17 @@ public class ActorManager {
      * If limit <= 0, drains all matching messages. The fromFilter is a regex pattern
      * (e.g. "loot-.*", "quest-guide/.*", or an exact name like "ping").
      */
-    public List<MailMessage> drainClaudeMailbox(int limit, String fromFilter) {
-        java.util.regex.Pattern pattern = compileFromFilter(fromFilter);
-        List<MailMessage> matched = new ArrayList<>();
-        List<MailMessage> skipped = new ArrayList<>();
+    public List<MailMessage> drainClaudeMailbox(final int limit, final String fromFilter) {
+        final Pattern pattern = compileFromFilter(fromFilter);
+        final List<MailMessage> matched = new ArrayList<>();
+        final List<MailMessage> skipped = new ArrayList<>();
 
         MailMessage msg;
         while ((msg = claudeMailbox.poll()) != null) {
-            boolean matches = (pattern == null || pattern.matcher(msg.from()).matches());
-            if (matches && (limit <= 0 || matched.size() < limit)) {
+            final boolean matches = (pattern == null || pattern.matcher(msg.from()).matches());
+            final boolean underLimit = (limit <= 0 || matched.size() < limit);
+
+            if (matches && underLimit) {
                 matched.add(msg);
             } else {
                 skipped.add(msg);
@@ -225,48 +236,56 @@ public class ActorManager {
         }
 
         // Put non-matching messages back
-        for (MailMessage s : skipped) {
+        for (final MailMessage s : skipped) {
             claudeMailbox.add(s);
         }
+
         return matched;
     }
 
     /**
      * Count how many claude mailbox messages match the given filter, without consuming them.
      */
-    public int countClaudeMailbox(String fromFilter) {
-        java.util.regex.Pattern pattern = compileFromFilter(fromFilter);
+    public int countClaudeMailbox(final String fromFilter) {
+        final Pattern pattern = compileFromFilter(fromFilter);
         int count = 0;
-        for (MailMessage msg : claudeMailbox) {
+
+        for (final MailMessage msg : claudeMailbox) {
             if (pattern == null || pattern.matcher(msg.from()).matches()) {
                 count++;
             }
         }
+
         return count;
     }
 
-    private static final int MAX_FILTER_LENGTH = 200;
-
-    private static java.util.regex.Pattern compileFromFilter(String fromFilter) {
+    private static Pattern compileFromFilter(final String fromFilter) {
         if (fromFilter == null || fromFilter.isEmpty()) {
             return null;
         }
+
         if (fromFilter.length() > MAX_FILTER_LENGTH) {
-            return java.util.regex.Pattern.compile(java.util.regex.Pattern.quote(fromFilter));
+            return Pattern.compile(Pattern.quote(fromFilter));
         }
+
         try {
-            return java.util.regex.Pattern.compile(fromFilter);
-        } catch (java.util.regex.PatternSyntaxException e) {
-            return java.util.regex.Pattern.compile(java.util.regex.Pattern.quote(fromFilter));
+            return Pattern.compile(fromFilter);
+        } catch (final PatternSyntaxException e) {
+            return Pattern.compile(Pattern.quote(fromFilter));
         }
     }
 
+    /**
+     * Called every game tick — dispatches to all active scripts with hooks.
+     */
     public void tick() {
-        var it = scripts.entrySet().iterator();
+        final var it = scripts.entrySet().iterator();
+
         while (it.hasNext()) {
-            var entry = it.next();
-            LuaActor script = entry.getValue();
+            final var entry = it.next();
+            final LuaActor script = entry.getValue();
             script.tick();
+
             if (script.shouldStop()) {
                 script.stop();
                 it.remove();
@@ -279,7 +298,7 @@ public class ActorManager {
     /**
      * Buffer a game event for delivery to actors on the next drainEvents() call.
      */
-    public void bufferEvent(LuaEvent event) {
+    public void bufferEvent(final LuaEvent event) {
         eventQueue.add(event);
     }
 
@@ -288,22 +307,27 @@ public class ActorManager {
      * Called after tick() — actors see on_tick first, then events from that tick.
      */
     public void drainEvents() {
-        List<LuaEvent> batch = new ArrayList<>();
+        final List<LuaEvent> batch = new ArrayList<>();
         LuaEvent evt;
         while ((evt = eventQueue.poll()) != null) {
             batch.add(evt);
         }
 
-        if (batch.isEmpty()) return;
+        if (batch.isEmpty()) {
+            return;
+        }
 
-        for (LuaEvent event : batch) {
-            String hookName = HOOK_NAMES.get(event.getType());
-            if (hookName == null) continue;
+        for (final LuaEvent event : batch) {
+            final String hookName = HOOK_NAMES.get(event.getType());
+            if (hookName == null) {
+                continue;
+            }
 
-            var it = scripts.entrySet().iterator();
+            final var it = scripts.entrySet().iterator();
             while (it.hasNext()) {
-                var entry = it.next();
-                LuaActor script = entry.getValue();
+                final var entry = it.next();
+                final LuaActor script = entry.getValue();
+
                 if (!script.deliverEvent(hookName, event.getData())) {
                     script.stop();
                     it.remove();
@@ -318,8 +342,11 @@ public class ActorManager {
      * Evaluate a Lua expression and return the result as a string.
      * Runs in a temporary LuaJ runtime with all API bindings.
      */
-    public String eval(String script) {
-        LuaActor temp = new LuaActor("__eval", "return " + script, client, chatMessageManager, itemManager, this, null);
+    public String eval(final String script) {
+        final LuaActor temp = new LuaActor(
+            "__eval", "return " + script, client, chatMessageManager, itemManager, this, null
+        );
+
         try {
             return temp.evalAndReturn();
         } finally {
@@ -330,12 +357,13 @@ public class ActorManager {
     /**
      * Unload and stop a script and all its children.
      */
-    public void unload(String name) {
+    public void unload(final String name) {
         // Stop children first
-        String prefix = name + "/";
-        var it = scripts.entrySet().iterator();
+        final String prefix = name + "/";
+        final var it = scripts.entrySet().iterator();
+
         while (it.hasNext()) {
-            var entry = it.next();
+            final var entry = it.next();
             if (entry.getKey().startsWith(prefix)) {
                 entry.getValue().stop();
                 it.remove();
@@ -344,11 +372,12 @@ public class ActorManager {
         }
 
         // Stop the script itself
-        LuaActor script = scripts.remove(name);
+        final LuaActor script = scripts.remove(name);
         if (script != null) {
             script.stop();
             log.info("Unloaded actor: {}", name);
         }
+
         fireChange();
     }
 
@@ -356,7 +385,7 @@ public class ActorManager {
      * Resolve a child name relative to a parent.
      * Child names must not contain '/' or '..' to prevent namespace escaping.
      */
-    public String childName(String parent, String child) {
+    public String childName(final String parent, final String child) {
         if (child == null || child.isEmpty() || child.contains("/") || child.contains("..")) {
             throw new IllegalArgumentException("invalid child name: must not be empty or contain '/' or '..'");
         }
@@ -366,25 +395,26 @@ public class ActorManager {
     /**
      * List direct children of a parent script.
      */
-    public List<String> listChildren(String parent) {
-        String prefix = parent + "/";
-        List<String> result = new ArrayList<>();
-        for (String key : scripts.keySet()) {
+    public List<String> listChildren(final String parent) {
+        final String prefix = parent + "/";
+        final List<String> result = new ArrayList<>();
+
+        for (final String key : scripts.keySet()) {
             if (key.startsWith(prefix)) {
-                // Only direct children (no further slashes after prefix)
-                String rest = key.substring(prefix.length());
+                final String rest = key.substring(prefix.length());
                 if (!rest.contains("/")) {
                     result.add(rest);
                 }
             }
         }
+
         return result;
     }
 
     /**
      * Register a template (script blueprint).
      */
-    public void defineTemplate(String name, String source) {
+    public void defineTemplate(final String name, final String source) {
         templates.put(name, source);
         log.info("Defined template: {}", name);
         fireChange();
@@ -393,7 +423,7 @@ public class ActorManager {
     /**
      * Get a template's source by name.
      */
-    public String getTemplate(String name) {
+    public String getTemplate(final String name) {
         return templates.get(name);
     }
 
@@ -407,8 +437,8 @@ public class ActorManager {
     /**
      * Called during overlay render — dispatches to all active scripts with hooks.
      */
-    public void render(java.awt.Graphics2D graphics) {
-        for (LuaActor script : scripts.values()) {
+    public void render(final Graphics2D graphics) {
+        for (final LuaActor script : scripts.values()) {
             script.render(graphics);
         }
     }
@@ -423,16 +453,16 @@ public class ActorManager {
     /**
      * Get the source code of a running script by name.
      */
-    public String getSource(String name) {
-        LuaActor script = scripts.get(name);
+    public String getSource(final String name) {
+        final LuaActor script = scripts.get(name);
         return script != null ? script.getSource() : null;
     }
 
     /**
      * Check if a script is running.
      */
-    public boolean isRunning(String name) {
-        LuaActor script = scripts.get(name);
+    public boolean isRunning(final String name) {
+        final LuaActor script = scripts.get(name);
         return script != null && script.isRunning();
     }
 
@@ -440,9 +470,10 @@ public class ActorManager {
      * Shut down all scripts and clear templates.
      */
     public void shutdown() {
-        for (LuaActor script : scripts.values()) {
+        for (final LuaActor script : scripts.values()) {
             script.stop();
         }
+
         scripts.clear();
         templates.clear();
         fireChange();
