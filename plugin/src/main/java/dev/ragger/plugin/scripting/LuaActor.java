@@ -237,9 +237,31 @@ public class LuaActor {
     }
 
     /**
-     * Deliver a mail message to this actor's on_mail hook.
-     * Called by ActorManager.drainMail() on the game tick thread.
+     * Deliver a game event to this actor's matching hook (e.g. on_hitsplat, on_chat).
+     * Returns false if the hook returned false (request stop).
      */
+    public boolean deliverEvent(String hookName, Map<String, Object> data) {
+        if (!running || !hasHooks || lua == null) return true;
+
+        try {
+            lua.getGlobal("__hooks");
+            lua.getField(-1, hookName);
+            if (lua.type(-1) == Lua.LuaType.FUNCTION) {
+                LuaUtils.pushArgsTable(lua, data);
+                lua.pCall(1, 1);
+                boolean keepRunning = lua.type(-1) != Lua.LuaType.BOOLEAN || lua.toBoolean(-1);
+                lua.pop(2); // pop return value + __hooks
+                return keepRunning;
+            } else {
+                lua.pop(2); // pop non-function + __hooks
+                return true;
+            }
+        } catch (Exception e) {
+            log.error("Actor '{}' hook '{}' error: {}", name, hookName, e.getMessage());
+            return true;
+        }
+    }
+
     /**
      * Deliver a mail message to this actor's on_mail hook.
      * Returns false if the hook returned false (request stop).

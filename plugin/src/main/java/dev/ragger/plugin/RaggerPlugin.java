@@ -5,11 +5,12 @@ import dev.ragger.plugin.ui.ChatPanel;
 import dev.ragger.plugin.ui.ConsoleOverlay;
 import dev.ragger.plugin.scripting.ActorManager;
 import dev.ragger.plugin.scripting.ActorOverlay;
+import dev.ragger.plugin.scripting.LuaEvent;
 import dev.ragger.plugin.scripting.ServiceManager;
-import net.runelite.api.Client;
+import net.runelite.api.*;
+import net.runelite.api.events.*;
 import net.runelite.client.chat.ChatMessageManager;
 import net.runelite.client.game.ItemManager;
-import net.runelite.api.events.GameTick;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.eventbus.Subscribe;
@@ -76,6 +77,11 @@ public class RaggerPlugin extends Plugin {
     private ClaudeClient claude;
     private net.runelite.client.input.KeyListener consoleKeyListener;
     private net.runelite.client.input.MouseWheelListener consoleMouseWheelListener;
+
+    // Inventory snapshot for change detection
+    private int[] prevInventoryIds = new int[28];
+    private int[] prevInventoryQtys = new int[28];
+    private int prevWorld = -1;
 
     @Override
     protected void startUp() {
@@ -156,7 +162,142 @@ public class RaggerPlugin extends Plugin {
         bridgeServer.tick();
         actorManager.drainMail();
         actorManager.tick();
+        diffInventory();
+        actorManager.drainEvents();
         serviceManager.tick();
+    }
+
+    /**
+     * Diff the inventory against the previous snapshot and buffer change events.
+     */
+    private void diffInventory() {
+        ItemContainer inv = client.getItemContainer(InventoryID.INVENTORY);
+        if (inv == null) return;
+
+        Item[] items = inv.getItems();
+        for (int i = 0; i < 28; i++) {
+            int id = i < items.length ? items[i].getId() : -1;
+            int qty = i < items.length ? items[i].getQuantity() : 0;
+            if (id != prevInventoryIds[i] || qty != prevInventoryQtys[i]) {
+                actorManager.bufferEvent(LuaEvent.fromInventoryChanged(
+                    i, prevInventoryIds[i], prevInventoryQtys[i], id, qty));
+                prevInventoryIds[i] = id;
+                prevInventoryQtys[i] = qty;
+            }
+        }
+    }
+
+    // -- Game event subscriptions --
+
+    @Subscribe
+    public void onHitsplatApplied(HitsplatApplied event) {
+        actorManager.bufferEvent(LuaEvent.fromHitsplat(event));
+    }
+
+    @Subscribe
+    public void onProjectileMoved(ProjectileMoved event) {
+        // Only buffer on first cycle to avoid duplicate events per projectile
+        if (event.getProjectile().getRemainingCycles() == event.getProjectile().getEndCycle() - event.getProjectile().getStartCycle()) {
+            actorManager.bufferEvent(LuaEvent.fromProjectile(event));
+        }
+    }
+
+    @Subscribe
+    public void onActorDeath(ActorDeath event) {
+        actorManager.bufferEvent(LuaEvent.fromActorDeath(event));
+    }
+
+    @Subscribe
+    public void onChatMessage(ChatMessage event) {
+        actorManager.bufferEvent(LuaEvent.fromChat(event));
+    }
+
+    @Subscribe
+    public void onItemSpawned(ItemSpawned event) {
+        actorManager.bufferEvent(LuaEvent.fromItemSpawned(event));
+    }
+
+    @Subscribe
+    public void onItemDespawned(ItemDespawned event) {
+        actorManager.bufferEvent(LuaEvent.fromItemDespawned(event));
+    }
+
+    @Subscribe
+    public void onStatChanged(StatChanged event) {
+        actorManager.bufferEvent(LuaEvent.fromStatChanged(event));
+    }
+
+    @Subscribe
+    public void onPlayerSpawned(PlayerSpawned event) {
+        actorManager.bufferEvent(LuaEvent.fromPlayerSpawned(event));
+    }
+
+    @Subscribe
+    public void onPlayerDespawned(PlayerDespawned event) {
+        actorManager.bufferEvent(LuaEvent.fromPlayerDespawned(event));
+    }
+
+    @Subscribe
+    public void onNpcSpawned(NpcSpawned event) {
+        actorManager.bufferEvent(LuaEvent.fromNpcSpawned(event));
+    }
+
+    @Subscribe
+    public void onNpcDespawned(NpcDespawned event) {
+        actorManager.bufferEvent(LuaEvent.fromNpcDespawned(event));
+    }
+
+    @Subscribe
+    public void onAnimationChanged(AnimationChanged event) {
+        actorManager.bufferEvent(LuaEvent.fromAnimation(event.getActor(), event.getActor().getAnimation()));
+    }
+
+    @Subscribe
+    public void onGraphicChanged(GraphicChanged event) {
+        actorManager.bufferEvent(LuaEvent.fromGraphic(event.getActor(), event.getActor().getGraphic()));
+    }
+
+    @Subscribe
+    public void onGameObjectSpawned(GameObjectSpawned event) {
+        actorManager.bufferEvent(LuaEvent.fromGameObjectSpawned(event));
+    }
+
+    @Subscribe
+    public void onGameObjectDespawned(GameObjectDespawned event) {
+        actorManager.bufferEvent(LuaEvent.fromGameObjectDespawned(event));
+    }
+
+    @Subscribe
+    public void onVarbitChanged(VarbitChanged event) {
+        actorManager.bufferEvent(LuaEvent.fromVarpChanged(event));
+    }
+
+    @Subscribe
+    public void onGameStateChanged(GameStateChanged event) {
+        GameState state = event.getGameState();
+        if (state == GameState.LOGGED_IN) {
+            int world = client.getWorld();
+            if (prevWorld == -1) {
+                // First login
+                actorManager.bufferEvent(LuaEvent.fromLogin());
+            } else if (prevWorld != world) {
+                actorManager.bufferEvent(LuaEvent.fromWorldChanged(prevWorld, world));
+            }
+            prevWorld = world;
+        } else if (state == GameState.LOGIN_SCREEN && prevWorld != -1) {
+            actorManager.bufferEvent(LuaEvent.fromLogout());
+            prevWorld = -1;
+        }
+    }
+
+    @Subscribe
+    public void onWidgetLoaded(WidgetLoaded event) {
+        actorManager.bufferEvent(LuaEvent.fromWidgetLoaded(event));
+    }
+
+    @Subscribe
+    public void onWidgetClosed(WidgetClosed event) {
+        actorManager.bufferEvent(LuaEvent.fromWidgetClosed(event));
     }
 
     @Subscribe

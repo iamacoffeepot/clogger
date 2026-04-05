@@ -733,6 +733,46 @@ return {
 - `on_mail(from, data)` — called when another actor sends mail to this actor
 - `on_stop` — called when the actor is unloaded
 
+#### Event Hooks
+
+Event hooks fire after `on_tick` each tick, delivering buffered game events. Each receives a single table with the event data. Return `false` to self-stop the actor.
+
+**Combat & damage:**
+- `on_hitsplat(data)` — `{amount, type, is_mine, target_type, target_name, target_id?}`
+- `on_projectile(data)` — `{id, src_x, src_y, dst_x, dst_y, start_cycle, end_cycle, remaining_cycles, target_type?, target_name?, target_id?}`
+- `on_death(data)` — `{type, name, id?}` — NPC or player death observed
+
+**Chat:**
+- `on_chat(data)` — `{type, sender, message}` — chat message received (type is ChatMessageType int)
+
+**Items & loot:**
+- `on_item_spawned(data)` — `{id, quantity, x, y, plane}` — ground item appeared
+- `on_item_despawned(data)` — `{id, quantity, x, y, plane}` — ground item gone
+- `on_inventory_changed(data)` — `{slot, old_id, old_qty, new_id, new_qty}` — inventory slot changed
+
+**XP & progression:**
+- `on_xp_drop(data)` — `{skill, skill_name, xp, level, boosted_level}` — stat changed
+
+**World & movement:**
+- `on_player_spawned(data)` — `{name, x, y, combat}` — player entered scene
+- `on_player_despawned(data)` — `{name}` — player left scene
+- `on_npc_spawned(data)` — `{name, id, x, y, combat}` — NPC entered scene
+- `on_npc_despawned(data)` — `{name, id}` — NPC left scene
+- `on_animation(data)` — `{type, name, id?, animation}` — animation changed
+- `on_graphic(data)` — `{type, name, id?, graphic}` — graphic/spotanim applied
+- `on_object_spawned(data)` — `{id, x, y, plane}` — game object appeared
+- `on_object_despawned(data)` — `{id, x, y, plane}` — game object removed
+
+**Variables:**
+- `on_varp_changed(data)` — `{varp_id, varbit_id, value}` — varp/varbit changed (varbit_id is -1 for raw varps)
+
+**Client state:**
+- `on_login()` — player logged in (empty table)
+- `on_logout()` — player logged out (empty table)
+- `on_world_changed(data)` — `{old_world, new_world}` — world hop
+- `on_widget_loaded(data)` — `{group_id}` — interface opened
+- `on_widget_closed(data)` — `{group_id}` — interface closed
+
 If an actor does not return a table, it runs once top-to-bottom (one-shot mode). Locals defined in the actor body are captured by hook closures and persist for the actor's lifetime.
 
 ### API: `mail`

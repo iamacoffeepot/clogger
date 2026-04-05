@@ -7,6 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -34,6 +35,34 @@ public class ActorManager {
 
     private final ConcurrentLinkedQueue<MailMessage> mailQueue = new ConcurrentLinkedQueue<>();
     private final ConcurrentLinkedQueue<MailMessage> claudeMailbox = new ConcurrentLinkedQueue<>();
+    private final ConcurrentLinkedQueue<LuaEvent> eventQueue = new ConcurrentLinkedQueue<>();
+
+    /** Map from event type to Lua hook name. */
+    private static final Map<LuaEvent.Type, String> HOOK_NAMES = new EnumMap<>(LuaEvent.Type.class);
+    static {
+        HOOK_NAMES.put(LuaEvent.Type.HITSPLAT, "on_hitsplat");
+        HOOK_NAMES.put(LuaEvent.Type.PROJECTILE, "on_projectile");
+        HOOK_NAMES.put(LuaEvent.Type.DEATH, "on_death");
+        HOOK_NAMES.put(LuaEvent.Type.CHAT, "on_chat");
+        HOOK_NAMES.put(LuaEvent.Type.ITEM_SPAWNED, "on_item_spawned");
+        HOOK_NAMES.put(LuaEvent.Type.ITEM_DESPAWNED, "on_item_despawned");
+        HOOK_NAMES.put(LuaEvent.Type.INVENTORY_CHANGED, "on_inventory_changed");
+        HOOK_NAMES.put(LuaEvent.Type.XP_DROP, "on_xp_drop");
+        HOOK_NAMES.put(LuaEvent.Type.PLAYER_SPAWNED, "on_player_spawned");
+        HOOK_NAMES.put(LuaEvent.Type.PLAYER_DESPAWNED, "on_player_despawned");
+        HOOK_NAMES.put(LuaEvent.Type.NPC_SPAWNED, "on_npc_spawned");
+        HOOK_NAMES.put(LuaEvent.Type.NPC_DESPAWNED, "on_npc_despawned");
+        HOOK_NAMES.put(LuaEvent.Type.ANIMATION, "on_animation");
+        HOOK_NAMES.put(LuaEvent.Type.GRAPHIC, "on_graphic");
+        HOOK_NAMES.put(LuaEvent.Type.GAME_OBJECT_SPAWNED, "on_object_spawned");
+        HOOK_NAMES.put(LuaEvent.Type.GAME_OBJECT_DESPAWNED, "on_object_despawned");
+        HOOK_NAMES.put(LuaEvent.Type.VARP_CHANGED, "on_varp_changed");
+        HOOK_NAMES.put(LuaEvent.Type.LOGIN, "on_login");
+        HOOK_NAMES.put(LuaEvent.Type.LOGOUT, "on_logout");
+        HOOK_NAMES.put(LuaEvent.Type.WORLD_CHANGED, "on_world_changed");
+        HOOK_NAMES.put(LuaEvent.Type.WIDGET_LOADED, "on_widget_loaded");
+        HOOK_NAMES.put(LuaEvent.Type.WIDGET_CLOSED, "on_widget_closed");
+    }
 
     private int maxDepth = 3;
     private int maxChildren = 50;
@@ -242,6 +271,44 @@ public class ActorManager {
                 it.remove();
                 log.info("Script self-stopped: {}", entry.getKey());
                 fireChange();
+            }
+        }
+    }
+
+    /**
+     * Buffer a game event for delivery to actors on the next drainEvents() call.
+     */
+    public void bufferEvent(LuaEvent event) {
+        eventQueue.add(event);
+    }
+
+    /**
+     * Drain buffered events and deliver to all actors that define the matching hook.
+     * Called after tick() — actors see on_tick first, then events from that tick.
+     */
+    public void drainEvents() {
+        List<LuaEvent> batch = new ArrayList<>();
+        LuaEvent evt;
+        while ((evt = eventQueue.poll()) != null) {
+            batch.add(evt);
+        }
+
+        if (batch.isEmpty()) return;
+
+        for (LuaEvent event : batch) {
+            String hookName = HOOK_NAMES.get(event.getType());
+            if (hookName == null) continue;
+
+            var it = scripts.entrySet().iterator();
+            while (it.hasNext()) {
+                var entry = it.next();
+                LuaActor script = entry.getValue();
+                if (!script.deliverEvent(hookName, event.getData())) {
+                    script.stop();
+                    it.remove();
+                    log.info("Actor '{}' self-stopped via {}", entry.getKey(), hookName);
+                    fireChange();
+                }
             }
         }
     }
