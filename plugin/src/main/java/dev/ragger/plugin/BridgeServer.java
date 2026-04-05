@@ -1,10 +1,14 @@
 package dev.ragger.plugin;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.google.gson.JsonPrimitive;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import dev.ragger.plugin.scripting.ActorManager;
+import dev.ragger.plugin.scripting.MailMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -13,8 +17,11 @@ import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
@@ -46,16 +53,16 @@ public class BridgeServer {
     private final ConcurrentLinkedQueue<PendingMailRecv> pendingMailRecvs = new ConcurrentLinkedQueue<>();
     private HttpServer server;
 
-    public BridgeServer(ActorManager actorManager) {
+    public BridgeServer(final ActorManager actorManager) {
         this.actorManager = actorManager;
-        this.token = java.util.UUID.randomUUID().toString();
+        this.token = UUID.randomUUID().toString();
     }
 
     public String getToken() {
         return token;
     }
 
-    public void start(int port) throws IOException {
+    public void start(final int port) throws IOException {
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", port), 0);
 
         server.createContext("/eval", exchange -> {
@@ -65,6 +72,7 @@ public class BridgeServer {
             }
             handleEval(exchange);
         });
+
         server.createContext("/run", exchange -> {
             if (!authenticate(exchange)) {
                 respond(exchange, 401, "{\"error\":\"unauthorized\"}");
@@ -72,6 +80,7 @@ public class BridgeServer {
             }
             handleRun(exchange);
         });
+
         server.createContext("/list", exchange -> {
             if (!authenticate(exchange)) {
                 respond(exchange, 401, "{\"error\":\"unauthorized\"}");
@@ -79,6 +88,7 @@ public class BridgeServer {
             }
             handleList(exchange);
         });
+
         server.createContext("/source", exchange -> {
             if (!authenticate(exchange)) {
                 respond(exchange, 401, "{\"error\":\"unauthorized\"}");
@@ -86,6 +96,7 @@ public class BridgeServer {
             }
             handleSource(exchange);
         });
+
         server.createContext("/templates", exchange -> {
             if (!authenticate(exchange)) {
                 respond(exchange, 401, "{\"error\":\"unauthorized\"}");
@@ -93,6 +104,7 @@ public class BridgeServer {
             }
             handleTemplates(exchange);
         });
+
         server.createContext("/template-source", exchange -> {
             if (!authenticate(exchange)) {
                 respond(exchange, 401, "{\"error\":\"unauthorized\"}");
@@ -100,6 +112,7 @@ public class BridgeServer {
             }
             handleTemplateSource(exchange);
         });
+
         server.createContext("/mail-recv-block", exchange -> {
             if (!authenticate(exchange)) {
                 respond(exchange, 401, "{\"error\":\"unauthorized\"}");
@@ -107,6 +120,7 @@ public class BridgeServer {
             }
             handleMailRecvBlock(exchange);
         });
+
         server.createContext("/mail-recv", exchange -> {
             if (!authenticate(exchange)) {
                 respond(exchange, 401, "{\"error\":\"unauthorized\"}");
@@ -114,6 +128,7 @@ public class BridgeServer {
             }
             handleMailRecv(exchange);
         });
+
         server.createContext("/mail", exchange -> {
             if (!authenticate(exchange)) {
                 respond(exchange, 401, "{\"error\":\"unauthorized\"}");
@@ -121,6 +136,7 @@ public class BridgeServer {
             }
             handleMail(exchange);
         });
+
         server.createContext("/health", exchange -> {
             respond(exchange, 200, "{\"status\":\"ok\"}");
         });
@@ -144,10 +160,11 @@ public class BridgeServer {
         PendingRequest req;
         while ((req = pendingRequests.poll()) != null) {
             try {
-                String result = actorManager.eval(req.script);
+                final String result = actorManager.eval(req.script);
                 req.future.complete(result);
-            } catch (Exception e) {
-                req.future.complete("{\"error\":\"" + e.getMessage().replace("\"", "'") + "\"}");
+            } catch (final Exception e) {
+                final String escaped = e.getMessage().replace("\"", "'");
+                req.future.complete("{\"error\":\"" + escaped + "\"}");
             }
         }
 
@@ -157,31 +174,32 @@ public class BridgeServer {
                 actorManager.load(run.name, run.script);
                 actorManager.defineTemplate(run.name, run.script);
                 run.future.complete("{\"status\":\"loaded\",\"name\":\"" + run.name + "\"}");
-            } catch (Exception e) {
-                run.future.complete("{\"error\":\"" + e.getMessage().replace("\"", "'") + "\"}");
+            } catch (final Exception e) {
+                final String escaped = e.getMessage().replace("\"", "'");
+                run.future.complete("{\"error\":\"" + escaped + "\"}");
             }
         }
 
         // Process pending sync mail recv requests
-        long now = System.currentTimeMillis();
-        Iterator<PendingMailRecv> it = pendingMailRecvs.iterator();
+        final long now = System.currentTimeMillis();
+        final Iterator<PendingMailRecv> it = pendingMailRecvs.iterator();
+
         while (it.hasNext()) {
-            PendingMailRecv pending = it.next();
+            final PendingMailRecv pending = it.next();
+
             if (pending.future.isDone()) {
                 it.remove();
                 continue;
             }
 
-            // Check for timeout
-            if (now >= pending.deadlineMs) {
-                // Return whatever we collected so far
+            final boolean expired = now >= pending.deadlineMs;
+            if (expired) {
                 pending.future.complete(formatMailMessages(pending.collected));
                 it.remove();
                 continue;
             }
 
-            // Try to collect more messages
-            var messages = actorManager.drainClaudeMailbox(
+            final List<MailMessage> messages = actorManager.drainClaudeMailbox(
                 pending.remaining(), pending.fromFilter);
             pending.collected.addAll(messages);
 
@@ -192,332 +210,390 @@ public class BridgeServer {
         }
     }
 
-    private boolean authenticate(HttpExchange exchange) {
-        String auth = exchange.getRequestHeaders().getFirst("Authorization");
+    private boolean authenticate(final HttpExchange exchange) {
+        final String auth = exchange.getRequestHeaders().getFirst("Authorization");
         return auth != null && auth.equals("Bearer " + token);
     }
 
-    private void handleEval(HttpExchange exchange) throws IOException {
+    private void handleEval(final HttpExchange exchange) throws IOException {
         if (!"POST".equals(exchange.getRequestMethod())) {
             respond(exchange, 405, "{\"error\":\"POST required\"}");
             return;
         }
 
-        String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
-        try {
-            JsonObject json = new JsonParser().parse(body).getAsJsonObject();
-            String script = json.get("script").getAsString();
+        final String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
 
-            CompletableFuture<String> future = new CompletableFuture<>();
+        try {
+            final JsonObject json = new JsonParser().parse(body).getAsJsonObject();
+            final String script = json.get("script").getAsString();
+
+            final CompletableFuture<String> future = new CompletableFuture<>();
             pendingRequests.add(new PendingRequest(script, future));
 
-            String result = future.get(GAME_TICK_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            final String result = future.get(GAME_TICK_TIMEOUT_SECONDS, TimeUnit.SECONDS);
             respond(exchange, 200, result);
-        } catch (Exception e) {
-            respond(exchange, 500, "{\"error\":\"" + e.getMessage().replace("\"", "'") + "\"}");
+        } catch (final Exception e) {
+            final String escaped = e.getMessage().replace("\"", "'");
+            respond(exchange, 500, "{\"error\":\"" + escaped + "\"}");
         }
     }
 
-    private void handleRun(HttpExchange exchange) throws IOException {
+    private void handleRun(final HttpExchange exchange) throws IOException {
         if (!"POST".equals(exchange.getRequestMethod())) {
             respond(exchange, 405, "{\"error\":\"POST required\"}");
             return;
         }
 
-        String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
-        try {
-            JsonObject json = new JsonParser().parse(body).getAsJsonObject();
-            String name = json.get("name").getAsString();
-            String script = json.get("script").getAsString();
+        final String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
 
-            CompletableFuture<String> future = new CompletableFuture<>();
+        try {
+            final JsonObject json = new JsonParser().parse(body).getAsJsonObject();
+            final String name = json.get("name").getAsString();
+            final String script = json.get("script").getAsString();
+
+            final CompletableFuture<String> future = new CompletableFuture<>();
             pendingRuns.add(new PendingRun(name, script, future));
 
-            String result = future.get(GAME_TICK_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            final String result = future.get(GAME_TICK_TIMEOUT_SECONDS, TimeUnit.SECONDS);
             respond(exchange, 200, result);
-        } catch (Exception e) {
-            respond(exchange, 500, "{\"error\":\"" + e.getMessage().replace("\"", "'") + "\"}");
+        } catch (final Exception e) {
+            final String escaped = e.getMessage().replace("\"", "'");
+            respond(exchange, 500, "{\"error\":\"" + escaped + "\"}");
         }
     }
 
-    private void handleList(HttpExchange exchange) throws IOException {
+    private void handleList(final HttpExchange exchange) throws IOException {
         if (!"GET".equals(exchange.getRequestMethod())) {
             respond(exchange, 405, "{\"error\":\"GET required\"}");
             return;
         }
 
-        var names = actorManager.list();
-        var arr = new com.google.gson.JsonArray();
-        for (String name : names) {
+        final List<String> names = actorManager.list();
+        final JsonArray arr = new JsonArray();
+
+        for (final String name : names) {
             arr.add(name);
         }
-        JsonObject result = new JsonObject();
+
+        final JsonObject result = new JsonObject();
         result.add("actors", arr);
         respond(exchange, 200, result.toString());
     }
 
-    private void handleSource(HttpExchange exchange) throws IOException {
+    private void handleSource(final HttpExchange exchange) throws IOException {
         if (!"POST".equals(exchange.getRequestMethod())) {
             respond(exchange, 405, "{\"error\":\"POST required\"}");
             return;
         }
 
-        String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+        final String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+
         try {
-            JsonObject json = new JsonParser().parse(body).getAsJsonObject();
-            String name = json.get("name").getAsString();
-            String source = actorManager.getSource(name);
+            final JsonObject json = new JsonParser().parse(body).getAsJsonObject();
+            final String name = json.get("name").getAsString();
+            final String source = actorManager.getSource(name);
+
             if (source == null) {
                 respond(exchange, 404, "{\"error\":\"script not found\"}");
             } else {
-                JsonObject result = new JsonObject();
+                final JsonObject result = new JsonObject();
                 result.addProperty("name", name);
                 result.addProperty("source", source);
                 respond(exchange, 200, result.toString());
             }
-        } catch (Exception e) {
-            respond(exchange, 500, "{\"error\":\"" + e.getMessage().replace("\"", "'") + "\"}");
+        } catch (final Exception e) {
+            final String escaped = e.getMessage().replace("\"", "'");
+            respond(exchange, 500, "{\"error\":\"" + escaped + "\"}");
         }
     }
 
-    private void handleTemplates(HttpExchange exchange) throws IOException {
+    private void handleTemplates(final HttpExchange exchange) throws IOException {
         if (!"GET".equals(exchange.getRequestMethod())) {
             respond(exchange, 405, "{\"error\":\"GET required\"}");
             return;
         }
 
-        var names = actorManager.listTemplates();
-        var arr = new com.google.gson.JsonArray();
-        for (String name : names) {
+        final List<String> names = actorManager.listTemplates();
+        final JsonArray arr = new JsonArray();
+
+        for (final String name : names) {
             arr.add(name);
         }
-        JsonObject result = new JsonObject();
+
+        final JsonObject result = new JsonObject();
         result.add("templates", arr);
         respond(exchange, 200, result.toString());
     }
 
-    private void handleTemplateSource(HttpExchange exchange) throws IOException {
+    private void handleTemplateSource(final HttpExchange exchange) throws IOException {
         if (!"POST".equals(exchange.getRequestMethod())) {
             respond(exchange, 405, "{\"error\":\"POST required\"}");
             return;
         }
 
-        String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+        final String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+
         try {
-            JsonObject json = new JsonParser().parse(body).getAsJsonObject();
-            String name = json.get("name").getAsString();
-            String source = actorManager.getTemplate(name);
+            final JsonObject json = new JsonParser().parse(body).getAsJsonObject();
+            final String name = json.get("name").getAsString();
+            final String source = actorManager.getTemplate(name);
+
             if (source == null) {
                 respond(exchange, 404, "{\"error\":\"template not found\"}");
             } else {
-                JsonObject result = new JsonObject();
+                final JsonObject result = new JsonObject();
                 result.addProperty("name", name);
                 result.addProperty("source", source);
                 respond(exchange, 200, result.toString());
             }
-        } catch (Exception e) {
-            respond(exchange, 500, "{\"error\":\"" + e.getMessage().replace("\"", "'") + "\"}");
+        } catch (final Exception e) {
+            final String escaped = e.getMessage().replace("\"", "'");
+            respond(exchange, 500, "{\"error\":\"" + escaped + "\"}");
         }
     }
 
-    private void handleMailRecv(HttpExchange exchange) throws IOException {
+    private void handleMailRecv(final HttpExchange exchange) throws IOException {
         if (!"GET".equals(exchange.getRequestMethod())) {
             respond(exchange, 405, "{\"error\":\"GET required\"}");
             return;
         }
 
-        // Parse optional query params: ?limit=N&from=script-name
-        var params = parseQueryParams(exchange);
-        String fromFilter = params.getOrDefault("from", null);
-        int limit = 0; // 0 = all
-        String limitStr = params.get("limit");
+        final Map<String, String> params = parseQueryParams(exchange);
+        final String fromFilter = params.getOrDefault("from", null);
+        final String limitStr = params.get("limit");
+
+        int limit = 0;
         if (limitStr != null) {
-            try { limit = Integer.parseInt(limitStr); } catch (NumberFormatException ignored) {}
+            try {
+                limit = Integer.parseInt(limitStr);
+            } catch (final NumberFormatException ignored) {
+            }
         }
 
-        var messages = actorManager.drainClaudeMailbox(limit, fromFilter);
+        final List<MailMessage> messages = actorManager.drainClaudeMailbox(limit, fromFilter);
         respond(exchange, 200, formatMailMessages(messages));
     }
 
-    private void handleMailRecvBlock(HttpExchange exchange) throws IOException {
+    private void handleMailRecvBlock(final HttpExchange exchange) throws IOException {
         if (!"GET".equals(exchange.getRequestMethod())) {
             respond(exchange, 405, "{\"error\":\"GET required\"}");
             return;
         }
 
-        var params = parseQueryParams(exchange);
-        String fromFilter = params.getOrDefault("from", null);
+        final Map<String, String> params = parseQueryParams(exchange);
+        final String fromFilter = params.getOrDefault("from", null);
+        final String countStr = params.get("count");
+        final String timeoutStr = params.get("timeout");
+
         int count = 1;
-        String countStr = params.get("count");
         if (countStr != null) {
-            try { count = Math.max(1, Integer.parseInt(countStr)); } catch (NumberFormatException ignored) {}
-        }
-        int timeoutSec = MAIL_RECV_DEFAULT_TIMEOUT;
-        String timeoutStr = params.get("timeout");
-        if (timeoutStr != null) {
-            try { timeoutSec = Math.max(1, Math.min(MAIL_RECV_MAX_TIMEOUT, Integer.parseInt(timeoutStr))); } catch (NumberFormatException ignored) {}
+            try {
+                count = Math.max(1, Integer.parseInt(countStr));
+            } catch (final NumberFormatException ignored) {
+            }
         }
 
-        CompletableFuture<String> future = new CompletableFuture<>();
-        long deadlineMs = System.currentTimeMillis() + (timeoutSec * 1000L);
+        int timeoutSec = MAIL_RECV_DEFAULT_TIMEOUT;
+        if (timeoutStr != null) {
+            try {
+                final int parsed = Integer.parseInt(timeoutStr);
+                timeoutSec = Math.max(1, Math.min(MAIL_RECV_MAX_TIMEOUT, parsed));
+            } catch (final NumberFormatException ignored) {
+            }
+        }
+
+        final CompletableFuture<String> future = new CompletableFuture<>();
+        final long deadlineMs = System.currentTimeMillis() + (timeoutSec * 1000L);
         pendingMailRecvs.add(new PendingMailRecv(count, fromFilter, deadlineMs, future));
 
         try {
-            String result = future.get(timeoutSec + MAIL_RECV_BUFFER_SECONDS, TimeUnit.SECONDS);
+            final long futureTimeout = timeoutSec + MAIL_RECV_BUFFER_SECONDS;
+            final String result = future.get(futureTimeout, TimeUnit.SECONDS);
             respond(exchange, 200, result);
-        } catch (Exception e) {
+        } catch (final Exception e) {
             respond(exchange, 504, "{\"error\":\"timeout\"}");
         }
     }
 
-    private java.util.Map<String, String> parseQueryParams(HttpExchange exchange) {
-        java.util.Map<String, String> params = new java.util.HashMap<>();
-        String query = exchange.getRequestURI().getQuery();
+    private Map<String, String> parseQueryParams(final HttpExchange exchange) {
+        final Map<String, String> params = new HashMap<>();
+        final String query = exchange.getRequestURI().getQuery();
+
         if (query != null) {
-            for (String pair : query.split("&")) {
-                int eq = pair.indexOf('=');
+            for (final String pair : query.split("&")) {
+                final int eq = pair.indexOf('=');
                 if (eq > 0) {
                     params.put(pair.substring(0, eq), pair.substring(eq + 1));
                 }
             }
         }
+
         return params;
     }
 
-    private String formatMailMessages(List<dev.ragger.plugin.scripting.MailMessage> messages) {
-        var arr = new com.google.gson.JsonArray();
-        for (var msg : messages) {
-            JsonObject entry = new JsonObject();
+    private String formatMailMessages(final List<MailMessage> messages) {
+        final JsonArray arr = new JsonArray();
+
+        for (final MailMessage msg : messages) {
+            final JsonObject entry = new JsonObject();
             entry.addProperty("from", msg.from());
             entry.add("data", toJsonElement(msg.data()));
             arr.add(entry);
         }
-        JsonObject result = new JsonObject();
+
+        final JsonObject result = new JsonObject();
         result.add("messages", arr);
         return result.toString();
     }
 
     @SuppressWarnings("unchecked")
-    private static com.google.gson.JsonElement toJsonElement(Object value) {
-        if (value instanceof java.util.Map) {
-            JsonObject obj = new JsonObject();
-            for (var kv : ((java.util.Map<String, Object>) value).entrySet()) {
+    private static JsonElement toJsonElement(final Object value) {
+        if (value instanceof Map) {
+            final JsonObject obj = new JsonObject();
+            for (final Map.Entry<String, Object> kv : ((Map<String, Object>) value).entrySet()) {
                 obj.add(kv.getKey(), toJsonElement(kv.getValue()));
             }
             return obj;
-        } else if (value instanceof java.util.List) {
-            var arr = new com.google.gson.JsonArray();
-            for (Object item : (java.util.List<Object>) value) {
+        } else if (value instanceof List) {
+            final JsonArray arr = new JsonArray();
+            for (final Object item : (List<Object>) value) {
                 arr.add(toJsonElement(item));
             }
             return arr;
         } else if (value instanceof Boolean) {
-            return new com.google.gson.JsonPrimitive((Boolean) value);
+            return new JsonPrimitive((Boolean) value);
         } else if (value instanceof Number) {
-            return new com.google.gson.JsonPrimitive((Number) value);
+            return new JsonPrimitive((Number) value);
         } else if (value instanceof String) {
-            return new com.google.gson.JsonPrimitive((String) value);
+            return new JsonPrimitive((String) value);
         } else {
-            return new com.google.gson.JsonPrimitive(String.valueOf(value));
+            return new JsonPrimitive(String.valueOf(value));
         }
     }
 
-    private static Object fromJsonElement(com.google.gson.JsonElement element) {
+    private static Object fromJsonElement(final JsonElement element) {
         if (element.isJsonObject()) {
-            java.util.Map<String, Object> map = new java.util.HashMap<>();
-            for (var kv : element.getAsJsonObject().entrySet()) {
+            final Map<String, Object> map = new HashMap<>();
+            for (final Map.Entry<String, JsonElement> kv : element.getAsJsonObject().entrySet()) {
                 map.put(kv.getKey(), fromJsonElement(kv.getValue()));
             }
             return map;
         } else if (element.isJsonArray()) {
-            java.util.List<Object> list = new ArrayList<>();
-            for (var item : element.getAsJsonArray()) {
+            final List<Object> list = new ArrayList<>();
+            for (final JsonElement item : element.getAsJsonArray()) {
                 list.add(fromJsonElement(item));
             }
             return list;
         } else if (element.isJsonPrimitive()) {
-            var prim = element.getAsJsonPrimitive();
-            if (prim.isBoolean()) return prim.getAsBoolean();
+            final JsonPrimitive prim = element.getAsJsonPrimitive();
+
+            if (prim.isBoolean()) {
+                return prim.getAsBoolean();
+            }
+
             if (prim.isNumber()) {
-                double num = prim.getAsDouble();
-                if (num == Math.floor(num) && !Double.isInfinite(num)
-                        && num >= Integer.MIN_VALUE && num <= Integer.MAX_VALUE) {
+                final double num = prim.getAsDouble();
+                final boolean isWholeInt = num == Math.floor(num)
+                    && !Double.isInfinite(num)
+                    && num >= Integer.MIN_VALUE
+                    && num <= Integer.MAX_VALUE;
+
+                if (isWholeInt) {
                     return (int) num;
                 }
                 return num;
             }
+
             return prim.getAsString();
         }
+
         return null;
     }
 
-    private void handleMail(HttpExchange exchange) throws IOException {
+    private void handleMail(final HttpExchange exchange) throws IOException {
         if (!"POST".equals(exchange.getRequestMethod())) {
             respond(exchange, 405, "{\"error\":\"POST required\"}");
             return;
         }
 
-        String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+        final String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+
         try {
-            var parsed = new JsonParser().parse(body);
+            final JsonElement parsed = new JsonParser().parse(body);
 
             // Batch mode: array of {target, data} messages
             if (parsed.isJsonArray()) {
-                var array = parsed.getAsJsonArray();
+                final JsonArray array = parsed.getAsJsonArray();
                 int queued = 0;
-                for (var element : array) {
-                    var msg = element.getAsJsonObject();
-                    String target = msg.get("target").getAsString();
-                    JsonObject data = msg.getAsJsonObject("data");
-                    if (data == null) continue;
+
+                for (final JsonElement element : array) {
+                    final JsonObject msg = element.getAsJsonObject();
+                    final String target = msg.get("target").getAsString();
+                    final JsonObject data = msg.getAsJsonObject("data");
+
+                    if (data == null) {
+                        continue;
+                    }
+
                     @SuppressWarnings("unchecked")
-                    java.util.Map<String, Object> map = (java.util.Map<String, Object>) fromJsonElement(data);
+                    final Map<String, Object> map = (Map<String, Object>) fromJsonElement(data);
                     actorManager.enqueueMail("claude", target, map);
                     queued++;
                 }
+
                 respond(exchange, 200, "{\"status\":\"queued\",\"count\":" + queued + "}");
                 return;
             }
 
             // Single message mode
-            JsonObject json = parsed.getAsJsonObject();
-            String target = json.get("target").getAsString();
-            JsonObject data = json.getAsJsonObject("data");
+            final JsonObject json = parsed.getAsJsonObject();
+            final String target = json.get("target").getAsString();
+            final JsonObject data = json.getAsJsonObject("data");
+
             if (data == null) {
                 respond(exchange, 400, "{\"error\":\"missing data field\"}");
                 return;
             }
 
             @SuppressWarnings("unchecked")
-            java.util.Map<String, Object> map = (java.util.Map<String, Object>) fromJsonElement(data);
+            final Map<String, Object> map = (Map<String, Object>) fromJsonElement(data);
 
             actorManager.enqueueMail("claude", target, map);
             respond(exchange, 200, "{\"status\":\"queued\",\"target\":\"" + target + "\"}");
-        } catch (Exception e) {
-            respond(exchange, 500, "{\"error\":\"" + e.getMessage().replace("\"", "'") + "\"}");
+        } catch (final Exception e) {
+            final String escaped = e.getMessage().replace("\"", "'");
+            respond(exchange, 500, "{\"error\":\"" + escaped + "\"}");
         }
     }
 
-    private void respond(HttpExchange exchange, int code, String body) throws IOException {
-        byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+    private void respond(final HttpExchange exchange, final int code, final String body) throws IOException {
+        final byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().set("Content-Type", "application/json");
         exchange.sendResponseHeaders(code, bytes.length);
-        try (OutputStream os = exchange.getResponseBody()) {
+
+        try (final OutputStream os = exchange.getResponseBody()) {
             os.write(bytes);
         }
     }
 
     private record PendingRequest(String script, CompletableFuture<String> future) {}
+
     private record PendingRun(String name, String script, CompletableFuture<String> future) {}
 
     private static class PendingMailRecv {
+
         final int count;
         final String fromFilter;
         final long deadlineMs;
         final CompletableFuture<String> future;
-        final List<dev.ragger.plugin.scripting.MailMessage> collected = new ArrayList<>();
+        final List<MailMessage> collected = new ArrayList<>();
 
-        PendingMailRecv(int count, String fromFilter, long deadlineMs, CompletableFuture<String> future) {
+        PendingMailRecv(
+            final int count,
+            final String fromFilter,
+            final long deadlineMs,
+            final CompletableFuture<String> future
+        ) {
             this.count = count;
             this.fromFilter = fromFilter;
             this.deadlineMs = deadlineMs;
