@@ -5,10 +5,19 @@ import net.runelite.client.ui.overlay.Overlay;
 import net.runelite.client.ui.overlay.OverlayLayer;
 import net.runelite.client.ui.overlay.OverlayPosition;
 
-import java.awt.*;
+import java.awt.Color;
+import java.awt.Dimension;
+import java.awt.Font;
+import java.awt.FontMetrics;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
+import java.awt.Shape;
+import java.awt.Toolkit;
+import java.awt.datatransfer.DataFlavor;
 import java.awt.event.KeyEvent;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.function.Consumer;
 
 /**
@@ -28,7 +37,7 @@ public class ConsoleOverlay extends Overlay {
     private static final Color SYN_STRING = new Color(0x98, 0xC3, 0x79);    // green
     private static final Color SYN_NUMBER = new Color(0xD1, 0x9A, 0x66);    // orange
     private static final Color SYN_COMMENT = new Color(0x6A, 0x6A, 0x7A);   // dim gray
-    private static final java.util.Set<String> KEYWORDS = java.util.Set.of(
+    private static final Set<String> KEYWORDS = Set.of(
         "if", "then", "else", "elseif", "end", "do", "while", "for", "in",
         "repeat", "until", "return", "local", "function", "not", "and", "or",
         "true", "false", "nil", "break", "goto",
@@ -66,7 +75,7 @@ public class ConsoleOverlay extends Overlay {
     private int streamStartIndex = -1;
     private StringBuilder streamBuffer;
 
-    public ConsoleOverlay(Client client, Consumer<String> onMessage) {
+    public ConsoleOverlay(final Client client, final Consumer<String> onMessage) {
         this.client = client;
         this.onMessage = onMessage;
         setPosition(OverlayPosition.DYNAMIC);
@@ -82,37 +91,41 @@ public class ConsoleOverlay extends Overlay {
         scrollOffset = 0;
     }
 
-    public void addMessage(String sender, String message) {
+    public void addMessage(final String sender, final String message) {
         lines.add(new ConsoleLine(sender, LineType.SENDER));
         parseMessageLines(message.strip());
         scrollToBottom();
     }
 
-    private void parseMessageLines(String message) {
+    private void parseMessageLines(final String message) {
         boolean inCodeBlock = false;
         boolean seenTableHeader = false;
-        for (String rawLine : message.split("\n")) {
+
+        for (final String rawLine : message.split("\n")) {
             if (rawLine.startsWith("```")) {
                 inCodeBlock = !inCodeBlock;
                 seenTableHeader = false;
                 continue;
             }
+
             if (inCodeBlock) {
                 lines.add(new ConsoleLine(rawLine, LineType.CODE));
                 seenTableHeader = false;
             } else if (isListItem(rawLine)) {
-                int indent = countIndent(rawLine);
-                String stripped = rawLine.stripLeading();
-                String bullet;
-                String text;
+                final int indent = countIndent(rawLine);
+                final String stripped = rawLine.stripLeading();
+                final String bullet;
+                final String text;
+
                 if (stripped.matches("^\\d+\\.\\s.*")) {
-                    int dotIdx = stripped.indexOf('.');
+                    final int dotIdx = stripped.indexOf('.');
                     bullet = stripped.substring(0, dotIdx + 1);
                     text = stripped.substring(dotIdx + 1).strip();
                 } else {
                     bullet = "\u2022"; // •
                     text = stripped.substring(2); // skip "- " or "* "
                 }
+
                 lines.add(new ConsoleLine(text, LineType.LIST_ITEM, null, indent, bullet));
                 seenTableHeader = false;
             } else if (rawLine.startsWith("    ")) {
@@ -125,11 +138,15 @@ public class ConsoleOverlay extends Overlay {
                 lines.add(new ConsoleLine(rawLine.substring(1), LineType.QUOTE));
                 seenTableHeader = false;
             } else if (rawLine.contains("|") && rawLine.strip().startsWith("|")) {
-                String trimmed = rawLine.strip();
-                if (trimmed.matches("\\|[\\s\\-:|]+\\|")) {
+                final String trimmed = rawLine.strip();
+                final boolean isSeparator = trimmed.matches("\\|[\\s\\-:|]+\\|");
+
+                if (isSeparator) {
                     continue;
                 }
-                String[] cells = parseCells(trimmed);
+
+                final String[] cells = parseCells(trimmed);
+
                 if (!seenTableHeader) {
                     lines.add(new ConsoleLine(rawLine, LineType.TABLE_HEADER, cells));
                     seenTableHeader = true;
@@ -149,7 +166,7 @@ public class ConsoleOverlay extends Overlay {
     /**
      * Begin a streaming message — shows the sender and prepares for text chunks.
      */
-    public void beginStream(String sender) {
+    public void beginStream(final String sender) {
         lines.add(new ConsoleLine(sender, LineType.SENDER));
         streamStartIndex = lines.size();
         streamBuffer = new StringBuilder();
@@ -167,14 +184,18 @@ public class ConsoleOverlay extends Overlay {
     /**
      * Append a text chunk to the current streaming message.
      */
-    public void appendStream(String text) {
-        if (streamBuffer == null) return;
+    public void appendStream(final String text) {
+        if (streamBuffer == null) {
+            return;
+        }
+
         streamBuffer.append(text);
 
         // Re-parse the full buffer and replace lines from streamStartIndex
         while (lines.size() > streamStartIndex) {
             lines.remove(lines.size() - 1);
         }
+
         parseMessageLines(streamBuffer.toString().strip());
         scrollToBottom();
     }
@@ -187,7 +208,7 @@ public class ConsoleOverlay extends Overlay {
         streamStartIndex = -1;
     }
 
-    public void addToolMessage(String message) {
+    public void addToolMessage(final String message) {
         lines.add(new ConsoleLine(message, LineType.TOOL));
         scrollToBottom();
     }
@@ -206,7 +227,7 @@ public class ConsoleOverlay extends Overlay {
         scrollOffset = 0;
     }
 
-    public void setBusy(boolean busy) {
+    public void setBusy(final boolean busy) {
         this.busy = busy;
     }
 
@@ -214,7 +235,9 @@ public class ConsoleOverlay extends Overlay {
      * Remove and return the next queued message, or null if empty.
      */
     public String pollQueue() {
-        if (messageQueue.isEmpty()) return null;
+        if (messageQueue.isEmpty()) {
+            return null;
+        }
         return messageQueue.remove(0);
     }
 
@@ -222,20 +245,25 @@ public class ConsoleOverlay extends Overlay {
         messageQueue.clear();
     }
 
-    public void handleKeyTyped(KeyEvent e) {
-        if (!visible) return;
+    public void handleKeyTyped(final KeyEvent e) {
+        if (!visible) {
+            return;
+        }
 
-        char c = e.getKeyChar();
+        final char c = e.getKeyChar();
+
         if (c == KeyEvent.VK_BACK_SPACE) {
             if (cursorPos > 0) {
                 inputBuffer.deleteCharAt(cursorPos - 1);
                 cursorPos--;
             }
         } else if (c == '\n' || c == '\r') {
-            String text = inputBuffer.toString().trim();
+            final String text = inputBuffer.toString().trim();
+
             if (!text.isEmpty()) {
                 inputBuffer.setLength(0);
                 cursorPos = 0;
+
                 if (busy && !text.startsWith("/")) {
                     messageQueue.add(text);
                 } else {
@@ -250,71 +278,86 @@ public class ConsoleOverlay extends Overlay {
         e.consume();
     }
 
-    public void handleKeyPressed(KeyEvent e) {
-        if (!visible) return;
+    public void handleKeyPressed(final KeyEvent e) {
+        if (!visible) {
+            return;
+        }
+
+        final int keyCode = e.getKeyCode();
+        final boolean hasModifier = e.isMetaDown() || e.isControlDown();
 
         // Paste support (Cmd+V / Ctrl+V)
-        if (e.getKeyCode() == KeyEvent.VK_V && (e.isMetaDown() || e.isControlDown())) {
+        if (keyCode == KeyEvent.VK_V && hasModifier) {
             try {
-                String clip = (String) java.awt.Toolkit.getDefaultToolkit()
+                final String clip = (String) Toolkit.getDefaultToolkit()
                     .getSystemClipboard()
-                    .getData(java.awt.datatransfer.DataFlavor.stringFlavor);
+                    .getData(DataFlavor.stringFlavor);
+
                 if (clip != null) {
-                    String cleaned = clip.replaceAll("[\\r\\n]+", " ");
+                    final String cleaned = clip.replaceAll("[\\r\\n]+", " ");
                     inputBuffer.insert(cursorPos, cleaned);
                     cursorPos += cleaned.length();
                 }
-            } catch (Exception ex) {
+            } catch (final Exception ex) {
                 // clipboard not available or wrong format
             }
+
             e.consume();
             return;
         }
 
         // Cursor movement
-        if (e.getKeyCode() == KeyEvent.VK_LEFT) {
-            if (cursorPos > 0) cursorPos--;
+        if (keyCode == KeyEvent.VK_LEFT) {
+            if (cursorPos > 0) {
+                cursorPos--;
+            }
             e.consume();
-        } else if (e.getKeyCode() == KeyEvent.VK_RIGHT) {
-            if (cursorPos < inputBuffer.length()) cursorPos++;
+        } else if (keyCode == KeyEvent.VK_RIGHT) {
+            if (cursorPos < inputBuffer.length()) {
+                cursorPos++;
+            }
             e.consume();
-        } else if (e.getKeyCode() == KeyEvent.VK_HOME || (e.getKeyCode() == KeyEvent.VK_A && (e.isMetaDown() || e.isControlDown()))) {
+        } else if (keyCode == KeyEvent.VK_HOME || (keyCode == KeyEvent.VK_A && hasModifier)) {
             cursorPos = 0;
             e.consume();
-        } else if (e.getKeyCode() == KeyEvent.VK_END || (e.getKeyCode() == KeyEvent.VK_E && (e.isMetaDown() || e.isControlDown()))) {
+        } else if (keyCode == KeyEvent.VK_END || (keyCode == KeyEvent.VK_E && hasModifier)) {
             cursorPos = inputBuffer.length();
             e.consume();
-        } else if (e.getKeyCode() == KeyEvent.VK_DELETE) {
+        } else if (keyCode == KeyEvent.VK_DELETE) {
             if (cursorPos < inputBuffer.length()) {
                 inputBuffer.deleteCharAt(cursorPos);
             }
             e.consume();
-        } else if (e.getKeyCode() == KeyEvent.VK_ESCAPE) {
+        } else if (keyCode == KeyEvent.VK_ESCAPE) {
             visible = false;
             e.consume();
         }
     }
 
-    public void handleScroll(int rotation) {
-        if (!visible) return;
-        int consoleHeight = client.getCanvasHeight() / 2;
-        int visibleLines = (consoleHeight - PADDING * 3 - LINE_HEIGHT) / LINE_HEIGHT;
-        int maxScroll = Math.max(0, lines.size() - visibleLines);
+    public void handleScroll(final int rotation) {
+        if (!visible) {
+            return;
+        }
+
+        final int consoleHeight = client.getCanvasHeight() / 2;
+        final int visibleLines = (consoleHeight - PADDING * 3 - LINE_HEIGHT) / LINE_HEIGHT;
+        final int maxScroll = Math.max(0, lines.size() - visibleLines);
         scrollOffset = Math.max(0, Math.min(scrollOffset + rotation, maxScroll));
     }
-
 
     private void scrollToBottom() {
         scrollOffset = 0;
     }
 
     @Override
-    public Dimension render(Graphics2D g) {
-        if (!visible) return null;
+    public Dimension render(final Graphics2D g) {
+        if (!visible) {
+            return null;
+        }
 
-        int width = client.getCanvasWidth();
-        int height = client.getCanvasHeight();
-        int consoleHeight = height / 2;
+        final int width = client.getCanvasWidth();
+        final int height = client.getCanvasHeight();
+        final int consoleHeight = height / 2;
 
         // Background
         g.setColor(BG_COLOR);
@@ -329,45 +372,58 @@ public class ConsoleOverlay extends Overlay {
 
         // Input area
         g.setFont(FONT);
-        FontMetrics fm = g.getFontMetrics();
-        String inputText = inputBuffer.toString();
-        int inputInset = PADDING + 4;
-        int promptWidth = fm.stringWidth("\u276F") + 8;
-        int inputTextWidth = width - inputInset * 2 - promptWidth;
+        final FontMetrics fm = g.getFontMetrics();
+        final String inputText = inputBuffer.toString();
+        final int inputInset = PADDING + 4;
+        final int promptWidth = fm.stringWidth("\u276F") + 8;
+        final int inputTextWidth = width - inputInset * 2 - promptWidth;
 
         // Character-accurate line wrapping for input
-        List<String> inputLines = new ArrayList<>();
+        final List<String> inputLines = new ArrayList<>();
         int lineStart = 0;
+
         while (lineStart < inputText.length()) {
             int lineEnd = lineStart;
-            while (lineEnd < inputText.length() && fm.stringWidth(inputText.substring(lineStart, lineEnd + 1)) <= inputTextWidth) {
+
+            while (lineEnd < inputText.length()
+                    && fm.stringWidth(inputText.substring(lineStart, lineEnd + 1)) <= inputTextWidth) {
                 lineEnd++;
             }
-            if (lineEnd == lineStart) lineEnd = lineStart + 1;
+
+            if (lineEnd == lineStart) {
+                lineEnd = lineStart + 1;
+            }
+
             inputLines.add(inputText.substring(lineStart, lineEnd));
             lineStart = lineEnd;
         }
-        if (inputLines.isEmpty()) inputLines.add("");
 
-        int inputLineCount = Math.min(inputLines.size(), 16);
-        int inputAreaHeight = inputLineCount * LINE_HEIGHT + LINE_HEIGHT;
-        int queueHeight = messageQueue.size() * LINE_HEIGHT;
-        int inputY = consoleHeight - inputAreaHeight - queueHeight - PADDING;
+        if (inputLines.isEmpty()) {
+            inputLines.add("");
+        }
+
+        final int inputLineCount = Math.min(inputLines.size(), 16);
+        final int inputAreaHeight = inputLineCount * LINE_HEIGHT + LINE_HEIGHT;
+        final int queueHeight = messageQueue.size() * LINE_HEIGHT;
+        final int inputY = consoleHeight - inputAreaHeight - queueHeight - PADDING;
 
         // Queued messages — rendered below input box in tool style
         if (!messageQueue.isEmpty()) {
             g.setFont(FONT);
             g.setColor(TOOL_COLOR);
-            int queueY = inputY + inputAreaHeight + LINE_HEIGHT;
+            final int queueY = inputY + inputAreaHeight + LINE_HEIGHT;
+
             for (int qi = 0; qi < messageQueue.size(); qi++) {
                 String qMsg = messageQueue.get(qi);
-                // Truncate if too wide
-                if (fm.stringWidth(qMsg) > inputTextWidth) {
+                final boolean tooWide = fm.stringWidth(qMsg) > inputTextWidth;
+
+                if (tooWide) {
                     while (qMsg.length() > 1 && fm.stringWidth(qMsg + "...") > inputTextWidth) {
                         qMsg = qMsg.substring(0, qMsg.length() - 1);
                     }
                     qMsg = qMsg + "...";
                 }
+
                 g.drawString("\u25B8 " + qMsg, inputInset + 4, queueY + qi * LINE_HEIGHT);
             }
         }
@@ -380,64 +436,68 @@ public class ConsoleOverlay extends Overlay {
         g.drawLine(inputInset, inputY + inputAreaHeight, width - inputInset, inputY + inputAreaHeight);
 
         // Text vertically centered between the two lines
-        int baselineOffset = inputY + LINE_HEIGHT + (fm.getAscent() - fm.getDescent()) / 2;
+        final int baselineOffset = inputY + LINE_HEIGHT + (fm.getAscent() - fm.getDescent()) / 2;
         g.setColor(TOOL_COLOR);
         g.drawString("\u276F", inputInset + 4, baselineOffset);
 
-        // Input text lines — vertically centered between the lines
+        // Input text lines
         g.setColor(TEXT_COLOR);
-        int textX = inputInset + promptWidth;
+        final int textX = inputInset + promptWidth;
+
         for (int il = 0; il < inputLines.size(); il++) {
             g.drawString(inputLines.get(il), textX, baselineOffset + il * LINE_HEIGHT);
         }
 
         // Cursor at cursorPos
         {
-            // Find cursor line and x position
             int charsConsumed = 0;
             int cursorLine = 0;
             int cursorLineOffset = cursorPos;
+
             for (int il = 0; il < inputLines.size(); il++) {
-                int lineLen = inputLines.get(il).length();
+                final int lineLen = inputLines.get(il).length();
+
                 if (charsConsumed + lineLen >= cursorPos) {
                     cursorLine = il;
                     cursorLineOffset = cursorPos - charsConsumed;
                     break;
                 }
+
                 charsConsumed += lineLen;
             }
-            String lineText = inputLines.get(cursorLine);
-            String beforeCursorOnLine = lineText.substring(0, Math.min(cursorLineOffset, lineText.length()));
-            int cursorX = textX + fm.stringWidth(beforeCursorOnLine);
-            int cursorDrawY = baselineOffset + cursorLine * LINE_HEIGHT - fm.getAscent();
+
+            final String lineText = inputLines.get(cursorLine);
+            final int clampedOffset = Math.min(cursorLineOffset, lineText.length());
+            final String beforeCursorOnLine = lineText.substring(0, clampedOffset);
+            final int cursorX = textX + fm.stringWidth(beforeCursorOnLine);
+            final int cursorDrawY = baselineOffset + cursorLine * LINE_HEIGHT - fm.getAscent();
 
             // Block cursor — covers the character cell
-            int charWidth;
-            if (cursorLineOffset < lineText.length()) {
-                charWidth = fm.charWidth(lineText.charAt(cursorLineOffset));
-            } else {
-                charWidth = fm.charWidth(' ');
-            }
+            final boolean atEndOfLine = cursorLineOffset >= lineText.length();
+            final int charWidth = atEndOfLine
+                ? fm.charWidth(' ')
+                : fm.charWidth(lineText.charAt(cursorLineOffset));
 
             g.setColor(CURSOR_COLOR);
             g.fillRect(cursorX, cursorDrawY, charWidth, fm.getAscent() + fm.getDescent());
 
             // Draw the character under the cursor in the background color
-            if (cursorLineOffset < lineText.length()) {
+            if (!atEndOfLine) {
+                final String cursorChar = String.valueOf(lineText.charAt(cursorLineOffset));
                 g.setColor(BG_COLOR);
-                g.drawString(String.valueOf(lineText.charAt(cursorLineOffset)), cursorX, baselineOffset + cursorLine * LINE_HEIGHT);
+                g.drawString(cursorChar, cursorX, baselineOffset + cursorLine * LINE_HEIGHT);
             }
         }
 
         // Chat lines — render bottom-up above input
-        int maxWidth = width - PADDING * 2 - 8;
-        int maxLines = (inputY - PADDING) / LINE_HEIGHT;
-        int startLine = Math.max(0, lines.size() - maxLines - scrollOffset);
-        int endLine = Math.max(0, lines.size() - scrollOffset);
+        final int maxWidth = width - PADDING * 2 - 8;
+        final int maxLines = (inputY - PADDING) / LINE_HEIGHT;
+        final int startLine = Math.max(0, lines.size() - maxLines - scrollOffset);
+        final int endLine = Math.max(0, lines.size() - scrollOffset);
         int y = inputY - PADDING;
 
         for (int i = endLine - 1; i >= startLine && y > PADDING; i--) {
-            ConsoleLine line = lines.get(i);
+            final ConsoleLine line = lines.get(i);
 
             switch (line.type) {
                 case SENDER -> {
@@ -446,67 +506,85 @@ public class ConsoleOverlay extends Overlay {
                     g.drawString("\u2022 " + line.text, PADDING + 4, y);
                     y -= LINE_HEIGHT;
                 }
+
                 case TEXT -> {
-                    String text = line.text;
-                    if (text.startsWith("# ") || text.startsWith("## ") || text.startsWith("### ")) {
-                        text = text.replaceFirst("^#+\\s+", "");
+                    final String text = line.text;
+                    final boolean isHeader = text.startsWith("# ")
+                        || text.startsWith("## ")
+                        || text.startsWith("### ");
+
+                    if (isHeader) {
+                        final String headerText = text.replaceFirst("^#+\\s+", "");
                         g.setFont(FONT_HEADER);
                         g.setColor(TEXT_COLOR);
-                        List<String> wrapped = wrapText(text, g.getFontMetrics(), maxWidth);
+                        final List<String> wrapped = wrapText(headerText, g.getFontMetrics(), maxWidth);
+
                         for (int w = wrapped.size() - 1; w >= 0 && y > PADDING; w--) {
                             g.drawString(wrapped.get(w), PADDING + 4, y);
                             y -= LINE_HEIGHT + 2;
                         }
                     } else {
                         g.setFont(FONT);
-                        List<String> wrapped = wrapText(text, g.getFontMetrics(), maxWidth);
+                        final List<String> wrapped = wrapText(text, g.getFontMetrics(), maxWidth);
+
                         for (int w = wrapped.size() - 1; w >= 0 && y > PADDING; w--) {
                             drawStyledLine(g, wrapped.get(w), PADDING + 4, y, maxWidth);
                             y -= LINE_HEIGHT;
                         }
                     }
                 }
+
                 case CODE -> {
                     g.setFont(FONT);
                     String codeText = line.text;
-                    // Truncate if too long, don't wrap code
-                    if (g.getFontMetrics().stringWidth(codeText) > maxWidth) {
-                        while (codeText.length() > 1 && g.getFontMetrics().stringWidth(codeText + "...") > maxWidth) {
+                    final int codeWidth = g.getFontMetrics().stringWidth(codeText);
+                    final boolean codeTooWide = codeWidth > maxWidth;
+
+                    if (codeTooWide) {
+                        while (codeText.length() > 1
+                                && g.getFontMetrics().stringWidth(codeText + "...") > maxWidth) {
                             codeText = codeText.substring(0, codeText.length() - 1);
                         }
                         codeText = codeText + "...";
                     }
+
                     g.setColor(CODE_BG);
                     g.fillRect(PADDING + 2, y - LINE_HEIGHT + 4, maxWidth, LINE_HEIGHT);
                     drawSyntaxHighlighted(g, codeText, PADDING + 8, y);
                     y -= LINE_HEIGHT;
                 }
+
                 case LIST_ITEM -> {
-                    int indentPx = PADDING + 4 + line.indent * 16;
+                    final int indentPx = PADDING + 4 + line.indent * 16;
                     g.setFont(FONT);
-                    int bulletWidth = g.getFontMetrics().stringWidth(line.bullet) + 6;
-                    int listTextWidth = maxWidth - indentPx - bulletWidth + PADDING;
-                    List<String> wrapped = wrapText(line.text, g.getFontMetrics(), listTextWidth);
-                    // Render wrapped text bottom-up
+                    final int bulletWidth = g.getFontMetrics().stringWidth(line.bullet) + 6;
+                    final int listTextWidth = maxWidth - indentPx - bulletWidth + PADDING;
+                    final List<String> wrapped = wrapText(line.text, g.getFontMetrics(), listTextWidth);
+
                     for (int w = wrapped.size() - 1; w >= 0 && y > PADDING; w--) {
                         drawStyledLine(g, wrapped.get(w), indentPx + bulletWidth, y, listTextWidth);
                         y -= LINE_HEIGHT;
                     }
+
                     // Draw bullet aligned with the first line (which is now at y + LINE_HEIGHT)
                     g.setColor(LIST_BULLET_COLOR);
                     g.drawString(line.bullet, indentPx, y + LINE_HEIGHT);
                 }
+
                 case TABLE_HEADER -> {
                     drawTableRow(g, line.cells, PADDING + 4, y, maxWidth, true);
                     y -= LINE_HEIGHT;
                 }
+
                 case TABLE_ROW -> {
                     drawTableRow(g, line.cells, PADDING + 4, y, maxWidth, false);
                     y -= LINE_HEIGHT;
                 }
+
                 case QUOTE -> {
                     g.setFont(FONT_ITALIC);
-                    List<String> wrapped = wrapText(line.text, g.getFontMetrics(), maxWidth - 12);
+                    final List<String> wrapped = wrapText(line.text, g.getFontMetrics(), maxWidth - 12);
+
                     for (int w = wrapped.size() - 1; w >= 0 && y > PADDING; w--) {
                         g.setColor(QUOTE_BAR);
                         g.fillRect(PADDING + 4, y - LINE_HEIGHT + 4, 2, LINE_HEIGHT);
@@ -515,25 +593,29 @@ public class ConsoleOverlay extends Overlay {
                         y -= LINE_HEIGHT;
                     }
                 }
+
                 case RULER -> {
                     g.setColor(TABLE_BORDER);
-                    int rulerY = y - LINE_HEIGHT / 2 + 4;
+                    final int rulerY = y - LINE_HEIGHT / 2 + 4;
                     g.drawLine(PADDING + 4, rulerY, PADDING + 4 + maxWidth, rulerY);
                     y -= LINE_HEIGHT;
                 }
+
                 case TOOL -> {
                     g.setFont(FONT);
-                    List<String> wrapped = wrapText(line.text, g.getFontMetrics(), maxWidth);
+                    final List<String> wrapped = wrapText(line.text, g.getFontMetrics(), maxWidth);
+
                     for (int w = wrapped.size() - 1; w >= 0 && y > PADDING; w--) {
                         g.setColor(TOOL_COLOR);
                         g.drawString(wrapped.get(w), PADDING + 4, y);
                         y -= LINE_HEIGHT;
                     }
                 }
+
                 case THINKING -> {
                     g.setFont(FONT);
                     g.setColor(TOOL_COLOR);
-                    int dots = (int) ((System.currentTimeMillis() / 400) % 3) + 1;
+                    final int dots = (int) ((System.currentTimeMillis() / 400) % 3) + 1;
                     g.drawString("Thinking" + ".".repeat(dots), PADDING + 4, y);
                     y -= LINE_HEIGHT;
                 }
@@ -544,28 +626,23 @@ public class ConsoleOverlay extends Overlay {
     }
 
     /**
-     * Draw a line with inline markdown: **bold**, *italic*, `code`
-     */
-    /**
      * Draw a line of code with syntax highlighting.
      * Tokenizes into keywords, strings, numbers, comments, and plain code.
      */
-    private void drawSyntaxHighlighted(Graphics2D g, String text, int x, int y) {
+    private void drawSyntaxHighlighted(final Graphics2D g, final String text, final int x, final int y) {
         g.setFont(FONT);
-        FontMetrics fm = g.getFontMetrics();
+        final FontMetrics fm = g.getFontMetrics();
         int cx = x;
         int idx = 0;
 
         while (idx < text.length()) {
-            char c = text.charAt(idx);
+            final char c = text.charAt(idx);
 
             // Comments: -- (Lua) or # (Python)
-            if (c == '-' && idx + 1 < text.length() && text.charAt(idx + 1) == '-') {
-                g.setColor(SYN_COMMENT);
-                g.drawString(text.substring(idx), cx, y);
-                return;
-            }
-            if (c == '#') {
+            final boolean isLuaComment = c == '-' && idx + 1 < text.length() && text.charAt(idx + 1) == '-';
+            final boolean isPythonComment = c == '#';
+
+            if (isLuaComment || isPythonComment) {
                 g.setColor(SYN_COMMENT);
                 g.drawString(text.substring(idx), cx, y);
                 return;
@@ -574,8 +651,12 @@ public class ConsoleOverlay extends Overlay {
             // Strings: "..." or '...'
             if (c == '"' || c == '\'') {
                 int end = text.indexOf(c, idx + 1);
-                if (end < 0) end = text.length() - 1;
-                String str = text.substring(idx, end + 1);
+
+                if (end < 0) {
+                    end = text.length() - 1;
+                }
+
+                final String str = text.substring(idx, end + 1);
                 g.setColor(SYN_STRING);
                 g.drawString(str, cx, y);
                 cx += fm.stringWidth(str);
@@ -584,13 +665,26 @@ public class ConsoleOverlay extends Overlay {
             }
 
             // Numbers
-            if (Character.isDigit(c) || (c == '.' && idx + 1 < text.length() && Character.isDigit(text.charAt(idx + 1)))) {
+            final boolean isDigitStart = Character.isDigit(c);
+            final boolean isDotDigit = c == '.' && idx + 1 < text.length()
+                && Character.isDigit(text.charAt(idx + 1));
+
+            if (isDigitStart || isDotDigit) {
                 int end = idx;
-                while (end < text.length() && (Character.isDigit(text.charAt(end)) || text.charAt(end) == '.' || text.charAt(end) == 'x' || text.charAt(end) == 'X'
-                    || (text.charAt(end) >= 'a' && text.charAt(end) <= 'f') || (text.charAt(end) >= 'A' && text.charAt(end) <= 'F'))) {
+
+                while (end < text.length()) {
+                    final char ch = text.charAt(end);
+                    final boolean isNumChar = Character.isDigit(ch) || ch == '.' || ch == 'x' || ch == 'X'
+                        || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F');
+
+                    if (!isNumChar) {
+                        break;
+                    }
+
                     end++;
                 }
-                String num = text.substring(idx, end);
+
+                final String num = text.substring(idx, end);
                 g.setColor(SYN_NUMBER);
                 g.drawString(num, cx, y);
                 cx += fm.stringWidth(num);
@@ -601,10 +695,13 @@ public class ConsoleOverlay extends Overlay {
             // Words (potential keywords)
             if (Character.isLetter(c) || c == '_') {
                 int end = idx;
+
                 while (end < text.length() && (Character.isLetterOrDigit(text.charAt(end)) || text.charAt(end) == '_')) {
                     end++;
                 }
-                String word = text.substring(idx, end);
+
+                final String word = text.substring(idx, end);
+
                 if (KEYWORDS.contains(word)) {
                     g.setColor(SYN_KEYWORD);
                     g.setFont(FONT_BOLD);
@@ -616,31 +713,39 @@ public class ConsoleOverlay extends Overlay {
                     g.drawString(word, cx, y);
                     cx += fm.stringWidth(word);
                 }
+
                 idx = end;
                 continue;
             }
 
             // Everything else (operators, punctuation, whitespace)
             g.setColor(CODE_COLOR);
-            String ch = String.valueOf(c);
+            final String ch = String.valueOf(c);
             g.drawString(ch, cx, y);
             cx += fm.stringWidth(ch);
             idx++;
         }
     }
 
-    private void drawStyledLine(Graphics2D g, String text, int x, int y, int maxWidth) {
+    private void drawStyledLine(
+        final Graphics2D g,
+        final String text,
+        final int x,
+        final int y,
+        final int maxWidth
+    ) {
         int cx = x;
         int idx = 0;
 
         while (idx < text.length()) {
             // Inline code: `text`
             if (text.charAt(idx) == '`') {
-                int end = text.indexOf('`', idx + 1);
+                final int end = text.indexOf('`', idx + 1);
+
                 if (end > idx) {
-                    String code = text.substring(idx + 1, end);
+                    final String code = text.substring(idx + 1, end);
                     g.setFont(FONT);
-                    int codeWidth = g.getFontMetrics().stringWidth(code) + 10;
+                    final int codeWidth = g.getFontMetrics().stringWidth(code) + 10;
                     g.setColor(CODE_BG);
                     g.fillRoundRect(cx, y - LINE_HEIGHT + 2, codeWidth, LINE_HEIGHT + 2, 4, 4);
                     g.setColor(CODE_COLOR);
@@ -652,10 +757,15 @@ public class ConsoleOverlay extends Overlay {
             }
 
             // Bold: **text**
-            if (idx + 1 < text.length() && text.charAt(idx) == '*' && text.charAt(idx + 1) == '*') {
-                int end = text.indexOf("**", idx + 2);
+            final boolean isBoldMarker = idx + 1 < text.length()
+                && text.charAt(idx) == '*'
+                && text.charAt(idx + 1) == '*';
+
+            if (isBoldMarker) {
+                final int end = text.indexOf("**", idx + 2);
+
                 if (end > idx) {
-                    String bold = text.substring(idx + 2, end);
+                    final String bold = text.substring(idx + 2, end);
                     g.setFont(FONT_BOLD);
                     g.setColor(TEXT_COLOR);
                     g.drawString(bold, cx, y);
@@ -667,9 +777,10 @@ public class ConsoleOverlay extends Overlay {
 
             // Italic: *text*
             if (text.charAt(idx) == '*') {
-                int end = text.indexOf('*', idx + 1);
+                final int end = text.indexOf('*', idx + 1);
+
                 if (end > idx) {
-                    String italic = text.substring(idx + 1, end);
+                    final String italic = text.substring(idx + 1, end);
                     g.setFont(FONT_ITALIC);
                     g.setColor(TEXT_COLOR);
                     g.drawString(italic, cx, y);
@@ -681,15 +792,17 @@ public class ConsoleOverlay extends Overlay {
 
             // Plain text — collect until next markdown marker
             int next = text.length();
+
             for (int j = idx + 1; j < text.length(); j++) {
-                char c = text.charAt(j);
+                final char c = text.charAt(j);
+
                 if (c == '`' || c == '*') {
                     next = j;
                     break;
                 }
             }
 
-            String plain = text.substring(idx, next);
+            final String plain = text.substring(idx, next);
             g.setFont(FONT);
             g.setColor(TEXT_COLOR);
             g.drawString(plain, cx, y);
@@ -698,36 +811,57 @@ public class ConsoleOverlay extends Overlay {
         }
     }
 
-    private static boolean isListItem(String line) {
-        String stripped = line.stripLeading();
+    private static boolean isListItem(final String line) {
+        final String stripped = line.stripLeading();
         return stripped.startsWith("- ") || stripped.startsWith("* ") || stripped.matches("^\\d+\\.\\s.*");
     }
 
-    private static int countIndent(String line) {
+    private static int countIndent(final String line) {
         int spaces = 0;
-        for (char c : line.toCharArray()) {
-            if (c == ' ') spaces++;
-            else break;
+
+        for (final char c : line.toCharArray()) {
+            if (c == ' ') {
+                spaces++;
+            } else {
+                break;
+            }
         }
+
         return spaces / 2; // 2 spaces per indent level
     }
 
     private static String[] parseCells(String row) {
-        // Strip leading/trailing pipes and split
-        if (row.startsWith("|")) row = row.substring(1);
-        if (row.endsWith("|")) row = row.substring(0, row.length() - 1);
-        String[] cells = row.split("\\|");
+        if (row.startsWith("|")) {
+            row = row.substring(1);
+        }
+
+        if (row.endsWith("|")) {
+            row = row.substring(0, row.length() - 1);
+        }
+
+        final String[] cells = row.split("\\|");
+
         for (int i = 0; i < cells.length; i++) {
             cells[i] = cells[i].strip();
         }
+
         return cells;
     }
 
-    private void drawTableRow(Graphics2D g, String[] cells, int x, int y, int maxWidth, boolean isHeader) {
-        if (cells == null || cells.length == 0) return;
+    private void drawTableRow(
+        final Graphics2D g,
+        final String[] cells,
+        final int x,
+        final int y,
+        final int maxWidth,
+        final boolean isHeader
+    ) {
+        if (cells == null || cells.length == 0) {
+            return;
+        }
 
-        int cellWidth = Math.min(maxWidth / cells.length, 200);
-        int cellPadding = 6;
+        final int cellWidth = Math.min(maxWidth / cells.length, 200);
+        final int cellPadding = 6;
 
         if (isHeader) {
             g.setColor(TABLE_HEADER_BG);
@@ -738,7 +872,7 @@ public class ConsoleOverlay extends Overlay {
         }
 
         for (int c = 0; c < cells.length; c++) {
-            int cellX = x + c * cellWidth;
+            final int cellX = x + c * cellWidth;
 
             // Cell border
             g.setColor(TABLE_BORDER);
@@ -746,29 +880,32 @@ public class ConsoleOverlay extends Overlay {
 
             // Cell text — clip to cell bounds and render with inline formatting
             g.setColor(isHeader ? SENDER_COLOR : TEXT_COLOR);
-            Shape oldClip = g.getClip();
+            final Shape oldClip = g.getClip();
             g.clipRect(cellX + cellPadding, y - LINE_HEIGHT + 4, cellWidth - cellPadding * 2, LINE_HEIGHT);
+
             if (isHeader) {
                 g.setFont(FONT_BOLD);
                 g.drawString(cells[c], cellX + cellPadding, y);
             } else {
                 drawStyledLine(g, cells[c], cellX + cellPadding, y, cellWidth - cellPadding * 2);
             }
+
             g.setClip(oldClip);
         }
     }
 
-    private static List<String> wrapText(String text, FontMetrics fm, int maxWidth) {
-        List<String> result = new ArrayList<>();
+    private static List<String> wrapText(final String text, final FontMetrics fm, final int maxWidth) {
+        final List<String> result = new ArrayList<>();
+
         if (text == null || text.isEmpty()) {
             result.add("");
             return result;
         }
 
-        String[] words = text.split(" ");
+        final String[] words = text.split(" ");
         StringBuilder current = new StringBuilder();
 
-        for (String word : words) {
+        for (final String word : words) {
             if (current.isEmpty()) {
                 current.append(word);
             } else if (fm.stringWidth(current + " " + word) <= maxWidth) {
@@ -778,20 +915,24 @@ public class ConsoleOverlay extends Overlay {
                 current = new StringBuilder(word);
             }
         }
+
         if (!current.isEmpty()) {
             result.add(current.toString());
         }
+
         return result;
     }
 
-    private enum LineType { SENDER, TEXT, CODE, QUOTE, TABLE_ROW, TABLE_HEADER, LIST_ITEM, RULER, TOOL, THINKING }
+    private enum LineType {
+        SENDER, TEXT, CODE, QUOTE, TABLE_ROW, TABLE_HEADER, LIST_ITEM, RULER, TOOL, THINKING
+    }
 
     private record ConsoleLine(String text, LineType type, String[] cells, int indent, String bullet) {
-        ConsoleLine(String text, LineType type) {
+        ConsoleLine(final String text, final LineType type) {
             this(text, type, null, 0, null);
         }
 
-        ConsoleLine(String text, LineType type, String[] cells) {
+        ConsoleLine(final String text, final LineType type, final String[] cells) {
             this(text, type, cells, 0, null);
         }
     }
