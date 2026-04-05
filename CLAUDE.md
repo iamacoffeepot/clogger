@@ -48,13 +48,13 @@ Pipeline order (managed by `fetch_all.py`):
 ### Utility scripts
 
 - `import_map_squares.py` — Imports map square images from `data/map-squares.zip` into the `map_squares` table. One-time setup.
-- `import_game_vars.py` — Parses VarpConstants.java and VarcConstants.java into the `game_vars` table. Re-run after updating RuneLite.
+- `import_game_vars.py` — Imports game var JSON from `data/game-vars/` (produced by `dumpGameVars`) into the `game_vars` table. Re-run after updating RuneLite.
 18. `fetch_league_tasks.py` — Pulls league tasks (with `--league` flag)
 19. `fetch_npcs.py` — Pulls non-combat NPC data (name, version, location, options, region) from Category:Non-player characters
 
 ## Cache Dump Tool
 
-Java tool in `tools/cache-dump/` that extracts map data directly from the OSRS game cache using RuneLite's cache library. Automatically downloads the latest cache from [OpenRS2](https://archive.openrs2.org/).
+Java tool in `tools/cache-dump/` that extracts map data and game constants from the OSRS game cache and RuneLite API. Automatically downloads the latest cache from [OpenRS2](https://archive.openrs2.org/).
 
 Requires JDK 21+. Run from `tools/cache-dump/`:
 
@@ -67,9 +67,13 @@ Requires JDK 21+. Run from `tools/cache-dump/`:
 
 # Dump rendered map tiles (terrain + walls, no objects/icons)
 ./gradlew dumpMapTiles [--args="--objects --icons --no-walls"]
+
+# Dump game variable constants (varps, varbits, varcs) to JSON
+./gradlew dumpGameVars [--args="--output ../../data/game-vars"]
 ```
 
 Output: `data/cache-dump/{collision,water,map-tiles}/{plane}_{rx}_{ry}.png`
+Output: `data/game-vars/{varp,varbit,varc_int}.json`
 
 ### DumpMapTiles flags
 

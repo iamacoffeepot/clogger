@@ -1,77 +1,38 @@
-"""Import game variable constants from VarpConstants.java and VarcConstants.java into the database."""
+"""Import game variable constants from JSON files produced by DumpGameVars into the database."""
 
 import argparse
-import re
+import json
 from pathlib import Path
 
 from ragger.db import create_tables, get_connection
 
-PLUGIN_DIR = Path(__file__).parent.parent / "plugin/src/main/java/dev/ragger/plugin/scripting"
-VARP_FILE = PLUGIN_DIR / "VarpConstants.java"
-VARC_FILE = PLUGIN_DIR / "VarcConstants.java"
-
-PUT_RE = re.compile(r'map\.put\("(\w+)",\s*(\d+)\)')
+GAME_VARS_DIR = Path(__file__).parent.parent / "data/game-vars"
 
 
-def parse_varp_constants(path: Path) -> tuple[list[tuple[str, int]], list[tuple[str, int]]]:
-    """Parse VarpConstants.java, returning (varplayer_entries, varbit_entries)."""
-    text = path.read_text()
-    varplayers: list[tuple[str, int]] = []
-    varbits: list[tuple[str, int]] = []
-
-    # Split by init method boundaries to determine type
-    in_varbit = False
-    for line in text.splitlines():
-        if "initVarbit" in line and "private static void" in line:
-            in_varbit = True
-        elif "initVarPlayer" in line and "private static void" in line:
-            in_varbit = False
-
-        m = PUT_RE.search(line)
-        if m:
-            name, var_id = m.group(1), int(m.group(2))
-            if in_varbit:
-                varbits.append((name, var_id))
-            else:
-                varplayers.append((name, var_id))
-
-    return varplayers, varbits
-
-
-def parse_varc_constants(path: Path) -> list[tuple[str, int]]:
-    """Parse VarcConstants.java, returning varc_int entries."""
-    text = path.read_text()
-    entries: list[tuple[str, int]] = []
-    for m in PUT_RE.finditer(text):
-        entries.append((m.group(1), int(m.group(2))))
-    return entries
-
-
-def ingest(db_path: Path) -> None:
+def ingest(db_path: Path, vars_dir: Path) -> None:
     create_tables(db_path)
     conn = get_connection(db_path)
 
     conn.execute("DELETE FROM game_vars")
 
-    varplayers, varbits = parse_varp_constants(VARP_FILE)
-    varc_ints = parse_varc_constants(VARC_FILE)
+    total = 0
+    counts: list[str] = []
 
-    conn.executemany(
-        "INSERT INTO game_vars (name, var_id, var_type) VALUES (?, ?, 'varp')",
-        [(name, var_id) for name, var_id in varplayers],
-    )
-    conn.executemany(
-        "INSERT INTO game_vars (name, var_id, var_type) VALUES (?, ?, 'varbit')",
-        [(name, var_id) for name, var_id in varbits],
-    )
-    conn.executemany(
-        "INSERT INTO game_vars (name, var_id, var_type) VALUES (?, ?, 'varc_int')",
-        [(name, var_id) for name, var_id in varc_ints],
-    )
+    for json_file in sorted(vars_dir.glob("*.json")):
+        data = json.loads(json_file.read_text())
+        var_type = data["var_type"]
+        entries = data["entries"]
+
+        conn.executemany(
+            "INSERT INTO game_vars (name, var_id, var_type, description) VALUES (?, ?, ?, ?)",
+            [(e["name"], e["id"], var_type, e.get("comment")) for e in entries],
+        )
+
+        total += len(entries)
+        counts.append(f"{len(entries)} {var_type}")
 
     conn.commit()
-    total = len(varplayers) + len(varbits) + len(varc_ints)
-    print(f"Imported {total} game vars ({len(varplayers)} varps, {len(varbits)} varbits, {len(varc_ints)} varc_ints)")
+    print(f"Imported {total} game vars ({', '.join(counts)})")
     conn.close()
 
 
@@ -83,5 +44,11 @@ if __name__ == "__main__":
         default=Path("data/ragger.db"),
         help="Path to the SQLite database",
     )
+    parser.add_argument(
+        "--vars-dir",
+        type=Path,
+        default=GAME_VARS_DIR,
+        help="Directory containing JSON files from DumpGameVars",
+    )
     args = parser.parse_args()
-    ingest(args.db)
+    ingest(args.db, args.vars_dir)
