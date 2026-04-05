@@ -293,9 +293,12 @@ def validate_content_tags(
         if entity_set is None:
             valid.append(tag)
             continue
-        # Try exact match, then substring match against entity names
+        # Try exact match, then stripped (no underscores) match, then substring
         norm_value = normalize(value)
+        stripped_value = norm_value.replace("_", "")
         if norm_value in entity_set:
+            valid.append(tag)
+        elif any(stripped_value == e.replace("_", "") for e in entity_set):
             valid.append(tag)
         elif any(norm_value in e or e in norm_value for e in entity_set if len(e) > 3):
             valid.append(tag)
