@@ -240,6 +240,43 @@ public class SilhouetteComputer {
             return null;
         }
 
+        // Occlusion filter: discard silhouette edges hidden behind front-facing geometry.
+        // A visible silhouette edge's midpoint sits on the boundary of the front-facing region;
+        // an occluded edge's midpoint is strictly inside some front-facing triangle's 2D projection.
+        List<int[]> visibleEdges = new ArrayList<>(silhouetteEdges.size());
+        for (int[] edge : silhouetteEdges) {
+            double mx = (x2d[edge[0]] + x2d[edge[1]]) * 0.5;
+            double my = (y2d[edge[0]] + y2d[edge[1]]) * 0.5;
+
+            boolean occluded = false;
+            for (int f = 0; f < faceCount; f++) {
+                if (!faceValid[f] || !frontFacing[f]) continue;
+
+                int ax = x2d[fi1[f]], ay = y2d[fi1[f]];
+                int bx = x2d[fi2[f]], by = y2d[fi2[f]];
+                int cx = x2d[fi3[f]], cy = y2d[fi3[f]];
+
+                // Bounding box pre-check
+                if (mx < Math.min(ax, Math.min(bx, cx)) || mx > Math.max(ax, Math.max(bx, cx))
+                        || my < Math.min(ay, Math.min(by, cy)) || my > Math.max(ay, Math.max(by, cy))) {
+                    continue;
+                }
+
+                if (strictlyInsideTriangle(mx, my, ax, ay, bx, by, cx, cy)) {
+                    occluded = true;
+                    break;
+                }
+            }
+            if (!occluded) {
+                visibleEdges.add(edge);
+            }
+        }
+        silhouetteEdges = visibleEdges;
+
+        if (silhouetteEdges.isEmpty()) {
+            return null;
+        }
+
         // Chain edges into contours
         List<List<int[]>> rawContours = chainEdges(silhouetteEdges, x2d, y2d);
 
@@ -285,6 +322,19 @@ public class SilhouetteComputer {
         } else if (faces[1] == -1) {
             faces[1] = faceIndex;
         }
+    }
+
+    /**
+     * Test if a point is strictly inside a triangle (not on any edge).
+     * Uses sign of cross products for each edge — all three must have the same non-zero sign.
+     */
+    private static boolean strictlyInsideTriangle(double px, double py,
+                                                   int x0, int y0, int x1, int y1, int x2, int y2) {
+        double d0 = (x1 - x0) * (py - y0) - (y1 - y0) * (px - x0);
+        double d1 = (x2 - x1) * (py - y1) - (y2 - y1) * (px - x1);
+        double d2 = (x0 - x2) * (py - y2) - (y0 - y2) * (px - x2);
+
+        return (d0 > 0 && d1 > 0 && d2 > 0) || (d0 < 0 && d1 < 0 && d2 < 0);
     }
 
     /**
