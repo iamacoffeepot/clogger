@@ -50,9 +50,11 @@ Pipeline order (managed by `fetch_all.py`):
 ### Utility scripts
 
 - `import_map_squares.py` — Imports map square images from `data/map-squares.zip` into the `map_squares` table. One-time setup.
-- `import_game_vars.py` — Imports game var JSON from `data/game-vars/` (produced by `dumpGameVars`) into the `game_vars` table. Re-run after updating RuneLite.
+- `import_game_vars.py` — Imports game var JSON from `data/game-vars/` (produced by `dumpGameVariables`) into the `game_vars` table. Re-run after updating RuneLite.
+- `classify_game_vars.py` — Classifies game variable names using Claude CLI. Tags vars with content categories and functional tags. Supports `--workers`, `--batch-size`, `--session-reset`, `--model`, `--reclassify` flags.
 20. `fetch_league_tasks.py` — Pulls league tasks (with `--league` flag)
 21. `fetch_npcs.py` — Pulls non-combat NPC data (name, version, location, options, region) from Category:Non-player characters
+22. `fetch_wiki_vars.py` — Scrapes RuneScape:Varplayer/* and RuneScape:Varbit/* wiki pages for descriptions, content links, var class, and value annotations (quest stages, etc.)
 
 ## Cache Dump Tool
 
@@ -71,7 +73,7 @@ Requires JDK 21+. Run from `tools/cache-dump/`:
 ./gradlew dumpMapTiles [--args="--objects --icons --no-walls"]
 
 # Dump game variable constants (varps, varbits, varcs) to JSON
-./gradlew dumpGameVars [--args="--output ../../data/game-vars"]
+./gradlew dumpGameVariables [--args="--output ../../data/game-vars"]
 ```
 
 Output: `data/cache-dump/{collision,water,map-tiles}/{plane}_{rx}_{ry}.png`
@@ -138,6 +140,7 @@ quest.quest_requirements(conn) -> list[QuestRequirement]
 quest.quest_point_requirement(conn) -> QuestPointRequirement | None
 quest.requirement_chain(conn) -> list[Quest]       # flat list, bottom-up order
 quest.requirement_tree(conn) -> str                 # indented tree string
+quest.game_vars(conn) -> list[GameVariable]             # associated game variables
 ```
 
 ### Item (`src/ragger/item.py`)
@@ -268,6 +271,7 @@ location.facility_list() -> list[Facility]
 location.x -> int | None                               # map coordinates
 location.y -> int | None
 location.facilities -> int                             # bitmask
+location.game_vars(conn) -> list[GameVariable]          # associated game variables
 ```
 
 Distance metrics for `nearby()` and `nearest()`: `DistanceMetric.CHEBYSHEV` (default, matches OSRS diagonal movement), `DistanceMetric.MANHATTAN`, `DistanceMetric.EUCLIDEAN`. Distance computation is on the enum: `metric.compute(dx, dy)`.
@@ -366,6 +370,7 @@ activity.y -> int | None
 activity.players -> str | None
 activity.skills -> int                                 # bitmask
 activity.region -> Region | None
+activity.game_vars(conn) -> list[GameVariable]          # associated game variables
 ```
 
 ### Npc (`src/ragger/npc.py`)
@@ -380,6 +385,7 @@ Npc.with_option(conn, option, region?) -> list[Npc] # e.g. "Travel", "Teleport"
 Npc.at_location(conn, location) -> list[Npc]
 npc.has_option(option) -> bool
 npc.option_list() -> list[str]
+npc.game_vars(conn) -> list[GameVariable]               # associated game variables
 ```
 
 ### Monster (`src/ragger/monster.py`)
@@ -396,6 +402,7 @@ monster.drops(conn) -> list[MonsterDrop]
 monster.drops_by_name(conn, item_name) -> list[MonsterDrop]
 monster.has_immunity(immunity) -> bool
 monster.immunity_list() -> list[Immunity]
+monster.game_vars(conn) -> list[GameVariable]           # associated game variables
 monster.combat_level -> int | None
 monster.hitpoints -> int | None
 monster.immunities -> int                              # bitmask
@@ -406,24 +413,36 @@ monster.elemental_weakness_percent -> int | None
 # Full defensive bonuses: stab/slash/crush/magic/light/standard/heavy ranged
 ```
 
-### GameVar (`src/ragger/game_var.py`)
+### GameVariable (`src/ragger/game_variable.py`)
 
 ```python
-from ragger.game_var import GameVar, ContentTag
+from ragger.game_variable import GameVariable, ContentTag
 from ragger.enums import ContentCategory, FunctionalTag
 
-GameVar.all(conn, var_type?) -> list[GameVar]       # var_type: 'varp', 'varbit', 'varc_int', 'varc_str'
-GameVar.by_name(conn, name) -> list[GameVar]        # exact name match
-GameVar.search(conn, name) -> list[GameVar]         # partial name match (LIKE %name%)
-GameVar.by_var_id(conn, var_id, var_type) -> GameVar | None
-GameVar.by_content_tag(conn, tag, var_type?) -> list[GameVar]       # "quest:troll_stronghold" or "quest" (category prefix)
-GameVar.by_functional_tag(conn, tag, var_type?) -> list[GameVar]    # FunctionalTag.TIMER or "timer"
+GameVariable.all(conn, var_type?) -> list[GameVariable]       # var_type: VariableType enum
+GameVariable.by_name(conn, name) -> list[GameVariable]        # exact name match
+GameVariable.search(conn, name) -> list[GameVariable]         # partial name match (LIKE %name%)
+GameVariable.by_var_id(conn, var_id, var_type) -> GameVariable | None
+GameVariable.by_content_tag(conn, ContentCategory.QUEST, "dragon_slayer_i") -> list[GameVariable]  # enum + name
+GameVariable.by_content_tag(conn, "quest:dragon_slayer_i") -> list[GameVariable]                  # legacy string form
+GameVariable.by_content_tag(conn, ContentCategory.QUEST) -> list[GameVariable]                    # all vars in category
+GameVariable.by_functional_tag(conn, tag, var_type?) -> list[GameVariable]    # FunctionalTag.TIMER or "timer"
 var.name -> str                                     # client name hash (e.g. "COM_STANCE")
 var.var_id -> int                                   # numeric ID to pass to varp:get/varc:int
-var.var_type -> str                                 # 'varp', 'varbit', 'varc_int', 'varc_str'
+var.var_type -> VariableType                         # VARP, VARBIT, VARC_INT, VARC_STR
 var.description -> str | None                       # human-readable description (if annotated)
 var.content_tags -> list[ContentTag]                # e.g. [ContentTag(QUEST, "troll_stronghold")]
 var.functional_tags -> list[FunctionalTag]          # e.g. [FunctionalTag.PROGRESS]
+var.wiki_name -> str | None                         # wiki-documented name (e.g. "DRAGON_SLAYER_I_PROGRESS")
+var.wiki_content -> str | None                      # wiki-linked content (e.g. "Dragon Slayer I")
+var.var_class -> str | None                         # Enum, Switch, Counter, Bitmap, Other
+var.values(conn) -> list[VariableValue]                  # annotated values (e.g. quest stages)
+
+# VariableValue fields
+vv.var_type -> str
+vv.var_id -> int
+vv.value -> int                                     # e.g. 0, 1, 2
+vv.label -> str                                     # e.g. "Not started", "Started", "Completed"
 
 # ContentTag fields
 tag.category -> ContentCategory                     # QUEST, SKILL, NPC, LOCATION, ITEM, MINIGAME, ACTIVITY
@@ -485,6 +504,7 @@ throttle()                                                                 # rat
 - `DiaryTier(str, Enum)` — Easy/Medium/Hard/Elite
 - `ShopType(str, Enum)` — 36 shop types (General, Gem, Fishing, Magic, etc.) with `from_label` fuzzy matching
 - `ActivityType(str, Enum)` — Minigame, Random event, Forestry, Raid, Activity, Boss, Distraction and Diversion, Quest, Reward with `from_label` (falls back to Activity)
+- `VariableType(str, Enum)` — varp, varbit, varc_int, varc_str with `from_label`
 - `ContentCategory(str, Enum)` — quest, skill, npc, location, item, minigame, activity with `from_label`
 - `FunctionalTag(str, Enum)` — progress, toggle, counter, ui, config, storage, timer, cosmetic with `from_label`
 - `Facility(int, Enum)` — Bank, Furnace, Anvil, Range, Altar, Spinning wheel, Loom with `mask`, `label` properties
