@@ -476,6 +476,9 @@ JAVA_HOME="$(brew --prefix openjdk@21)/libexec/openjdk.jdk/Contents/Home" ./grad
 - `scripting/CombatApi.java` — Lua `combat` API (spec, prayers, attack style, target)
 - `scripting/PrayerApi.java` — Lua `prayer` enum constants
 - `scripting/WidgetApi.java` — Lua `widget` API (game interface/widget state, InterfaceID constants)
+- `scripting/VarApi.java` — Lua `varp`/`varc` APIs (player variables, varbits, client variables)
+- `scripting/VarpConstants.java` — Named constants from RuneLite's VarPlayerID + VarbitID (lazy via `__index` metatable)
+- `scripting/VarcConstants.java` — Named constants from RuneLite's VarClientID (lazy via `__index` metatable)
 - `scripting/OverlayApi.java` — Lua overlay drawing context (text, shapes, fonts)
 - `scripting/MailApi.java` — Lua `mail` API (inter-actor messaging)
 - `scripting/MailMessage.java` — mail message data object

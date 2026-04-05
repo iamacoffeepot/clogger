@@ -552,6 +552,38 @@ widget.TYPE_GRAPHIC        widget.TYPE_MODEL          widget.TYPE_TEXT_INVENTORY
 widget.TYPE_LINE
 ```
 
+### API: `varp`
+
+Read player variables (varps) and varbits.
+
+```lua
+-- Read a raw varp slot by ID
+varp:get(43)                          -- attack style varp
+varp:get(varp.COM_STANCE)             -- same, using named constant
+
+-- Read a varbit value
+varp:bit(24)                          -- stamina duration varbit
+varp:bit(varp.STAMINA_DURATION)       -- same, using named constant
+```
+
+Named constants are available as fields on the `varp` table (e.g. `varp.QUEST_POINTS`, `varp.STAMINA_EFFECT`). These are generated from RuneLite's `VarPlayerID` and `VarbitID` classes — see `VarpConstants.java` for the full list.
+
+### API: `varc`
+
+Read client variables (integers and strings).
+
+```lua
+-- Read a client integer variable
+varc:int(171)                         -- inventory tab
+varc:int(varc.INVENTORY_TAB)          -- same, using named constant
+
+-- Read a client string variable
+varc:str(335)                         -- chatbox typed text
+varc:str(varc.CHATBOX_TYPED_TEXT)     -- same, using named constant (returns nil if empty)
+```
+
+Named constants are available as fields on the `varc` table (e.g. `varc.INVENTORY_TAB`, `varc.CAMERA_ZOOM_FIXED_VIEWPORT`). These are generated from RuneLite's `VarClientID` class — see `VarcConstants.java` for the full list.
+
 ### API: `coords`
 
 Convert between coordinate systems. Returns nil if the point is off-screen or outside the loaded scene.
