@@ -5,6 +5,7 @@ import os
 
 import requests
 from mcp.server.fastmcp import FastMCP
+from pydantic import BaseModel
 
 mcp = FastMCP("ragger")
 
@@ -177,21 +178,25 @@ def ragger_mail_recv_sync(count: int = 1, from_actor: str = "", timeout: int = 3
         return json.dumps({"error": "Bridge server not running"})
 
 
-@mcp.tool(name="RaggerMailSend")
-def ragger_mail_send(target: str, data: dict) -> str:
-    """Send a message to a running Lua actor's on_mail hook.
+class MailMessage(BaseModel):
+    target: str
+    data: dict
 
-    The actor receives on_mail(from, data) where from is "claude"
-    and data is the table you provide here.
+
+@mcp.tool(name="RaggerMailSend")
+def ragger_mail_send(messages: list[MailMessage]) -> str:
+    """Send one or more messages to actor on_mail hooks.
+
+    Each message must have "target" and "data" keys. Messages are
+    delivered in order. Use a single-element list for one message.
 
     Args:
-        target: The actor name to send to (e.g. "tile-marker", "npc-highlighter")
-        data: Key-value table to deliver (string/number/boolean values)
+        messages: List of {target: str, data: dict} messages to deliver
     """
     try:
         resp = requests.post(
             f"{BRIDGE_URL}/mail",
-            json={"target": target, "data": data},
+            json=[m.model_dump() for m in messages],
             headers=BRIDGE_HEADERS,
             timeout=10,
         )

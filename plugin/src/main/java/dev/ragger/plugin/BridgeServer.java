@@ -459,7 +459,28 @@ public class BridgeServer {
 
         String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
         try {
-            JsonObject json = new JsonParser().parse(body).getAsJsonObject();
+            var parsed = new JsonParser().parse(body);
+
+            // Batch mode: array of {target, data} messages
+            if (parsed.isJsonArray()) {
+                var array = parsed.getAsJsonArray();
+                int queued = 0;
+                for (var element : array) {
+                    var msg = element.getAsJsonObject();
+                    String target = msg.get("target").getAsString();
+                    JsonObject data = msg.getAsJsonObject("data");
+                    if (data == null) continue;
+                    @SuppressWarnings("unchecked")
+                    java.util.Map<String, Object> map = (java.util.Map<String, Object>) fromJsonElement(data);
+                    actorManager.enqueueMail("claude", target, map);
+                    queued++;
+                }
+                respond(exchange, 200, "{\"status\":\"queued\",\"count\":" + queued + "}");
+                return;
+            }
+
+            // Single message mode
+            JsonObject json = parsed.getAsJsonObject();
             String target = json.get("target").getAsString();
             JsonObject data = json.getAsJsonObject("data");
             if (data == null) {
