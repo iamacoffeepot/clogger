@@ -561,35 +561,29 @@ widget.TYPE_LINE
 
 ### API: `varp`
 
-Read player variables (varps) and varbits.
+Read player variables (varps) and varbits. Look up variable IDs from the `game_vars` table in the ragger database using `GameVar.search()` or `GameVar.by_name()`.
 
 ```lua
 -- Read a raw varp slot by ID
-varp:get(43)                          -- attack style varp
-varp:get(varp.COM_STANCE)             -- same, using named constant
+varp:get(43)                          -- attack style varp (COM_MODE)
+varp:get(46)                          -- combat stance (COM_STANCE)
 
 -- Read a varbit value
-varp:bit(24)                          -- stamina duration varbit
-varp:bit(varp.STAMINA_DURATION)       -- same, using named constant
+varp:bit(24)                          -- stamina duration (STAMINA_DURATION)
+varp:bit(25)                          -- stamina active (STAMINA_ACTIVE)
 ```
-
-Named constants are available as fields on the `varp` table (e.g. `varp.COM_STANCE`, `varp.STAMINA_DURATION`). These are the client's internal name hashes — see `VarpConstants.java` for the full list.
 
 ### API: `varc`
 
-Read client variables (integers and strings).
+Read client variables (integers and strings). Look up variable IDs from the `game_vars` table in the ragger database.
 
 ```lua
 -- Read a client integer variable
-varc:int(171)                         -- inventory tab
-varc:int(varc.TOPLEVEL_PANEL)         -- same, using named constant
+varc:int(171)                         -- top-level panel (TOPLEVEL_PANEL)
 
 -- Read a client string variable
-varc:str(335)                         -- chatbox typed text
-varc:str(varc.CHATINPUT)              -- same, using named constant (returns nil if empty)
+varc:str(335)                         -- chatbox input text (CHATINPUT, returns nil if empty)
 ```
-
-Named constants are available as fields on the `varc` table (e.g. `varc.TOPLEVEL_PANEL`, `varc.CHATINPUT`). These are the client's internal name hashes — see `VarcConstants.java` for the full list.
 
 ### API: `coords`
 

@@ -48,6 +48,7 @@ Pipeline order (managed by `fetch_all.py`):
 ### Utility scripts
 
 - `import_map_squares.py` — Imports map square images from `data/map-squares.zip` into the `map_squares` table. One-time setup.
+- `import_game_vars.py` — Parses VarpConstants.java and VarcConstants.java into the `game_vars` table. Re-run after updating RuneLite.
 18. `fetch_league_tasks.py` — Pulls league tasks (with `--league` flag)
 19. `fetch_npcs.py` — Pulls non-combat NPC data (name, version, location, options, region) from Category:Non-player characters
 
@@ -377,6 +378,21 @@ monster.elemental_weakness_percent -> int | None
 # Full defensive bonuses: stab/slash/crush/magic/light/standard/heavy ranged
 ```
 
+### GameVar (`src/ragger/game_var.py`)
+
+```python
+from ragger.game_var import GameVar
+
+GameVar.all(conn, var_type?) -> list[GameVar]       # var_type: 'varp', 'varbit', 'varc_int', 'varc_str'
+GameVar.by_name(conn, name) -> list[GameVar]        # exact name match
+GameVar.search(conn, name) -> list[GameVar]         # partial name match (LIKE %name%)
+GameVar.by_var_id(conn, var_id, var_type) -> GameVar | None
+var.name -> str                                     # client name hash (e.g. "COM_STANCE")
+var.var_id -> int                                   # numeric ID to pass to varp:get/varc:int
+var.var_type -> str                                 # 'varp', 'varbit', 'varc_int', 'varc_str'
+var.description -> str | None                       # human-readable description (if annotated)
+```
+
 ### Wiki utilities (`src/ragger/wiki.py`)
 
 ```python
@@ -477,8 +493,6 @@ JAVA_HOME="$(brew --prefix openjdk@21)/libexec/openjdk.jdk/Contents/Home" ./grad
 - `scripting/PrayerApi.java` — Lua `prayer` enum constants
 - `scripting/WidgetApi.java` — Lua `widget` API (game interface/widget state, InterfaceID constants)
 - `scripting/VarApi.java` — Lua `varp`/`varc` APIs (player variables, varbits, client variables)
-- `scripting/VarpConstants.java` — Named constants from RuneLite's VarPlayerID + VarbitID (lazy via `__index` metatable)
-- `scripting/VarcConstants.java` — Named constants from RuneLite's VarClientID (lazy via `__index` metatable)
 - `scripting/OverlayApi.java` — Lua overlay drawing context (text, shapes, fonts)
 - `scripting/MailApi.java` — Lua `mail` API (inter-actor messaging)
 - `scripting/MailMessage.java` — mail message data object

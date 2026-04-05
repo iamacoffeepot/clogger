@@ -402,6 +402,16 @@ SCHEMAS: list[str] = [
         UNIQUE(shop_id, item_name)
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS game_vars (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        var_id INTEGER NOT NULL,
+        var_type TEXT NOT NULL CHECK(var_type IN ('varp', 'varbit', 'varc_int', 'varc_str')),
+        description TEXT,
+        UNIQUE(name, var_type)
+    )
+    """,
 ]
 
 
