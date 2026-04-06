@@ -43,9 +43,6 @@ final class UiPanel {
     final Map<Integer, UiElement> elements = new LinkedHashMap<>();
     int nextElementId = 1;
 
-    // Child widget index counter (background, title, divider, close take first slots)
-    int nextChildIndex;
-
     UiPanel(final int id, final String title, final int x, final int y,
             final int width, final int height, final boolean closeable) {
         this.id = id;

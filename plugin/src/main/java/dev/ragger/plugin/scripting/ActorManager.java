@@ -76,6 +76,10 @@ public class ActorManager {
     private final ConcurrentLinkedQueue<MailMessage> mailQueue = new ConcurrentLinkedQueue<>();
     private final ConcurrentLinkedQueue<MailMessage> claudeMailbox = new ConcurrentLinkedQueue<>();
     private final ConcurrentLinkedQueue<LuaEvent> eventQueue = new ConcurrentLinkedQueue<>();
+    private final ConcurrentLinkedQueue<PendingSpawn> spawnQueue = new ConcurrentLinkedQueue<>();
+    private final ConcurrentLinkedQueue<String> unloadQueue = new ConcurrentLinkedQueue<>();
+
+    private record PendingSpawn(String name, String source, Map<String, Object> args) {}
 
     // --- Limits ---
 
@@ -166,6 +170,16 @@ public class ActorManager {
             }
         }
 
+        // Defer spawn to game thread if called from the EDT
+        if (javax.swing.SwingUtilities.isEventDispatchThread()) {
+            spawnQueue.add(new PendingSpawn(name, source, args));
+            return name;
+        }
+
+        return spawnNow(name, source, args);
+    }
+
+    private String spawnNow(final String name, final String source, final Map<String, Object> args) {
         // Stop existing actor with the same name before replacing
         final LuaActor existing = scripts.get(name);
         if (existing != null) {
@@ -187,6 +201,16 @@ public class ActorManager {
      * Unload and stop a script and all its children.
      */
     public void unload(final String name) {
+        // Defer to game thread if called from the EDT
+        if (javax.swing.SwingUtilities.isEventDispatchThread()) {
+            unloadQueue.add(name);
+            return;
+        }
+
+        unloadNow(name);
+    }
+
+    private void unloadNow(final String name) {
         // Stop children first
         final String prefix = name + "/";
         final var it = scripts.entrySet().iterator();
@@ -367,6 +391,17 @@ public class ActorManager {
      * Called every game tick -- dispatches to all active scripts with hooks.
      */
     public void tick() {
+        // Drain deferred operations from the EDT
+        String toUnload;
+        while ((toUnload = unloadQueue.poll()) != null) {
+            unloadNow(toUnload);
+        }
+
+        PendingSpawn spawn;
+        while ((spawn = spawnQueue.poll()) != null) {
+            spawnNow(spawn.name, spawn.source, spawn.args);
+        }
+
         final var it = scripts.entrySet().iterator();
 
         while (it.hasNext()) {

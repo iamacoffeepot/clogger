@@ -22,7 +22,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
  * Lua binding for creating native Jagex widget-based HUD interfaces.
  * Exposed as the global "ui" table in Lua scripts.
  *
- * Panels are LAYER widgets created as children of the viewport container.
+ * Panels are LAYER widgets created as dynamic children of VIEWPORT_TRACKER_BACK.
  * Each panel has a background, optional title bar, and user-added elements
  * (text, rectangles, buttons, sprites, items).
  *
@@ -40,7 +40,7 @@ public class UiApi {
     private final ConcurrentLinkedQueue<ClickEvent> clickQueue = new ConcurrentLinkedQueue<>();
     private int nextPanelId = 1;
 
-    record ClickEvent(int panelId, int elementId, int actionIndex) {}
+    private record ClickEvent(int panelId, int elementId, int actionIndex) {}
 
     public UiApi(final Client client, final Lua lua) {
         this.client = client;
@@ -441,28 +441,27 @@ public class UiApi {
     // -----------------------------------------------------------------------
 
     /**
-     * Viewport parent candidates in priority order.
-     * Uses gameval InterfaceID inner classes (non-deprecated).
-     * Tries POPOUT first (floating interface layer), then VIEWPORT.
+     * Parent widget candidates for HUD panels, in priority order.
+     * VIEWPORT_TRACKER_BACK is a full-size overlay layer on top of the game viewport.
+     * POPOUT is a narrow popup layer (fallback).
      */
-    private static final int[] VIEWPORT_CANDIDATES = {
-        InterfaceID.ToplevelOsrsStretch.POPOUT,     // resizable modern
-        InterfaceID.ToplevelOsrsStretch.VIEWPORT,
-        InterfaceID.ToplevelPreEoc.POPOUT,           // resizable classic
-        InterfaceID.ToplevelPreEoc.VIEWPORT,
-        InterfaceID.Toplevel.POPOUT,                 // fixed mode
-        InterfaceID.Toplevel.VIEWPORT,
+    private static final int[] HUD_PARENT_CANDIDATES = {
+        InterfaceID.ToplevelOsrsStretch.VIEWPORT_TRACKER_BACK,  // resizable modern
+        InterfaceID.ToplevelOsrsStretch.POPOUT,
+        InterfaceID.ToplevelPreEoc.VIEWPORT_TRACKER_BACK,       // resizable classic
+        InterfaceID.ToplevelPreEoc.POPOUT,
+        InterfaceID.Toplevel.POPOUT,                             // fixed mode (no tracker layer)
     };
 
-    private static final int[] VIEWPORT_GROUP_IDS = {
+    private static final int[] HUD_GROUP_IDS = {
         InterfaceID.TOPLEVEL_OSRS_STRETCH,
         InterfaceID.TOPLEVEL_PRE_EOC,
         InterfaceID.TOPLEVEL,
     };
 
-    private Widget findViewportParent() {
+    private Widget findHudParent() {
         // Try known viewport candidates — must be LAYER type for createChild
-        for (final int id : VIEWPORT_CANDIDATES) {
+        for (final int id : HUD_PARENT_CANDIDATES) {
             final Widget w = client.getWidget(id);
             if (w != null && !w.isHidden() && w.getType() == WidgetType.LAYER) {
                 return w;
@@ -512,7 +511,7 @@ public class UiApi {
         }
 
         if (best != null) {
-            log.info("Viewport parent: id=0x{} ({}x{}, type={})",
+            log.info("HUD parent fallback: id=0x{} ({}x{}, type={})",
                     Integer.toHexString(best.getId()), best.getWidth(), best.getHeight(),
                     best.getType());
         }
@@ -521,16 +520,16 @@ public class UiApi {
     }
 
     private void buildPanel(final UiPanel panel) {
-        final Widget parent = findViewportParent();
+        final Widget parent = findHudParent();
         if (parent == null) {
             log.warn("No viewport parent found for panel {}", panel.id);
             return;
         }
 
-        panel.nextChildIndex = 0;
+        parent.deleteAllChildren();
 
-        // Root LAYER (append to parent)
-        final Widget root = parent.createChild(WidgetType.LAYER);
+        // Root LAYER (append to parent as dynamic child)
+        final Widget root = parent.createChild(-1, WidgetType.LAYER);
         root.setOriginalX(panel.x);
         root.setOriginalY(panel.y);
         root.setOriginalWidth(panel.width);
@@ -543,7 +542,7 @@ public class UiApi {
         panel.rootLayer = root;
 
         // Background rectangle
-        final Widget bg = root.createChild(panel.nextChildIndex++, WidgetType.RECTANGLE);
+        final Widget bg = root.createChild(WidgetType.RECTANGLE);
         bg.setOriginalX(0);
         bg.setOriginalY(0);
         bg.setOriginalWidth(panel.width);
@@ -559,7 +558,7 @@ public class UiApi {
         // Title bar
         if (panel.title != null) {
             // Title background
-            final Widget titleBg = root.createChild(panel.nextChildIndex++, WidgetType.RECTANGLE);
+            final Widget titleBg = root.createChild(WidgetType.RECTANGLE);
             titleBg.setOriginalX(0);
             titleBg.setOriginalY(0);
             titleBg.setOriginalWidth(panel.width);
@@ -573,7 +572,7 @@ public class UiApi {
             panel.titleBg = titleBg;
 
             // Title text
-            final Widget titleText = root.createChild(panel.nextChildIndex++, WidgetType.TEXT);
+            final Widget titleText = root.createChild(WidgetType.TEXT);
             titleText.setOriginalX(0);
             titleText.setOriginalY(2);
             titleText.setOriginalWidth(panel.width);
@@ -590,7 +589,7 @@ public class UiApi {
             panel.titleText = titleText;
 
             // Divider line
-            final Widget div = root.createChild(panel.nextChildIndex++, WidgetType.RECTANGLE);
+            final Widget div = root.createChild(WidgetType.RECTANGLE);
             div.setOriginalX(0);
             div.setOriginalY(UiPanel.TITLE_HEIGHT);
             div.setOriginalWidth(panel.width);
@@ -605,7 +604,7 @@ public class UiApi {
 
             // Close button
             if (panel.closeable) {
-                final Widget closeBtn = root.createChild(panel.nextChildIndex++, WidgetType.TEXT);
+                final Widget closeBtn = root.createChild(WidgetType.TEXT);
                 closeBtn.setOriginalX(panel.width - UiPanel.CLOSE_BTN_SIZE - 2);
                 closeBtn.setOriginalY(2);
                 closeBtn.setOriginalWidth(UiPanel.CLOSE_BTN_SIZE);
@@ -655,7 +654,7 @@ public class UiApi {
         final int color = intVal(c, "color", 0xFFFFFF);
         final int fontSize = intVal(c, "font_size", 0);
 
-        final Widget w = panel.rootLayer.createChild(panel.nextChildIndex++, WidgetType.TEXT);
+        final Widget w = panel.rootLayer.createChild(-1, WidgetType.TEXT);
         w.setOriginalX(ex);
         w.setOriginalY(ey);
         w.setOriginalWidth(panel.width - ex);
@@ -686,7 +685,7 @@ public class UiApi {
         final boolean filled = boolVal(c, "filled", true);
         final int opacity = intVal(c, "opacity", 0);
 
-        final Widget w = panel.rootLayer.createChild(panel.nextChildIndex++, WidgetType.RECTANGLE);
+        final Widget w = panel.rootLayer.createChild(-1, WidgetType.RECTANGLE);
         w.setOriginalX(ex);
         w.setOriginalY(ey);
         w.setOriginalWidth(ew);
@@ -716,7 +715,7 @@ public class UiApi {
         final int color = intVal(c, "color", 0xFFFFFF);
 
         // Button background
-        final Widget bg = panel.rootLayer.createChild(panel.nextChildIndex++, WidgetType.RECTANGLE);
+        final Widget bg = panel.rootLayer.createChild(-1, WidgetType.RECTANGLE);
         bg.setOriginalX(ex);
         bg.setOriginalY(ey);
         bg.setOriginalWidth(ew);
@@ -729,7 +728,7 @@ public class UiApi {
         bg.revalidate();
 
         // Button text (this is the clickable widget)
-        final Widget w = panel.rootLayer.createChild(panel.nextChildIndex++, WidgetType.TEXT);
+        final Widget w = panel.rootLayer.createChild(-1, WidgetType.TEXT);
         w.setOriginalX(ex);
         w.setOriginalY(ey);
         w.setOriginalWidth(ew);
@@ -780,7 +779,7 @@ public class UiApi {
         final int eh = intVal(c, "h", 20);
         final int spriteId = intVal(c, "sprite", 0);
 
-        final Widget w = panel.rootLayer.createChild(panel.nextChildIndex++, WidgetType.GRAPHIC);
+        final Widget w = panel.rootLayer.createChild(-1, WidgetType.GRAPHIC);
         w.setOriginalX(ex);
         w.setOriginalY(ey);
         w.setOriginalWidth(ew);
@@ -806,7 +805,7 @@ public class UiApi {
         final int itemId = intVal(c, "item_id", 0);
         final int quantity = intVal(c, "quantity", 1);
 
-        final Widget w = panel.rootLayer.createChild(panel.nextChildIndex++, WidgetType.GRAPHIC);
+        final Widget w = panel.rootLayer.createChild(-1, WidgetType.GRAPHIC);
         w.setOriginalX(ex);
         w.setOriginalY(ey);
         w.setOriginalWidth(ew);
@@ -884,7 +883,7 @@ public class UiApi {
         }
 
         boolean isViewport = false;
-        for (final int vgId : VIEWPORT_GROUP_IDS) {
+        for (final int vgId : HUD_GROUP_IDS) {
             if (groupId == vgId) {
                 isViewport = true;
                 break;
@@ -946,8 +945,6 @@ public class UiApi {
         for (final UiElement elem : panel.elements.values()) {
             elem.widget = null;
         }
-
-        panel.nextChildIndex = 0;
     }
 
     private void unrefPanel(final UiPanel panel) {
@@ -1013,8 +1010,7 @@ public class UiApi {
 
     private void pushClosureMethod(final Lua lua, final int panelId,
                                    final String name, final PanelMethod method) {
-        final int pid = panelId;
-        lua.push((party.iroiro.luajava.JFunction) l -> method.call(l, pid));
+        lua.push((party.iroiro.luajava.JFunction) l -> method.call(l, panelId));
         lua.setField(-2, name);
     }
 
