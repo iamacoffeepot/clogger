@@ -10,6 +10,7 @@ import net.runelite.api.widgets.WidgetTextAlignment;
 import net.runelite.api.widgets.WidgetType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import party.iroiro.luajava.JFunction;
 import party.iroiro.luajava.Lua;
 
 import java.util.ArrayList;
@@ -1010,7 +1011,7 @@ public class UiApi {
 
     private void pushClosureMethod(final Lua lua, final int panelId,
                                    final String name, final PanelMethod method) {
-        lua.push((party.iroiro.luajava.JFunction) l -> method.call(l, panelId));
+        lua.push((JFunction) l -> method.call(l, panelId));
         lua.setField(-2, name);
     }
 

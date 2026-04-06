@@ -389,7 +389,7 @@ public class ActorManager {
     }
 
     // -----------------------------------------------------------------------
-    // Tick and events
+    // Frame loop and events
     // -----------------------------------------------------------------------
 
     /**
@@ -453,7 +453,7 @@ public class ActorManager {
 
     /**
      * Drain buffered events and deliver to all actors that define the matching hook.
-     * Called after tick() -- actors see on_tick first, then events from that tick.
+     * Called at the end of game tick frames, after on_frame and on_tick.
      */
     public void drainEvents() {
         final List<LuaEvent> batch = new ArrayList<>();
