@@ -584,6 +584,9 @@ JAVA_HOME="$(brew --prefix openjdk@21)/libexec/openjdk.jdk/Contents/Home" ./grad
 - `scripting/CombatApi.java` — Lua `combat` API (spec, prayers, attack style, target)
 - `scripting/PrayerApi.java` — Lua `prayer` enum constants
 - `scripting/WidgetApi.java` — Lua `widget` API (game interface/widget state, InterfaceID constants)
+- `scripting/UiApi.java` — Lua `ui` API (create native HUD panels with text, buttons, sprites, items)
+- `scripting/UiPanel.java` — panel state and widget tree tracking
+- `scripting/UiElement.java` — element state and callback ref tracking
 - `scripting/VarApi.java` — Lua `varp`/`varc` APIs (player variables, varbits, client variables)
 - `scripting/OverlayApi.java` — Lua overlay drawing context (text, shapes, fonts)
 - `scripting/MailApi.java` — Lua `mail` API (inter-actor messaging)

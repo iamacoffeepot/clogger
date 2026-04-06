@@ -31,6 +31,7 @@ public class LuaActor {
     private final OverlayApi overlayApi = new OverlayApi();
 
     private Lua lua;
+    private UiApi uiApi;
     private boolean running = false;
     private boolean hasHooks = false;
     private boolean requestStop = false;
@@ -79,6 +80,8 @@ public class LuaActor {
         new ActorsApi(name, actorManager).register(lua);
         new MailApi(name, actorManager).register(lua);
         new WidgetApi(client).register(lua);
+        uiApi = new UiApi(client, lua);
+        uiApi.register(lua);
         new VarApi(client).register(lua);
         new JsonApi().register(lua);
         new Base64Api().register(lua);
@@ -118,6 +121,10 @@ public class LuaActor {
     public void tick() {
         if (!running || !hasHooks) {
             return;
+        }
+
+        if (uiApi != null) {
+            uiApi.drainClicks();
         }
 
         if (!callHook("on_tick")) {
@@ -190,6 +197,11 @@ public class LuaActor {
     public void stop() {
         if (running && hasHooks) {
             callHook("on_stop");
+        }
+
+        if (uiApi != null) {
+            uiApi.destroyAll();
+            uiApi = null;
         }
 
         if (lua != null) {
@@ -276,6 +288,14 @@ public class LuaActor {
     public boolean deliverEvent(final String hookName, final Map<String, Object> data) {
         if (!running || !hasHooks || lua == null) {
             return true;
+        }
+
+        // Rebuild UI panels when the viewport interface reloads (e.g. fixed/resizable switch)
+        if ("on_widget_loaded".equals(hookName) && uiApi != null) {
+            final Object groupId = data.get("group_id");
+            if (groupId instanceof Number n) {
+                uiApi.onViewportReloaded(n.intValue());
+            }
         }
 
         try {

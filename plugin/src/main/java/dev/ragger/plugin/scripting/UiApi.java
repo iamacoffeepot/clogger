@@ -1,0 +1,1063 @@
+package dev.ragger.plugin.scripting;
+
+import net.runelite.api.Client;
+import net.runelite.api.gameval.InterfaceID;
+import net.runelite.api.widgets.JavaScriptCallback;
+import net.runelite.api.widgets.Widget;
+import net.runelite.api.widgets.WidgetPositionMode;
+import net.runelite.api.widgets.WidgetSizeMode;
+import net.runelite.api.widgets.WidgetTextAlignment;
+import net.runelite.api.widgets.WidgetType;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import party.iroiro.luajava.Lua;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentLinkedQueue;
+
+/**
+ * Lua binding for creating native Jagex widget-based HUD interfaces.
+ * Exposed as the global "ui" table in Lua scripts.
+ *
+ * Panels are LAYER widgets created as children of the viewport container.
+ * Each panel has a background, optional title bar, and user-added elements
+ * (text, rectangles, buttons, sprites, items).
+ *
+ * Click callbacks are stored as Lua registry references and invoked
+ * during tick via drainClicks().
+ */
+public class UiApi {
+
+    private static final Logger log = LoggerFactory.getLogger(UiApi.class);
+
+    private final Client client;
+    private Lua lua;
+
+    private final Map<Integer, UiPanel> panels = new LinkedHashMap<>();
+    private final ConcurrentLinkedQueue<ClickEvent> clickQueue = new ConcurrentLinkedQueue<>();
+    private int nextPanelId = 1;
+
+    record ClickEvent(int panelId, int elementId, int actionIndex) {}
+
+    public UiApi(final Client client, final Lua lua) {
+        this.client = client;
+        this.lua = lua;
+    }
+
+    public void register(final Lua lua) {
+        lua.createTable(0, 4);
+
+        lua.push(this::create);
+        lua.setField(-2, "create");
+
+        lua.push(this::listPanels);
+        lua.setField(-2, "list");
+
+        lua.push(this::destroyPanel);
+        lua.setField(-2, "destroy");
+
+        lua.setGlobal("ui");
+    }
+
+    // -----------------------------------------------------------------------
+    // Lua methods — ui:create(), ui:list(), ui:destroy()
+    // -----------------------------------------------------------------------
+
+    /**
+     * ui:create(opts) -> panel table
+     * opts: { title, x, y, width, height, closeable, on_close }
+     */
+    private int create(final Lua lua) {
+        if (lua.type(2) != Lua.LuaType.TABLE) {
+            lua.pushNil();
+            return 1;
+        }
+
+        final int optsIndex = 2;
+
+        final String title = getStringField(lua, optsIndex, "title");
+        final int x = getIntField(lua, optsIndex, "x", 0);
+        final int y = getIntField(lua, optsIndex, "y", 0);
+        final int width = getIntField(lua, optsIndex, "width", 200);
+        final int height = getIntField(lua, optsIndex, "height", 150);
+        final boolean closeable = getBoolField(lua, optsIndex, "closeable", false);
+
+        final int panelId = nextPanelId++;
+        final UiPanel panel = new UiPanel(panelId, title, x, y, width, height, closeable);
+
+        // Store on_close callback ref if provided
+        lua.getField(optsIndex, "on_close");
+        if (lua.type(-1) == Lua.LuaType.FUNCTION) {
+            panel.closeCallbackRef = lua.ref();
+        } else {
+            lua.pop(1);
+        }
+
+        panels.put(panelId, panel);
+
+        // Build the native widgets
+        buildPanel(panel);
+
+        // Return a Lua table with panel methods (closures over panelId)
+        pushPanelTable(lua, panelId);
+
+        return 1;
+    }
+
+    /**
+     * ui:list() -> array of panel IDs
+     */
+    private int listPanels(final Lua lua) {
+        lua.createTable(panels.size(), 0);
+        int i = 1;
+        for (final int id : panels.keySet()) {
+            lua.push(id);
+            lua.rawSetI(-2, i++);
+        }
+        return 1;
+    }
+
+    /**
+     * ui:destroy(panelId)
+     */
+    private int destroyPanel(final Lua lua) {
+        final int panelId = (int) lua.toInteger(2);
+        destroyPanelById(panelId);
+        return 0;
+    }
+
+    // -----------------------------------------------------------------------
+    // Panel methods — called from Lua panel table closures
+    // -----------------------------------------------------------------------
+
+    private int addText(final Lua lua, final int panelId) {
+        final UiPanel panel = panels.get(panelId);
+        if (panel == null || lua.type(2) != Lua.LuaType.TABLE) {
+            lua.push(-1);
+            return 1;
+        }
+
+        final int optsIndex = 2;
+        final Map<String, Object> config = LuaUtils.tableToMap(lua, optsIndex);
+
+        final int elemId = panel.nextElementId++;
+        final UiElement elem = new UiElement(elemId, UiElement.TEXT, config);
+        panel.elements.put(elemId, elem);
+
+        buildTextWidget(panel, elem);
+
+        lua.push(elemId);
+        return 1;
+    }
+
+    private int addRect(final Lua lua, final int panelId) {
+        final UiPanel panel = panels.get(panelId);
+        if (panel == null || lua.type(2) != Lua.LuaType.TABLE) {
+            lua.push(-1);
+            return 1;
+        }
+
+        final int optsIndex = 2;
+        final Map<String, Object> config = LuaUtils.tableToMap(lua, optsIndex);
+
+        final int elemId = panel.nextElementId++;
+        final UiElement elem = new UiElement(elemId, UiElement.RECT, config);
+        panel.elements.put(elemId, elem);
+
+        buildRectWidget(panel, elem);
+
+        lua.push(elemId);
+        return 1;
+    }
+
+    private int addButton(final Lua lua, final int panelId) {
+        final UiPanel panel = panels.get(panelId);
+        if (panel == null || lua.type(2) != Lua.LuaType.TABLE) {
+            lua.push(-1);
+            return 1;
+        }
+
+        final int optsIndex = 2;
+
+        // Read config but handle callback refs manually before tableToMap
+        // (tableToMap would stringify functions)
+        final Map<String, Object> config = new LinkedHashMap<>();
+        config.put("x", getIntField(lua, optsIndex, "x", 0));
+        config.put("y", getIntField(lua, optsIndex, "y", 0));
+        config.put("w", getIntField(lua, optsIndex, "w", 80));
+        config.put("h", getIntField(lua, optsIndex, "h", 24));
+        config.put("text", getStringField(lua, optsIndex, "text"));
+        config.put("color", getIntField(lua, optsIndex, "color", 0xFFFFFF));
+
+        final int elemId = panel.nextElementId++;
+        final UiElement elem = new UiElement(elemId, UiElement.BUTTON, config);
+
+        // Store on_click callback ref
+        lua.getField(optsIndex, "on_click");
+        if (lua.type(-1) == Lua.LuaType.FUNCTION) {
+            elem.clickRef = lua.ref();
+        } else {
+            lua.pop(1);
+        }
+
+        // Store action callback refs
+        lua.getField(optsIndex, "actions");
+        if (lua.type(-1) == Lua.LuaType.TABLE) {
+            final int actionsIndex = LuaUtils.abs(lua, -1);
+            final int len = lua.rawLength(actionsIndex);
+            final List<String> actionLabels = new ArrayList<>();
+
+            for (int i = 1; i <= len; i++) {
+                lua.rawGetI(actionsIndex, i);
+                if (lua.type(-1) == Lua.LuaType.TABLE) {
+                    final int actionIndex = LuaUtils.abs(lua, -1);
+
+                    lua.getField(actionIndex, "label");
+                    final String label = lua.type(-1) == Lua.LuaType.STRING
+                            ? lua.toString(-1) : "Action " + i;
+                    lua.pop(1);
+                    actionLabels.add(label);
+
+                    lua.getField(actionIndex, "on_click");
+                    if (lua.type(-1) == Lua.LuaType.FUNCTION) {
+                        // Action indices are 1-based in Lua, but widget ops start at 2
+                        // (op 1 is reserved for left-click/on_click)
+                        elem.actionRefs.put(i + 1, lua.ref());
+                    } else {
+                        lua.pop(1);
+                    }
+                }
+                lua.pop(1); // pop action table
+            }
+
+            config.put("action_labels", actionLabels);
+        }
+        lua.pop(1); // pop actions field
+
+        panel.elements.put(elemId, elem);
+
+        buildButtonWidget(panel, elem);
+
+        lua.push(elemId);
+        return 1;
+    }
+
+    private int addSprite(final Lua lua, final int panelId) {
+        final UiPanel panel = panels.get(panelId);
+        if (panel == null || lua.type(2) != Lua.LuaType.TABLE) {
+            lua.push(-1);
+            return 1;
+        }
+
+        final Map<String, Object> config = LuaUtils.tableToMap(lua, 2);
+
+        final int elemId = panel.nextElementId++;
+        final UiElement elem = new UiElement(elemId, UiElement.SPRITE, config);
+        panel.elements.put(elemId, elem);
+
+        buildSpriteWidget(panel, elem);
+
+        lua.push(elemId);
+        return 1;
+    }
+
+    private int addItem(final Lua lua, final int panelId) {
+        final UiPanel panel = panels.get(panelId);
+        if (panel == null || lua.type(2) != Lua.LuaType.TABLE) {
+            lua.push(-1);
+            return 1;
+        }
+
+        final Map<String, Object> config = LuaUtils.tableToMap(lua, 2);
+
+        final int elemId = panel.nextElementId++;
+        final UiElement elem = new UiElement(elemId, UiElement.ITEM, config);
+        panel.elements.put(elemId, elem);
+
+        buildItemWidget(panel, elem);
+
+        lua.push(elemId);
+        return 1;
+    }
+
+    /**
+     * panel:set(elemId, opts) — update element properties.
+     */
+    private int setElement(final Lua lua, final int panelId) {
+        final UiPanel panel = panels.get(panelId);
+        if (panel == null) {
+            return 0;
+        }
+
+        final int elemId = (int) lua.toInteger(2);
+        final UiElement elem = panel.elements.get(elemId);
+        if (elem == null || elem.widget == null) {
+            return 0;
+        }
+
+        if (lua.type(3) != Lua.LuaType.TABLE) {
+            return 0;
+        }
+
+        final int optsIndex = 3;
+
+        // Update text
+        lua.getField(optsIndex, "text");
+        if (lua.type(-1) == Lua.LuaType.STRING) {
+            final String text = lua.toString(-1);
+            elem.widget.setText(text);
+            elem.config.put("text", text);
+        }
+        lua.pop(1);
+
+        // Update color
+        lua.getField(optsIndex, "color");
+        if (lua.type(-1) == Lua.LuaType.NUMBER) {
+            final int color = (int) lua.toInteger(-1);
+            elem.widget.setTextColor(color);
+            elem.config.put("color", color);
+        }
+        lua.pop(1);
+
+        // Update position
+        lua.getField(optsIndex, "x");
+        if (lua.type(-1) == Lua.LuaType.NUMBER) {
+            final int ex = (int) lua.toInteger(-1);
+            elem.widget.setOriginalX(ex);
+            elem.config.put("x", ex);
+        }
+        lua.pop(1);
+
+        lua.getField(optsIndex, "y");
+        if (lua.type(-1) == Lua.LuaType.NUMBER) {
+            final int ey = (int) lua.toInteger(-1) + panel.contentOffsetY();
+            elem.widget.setOriginalY(ey);
+            elem.config.put("y", (int) lua.toInteger(-1));
+        }
+        lua.pop(1);
+
+        elem.widget.revalidate();
+        return 0;
+    }
+
+    private int hideElement(final Lua lua, final int panelId) {
+        final UiPanel panel = panels.get(panelId);
+        if (panel == null) {
+            return 0;
+        }
+
+        final int elemId = (int) lua.toInteger(2);
+        final UiElement elem = panel.elements.get(elemId);
+        if (elem != null && elem.widget != null) {
+            elem.widget.setHidden(true);
+            elem.widget.revalidate();
+        }
+        return 0;
+    }
+
+    private int showElement(final Lua lua, final int panelId) {
+        final UiPanel panel = panels.get(panelId);
+        if (panel == null) {
+            return 0;
+        }
+
+        final int elemId = (int) lua.toInteger(2);
+        final UiElement elem = panel.elements.get(elemId);
+        if (elem != null && elem.widget != null) {
+            elem.widget.setHidden(false);
+            elem.widget.revalidate();
+        }
+        return 0;
+    }
+
+    private int removeElement(final Lua lua, final int panelId) {
+        final UiPanel panel = panels.get(panelId);
+        if (panel == null) {
+            return 0;
+        }
+
+        final int elemId = (int) lua.toInteger(2);
+        final UiElement elem = panel.elements.remove(elemId);
+        if (elem != null) {
+            unrefElement(elem);
+            if (elem.widget != null) {
+                elem.widget.setHidden(true);
+                elem.widget.revalidate();
+            }
+        }
+        return 0;
+    }
+
+    private int movePanel(final Lua lua, final int panelId) {
+        final UiPanel panel = panels.get(panelId);
+        if (panel == null) {
+            return 0;
+        }
+
+        panel.x = (int) lua.toInteger(2);
+        panel.y = (int) lua.toInteger(3);
+
+        if (panel.rootLayer != null) {
+            panel.rootLayer.setOriginalX(panel.x);
+            panel.rootLayer.setOriginalY(panel.y);
+            panel.rootLayer.revalidate();
+        }
+        return 0;
+    }
+
+    private int resizePanel(final Lua lua, final int panelId) {
+        final UiPanel panel = panels.get(panelId);
+        if (panel == null) {
+            return 0;
+        }
+
+        panel.width = (int) lua.toInteger(2);
+        panel.height = (int) lua.toInteger(3);
+
+        // Rebuild the entire panel to resize background, title, etc.
+        destroyPanelWidgets(panel);
+        buildPanel(panel);
+        for (final UiElement elem : panel.elementList()) {
+            buildElementWidget(panel, elem);
+        }
+        return 0;
+    }
+
+    private int closePanel(final Lua lua, final int panelId) {
+        destroyPanelById(panelId);
+        return 0;
+    }
+
+    private int panelId(final Lua lua, final int panelId) {
+        lua.push(panelId);
+        return 1;
+    }
+
+    // -----------------------------------------------------------------------
+    // Widget building
+    // -----------------------------------------------------------------------
+
+    /**
+     * Viewport parent candidates in priority order.
+     * Uses gameval InterfaceID inner classes (non-deprecated).
+     * Tries POPOUT first (floating interface layer), then VIEWPORT.
+     */
+    private static final int[] VIEWPORT_CANDIDATES = {
+        InterfaceID.ToplevelOsrsStretch.POPOUT,     // resizable modern
+        InterfaceID.ToplevelOsrsStretch.VIEWPORT,
+        InterfaceID.ToplevelPreEoc.POPOUT,           // resizable classic
+        InterfaceID.ToplevelPreEoc.VIEWPORT,
+        InterfaceID.Toplevel.POPOUT,                 // fixed mode
+        InterfaceID.Toplevel.VIEWPORT,
+    };
+
+    private static final int[] VIEWPORT_GROUP_IDS = {
+        InterfaceID.TOPLEVEL_OSRS_STRETCH,
+        InterfaceID.TOPLEVEL_PRE_EOC,
+        InterfaceID.TOPLEVEL,
+    };
+
+    private Widget findViewportParent() {
+        // Try known viewport candidates — must be LAYER type for createChild
+        for (final int id : VIEWPORT_CANDIDATES) {
+            final Widget w = client.getWidget(id);
+            if (w != null && !w.isHidden() && w.getType() == WidgetType.LAYER) {
+                return w;
+            }
+        }
+
+        // Fallback: walk all roots and their direct children looking for a large LAYER
+        final Widget[] roots = client.getWidgetRoots();
+        if (roots == null) {
+            return null;
+        }
+
+        Widget best = null;
+        int bestArea = 0;
+
+        for (final Widget root : roots) {
+            if (root == null || root.isHidden()) {
+                continue;
+            }
+
+            // Check root itself
+            if (root.getType() == WidgetType.LAYER) {
+                final int area = root.getWidth() * root.getHeight();
+                if (area > bestArea) {
+                    bestArea = area;
+                    best = root;
+                }
+            }
+
+            // Check static children (dynamic/nested less likely to be stable)
+            final Widget[] children = root.getStaticChildren();
+            if (children == null) {
+                continue;
+            }
+
+            for (final Widget child : children) {
+                if (child == null || child.isHidden() || child.getType() != WidgetType.LAYER) {
+                    continue;
+                }
+
+                final int area = child.getWidth() * child.getHeight();
+                if (area > bestArea) {
+                    bestArea = area;
+                    best = child;
+                }
+            }
+        }
+
+        if (best != null) {
+            log.info("Viewport parent: id=0x{} ({}x{}, type={})",
+                    Integer.toHexString(best.getId()), best.getWidth(), best.getHeight(),
+                    best.getType());
+        }
+
+        return best;
+    }
+
+    private void buildPanel(final UiPanel panel) {
+        final Widget parent = findViewportParent();
+        if (parent == null) {
+            log.warn("No viewport parent found for panel {}", panel.id);
+            return;
+        }
+
+        panel.nextChildIndex = 0;
+
+        // Root LAYER (append to parent)
+        final Widget root = parent.createChild(WidgetType.LAYER);
+        root.setOriginalX(panel.x);
+        root.setOriginalY(panel.y);
+        root.setOriginalWidth(panel.width);
+        root.setOriginalHeight(panel.height);
+        root.setXPositionMode(WidgetPositionMode.ABSOLUTE_LEFT);
+        root.setYPositionMode(WidgetPositionMode.ABSOLUTE_TOP);
+        root.setWidthMode(WidgetSizeMode.ABSOLUTE);
+        root.setHeightMode(WidgetSizeMode.ABSOLUTE);
+        root.revalidate();
+        panel.rootLayer = root;
+
+        // Background rectangle
+        final Widget bg = root.createChild(panel.nextChildIndex++, WidgetType.RECTANGLE);
+        bg.setOriginalX(0);
+        bg.setOriginalY(0);
+        bg.setOriginalWidth(panel.width);
+        bg.setOriginalHeight(panel.height);
+        bg.setWidthMode(WidgetSizeMode.ABSOLUTE);
+        bg.setHeightMode(WidgetSizeMode.ABSOLUTE);
+        bg.setTextColor(UiPanel.BG_COLOR);
+        bg.setFilled(true);
+        bg.setOpacity(255 - UiPanel.BG_OPACITY);
+        bg.revalidate();
+        panel.background = bg;
+
+        // Title bar
+        if (panel.title != null) {
+            // Title background
+            final Widget titleBg = root.createChild(panel.nextChildIndex++, WidgetType.RECTANGLE);
+            titleBg.setOriginalX(0);
+            titleBg.setOriginalY(0);
+            titleBg.setOriginalWidth(panel.width);
+            titleBg.setOriginalHeight(UiPanel.TITLE_HEIGHT);
+            titleBg.setWidthMode(WidgetSizeMode.ABSOLUTE);
+            titleBg.setHeightMode(WidgetSizeMode.ABSOLUTE);
+            titleBg.setTextColor(UiPanel.TITLE_BG_COLOR);
+            titleBg.setFilled(true);
+            titleBg.setOpacity(0);
+            titleBg.revalidate();
+            panel.titleBg = titleBg;
+
+            // Title text
+            final Widget titleText = root.createChild(panel.nextChildIndex++, WidgetType.TEXT);
+            titleText.setOriginalX(0);
+            titleText.setOriginalY(2);
+            titleText.setOriginalWidth(panel.width);
+            titleText.setOriginalHeight(UiPanel.TITLE_HEIGHT);
+            titleText.setWidthMode(WidgetSizeMode.ABSOLUTE);
+            titleText.setHeightMode(WidgetSizeMode.ABSOLUTE);
+            titleText.setText(panel.title);
+            titleText.setTextColor(UiPanel.TITLE_TEXT_COLOR);
+            titleText.setTextShadowed(true);
+            titleText.setFontId(495);
+            titleText.setXTextAlignment(WidgetTextAlignment.CENTER);
+            titleText.setYTextAlignment(WidgetTextAlignment.CENTER);
+            titleText.revalidate();
+            panel.titleText = titleText;
+
+            // Divider line
+            final Widget div = root.createChild(panel.nextChildIndex++, WidgetType.RECTANGLE);
+            div.setOriginalX(0);
+            div.setOriginalY(UiPanel.TITLE_HEIGHT);
+            div.setOriginalWidth(panel.width);
+            div.setOriginalHeight(1);
+            div.setWidthMode(WidgetSizeMode.ABSOLUTE);
+            div.setHeightMode(WidgetSizeMode.ABSOLUTE);
+            div.setTextColor(UiPanel.DIVIDER_COLOR);
+            div.setFilled(true);
+            div.setOpacity(0);
+            div.revalidate();
+            panel.divider = div;
+
+            // Close button
+            if (panel.closeable) {
+                final Widget closeBtn = root.createChild(panel.nextChildIndex++, WidgetType.TEXT);
+                closeBtn.setOriginalX(panel.width - UiPanel.CLOSE_BTN_SIZE - 2);
+                closeBtn.setOriginalY(2);
+                closeBtn.setOriginalWidth(UiPanel.CLOSE_BTN_SIZE);
+                closeBtn.setOriginalHeight(UiPanel.CLOSE_BTN_SIZE);
+                closeBtn.setWidthMode(WidgetSizeMode.ABSOLUTE);
+                closeBtn.setHeightMode(WidgetSizeMode.ABSOLUTE);
+                closeBtn.setText("X");
+                closeBtn.setTextColor(UiPanel.CLOSE_COLOR);
+                closeBtn.setTextShadowed(true);
+                closeBtn.setFontId(495);
+                closeBtn.setXTextAlignment(WidgetTextAlignment.CENTER);
+                closeBtn.setYTextAlignment(WidgetTextAlignment.CENTER);
+                closeBtn.setAction(0, "Close");
+                closeBtn.setOnOpListener((JavaScriptCallback) ev -> {
+                    // Queue close callback
+                    if (panel.closeCallbackRef != UiElement.NO_REF) {
+                        clickQueue.add(new ClickEvent(panel.id, -1, -1));
+                    }
+                    destroyPanelById(panel.id);
+                });
+                closeBtn.setHasListener(true);
+                closeBtn.revalidate();
+                panel.closeBtn = closeBtn;
+            }
+        }
+    }
+
+    private void buildElementWidget(final UiPanel panel, final UiElement elem) {
+        switch (elem.elementType) {
+            case UiElement.TEXT -> buildTextWidget(panel, elem);
+            case UiElement.RECT -> buildRectWidget(panel, elem);
+            case UiElement.BUTTON -> buildButtonWidget(panel, elem);
+            case UiElement.SPRITE -> buildSpriteWidget(panel, elem);
+            case UiElement.ITEM -> buildItemWidget(panel, elem);
+        }
+    }
+
+    private void buildTextWidget(final UiPanel panel, final UiElement elem) {
+        if (panel.rootLayer == null) {
+            return;
+        }
+
+        final Map<String, Object> c = elem.config;
+        final int ex = intVal(c, "x", 0);
+        final int ey = intVal(c, "y", 0) + panel.contentOffsetY();
+        final String text = strVal(c, "text", "");
+        final int color = intVal(c, "color", 0xFFFFFF);
+        final int fontSize = intVal(c, "font_size", 0);
+
+        final Widget w = panel.rootLayer.createChild(panel.nextChildIndex++, WidgetType.TEXT);
+        w.setOriginalX(ex);
+        w.setOriginalY(ey);
+        w.setOriginalWidth(panel.width - ex);
+        w.setOriginalHeight(16);
+        w.setWidthMode(WidgetSizeMode.ABSOLUTE);
+        w.setHeightMode(WidgetSizeMode.ABSOLUTE);
+        w.setText(text);
+        w.setTextColor(color);
+        w.setTextShadowed(true);
+        w.setFontId(fontSize > 0 ? 495 : 494);
+        w.setYTextAlignment(WidgetTextAlignment.CENTER);
+        w.revalidate();
+
+        elem.widget = w;
+    }
+
+    private void buildRectWidget(final UiPanel panel, final UiElement elem) {
+        if (panel.rootLayer == null) {
+            return;
+        }
+
+        final Map<String, Object> c = elem.config;
+        final int ex = intVal(c, "x", 0);
+        final int ey = intVal(c, "y", 0) + panel.contentOffsetY();
+        final int ew = intVal(c, "w", panel.width);
+        final int eh = intVal(c, "h", 1);
+        final int color = intVal(c, "color", 0x333333);
+        final boolean filled = boolVal(c, "filled", true);
+        final int opacity = intVal(c, "opacity", 0);
+
+        final Widget w = panel.rootLayer.createChild(panel.nextChildIndex++, WidgetType.RECTANGLE);
+        w.setOriginalX(ex);
+        w.setOriginalY(ey);
+        w.setOriginalWidth(ew);
+        w.setOriginalHeight(eh);
+        w.setWidthMode(WidgetSizeMode.ABSOLUTE);
+        w.setHeightMode(WidgetSizeMode.ABSOLUTE);
+        w.setTextColor(color);
+        w.setFilled(filled);
+        w.setOpacity(opacity);
+        w.revalidate();
+
+        elem.widget = w;
+    }
+
+    @SuppressWarnings("unchecked")
+    private void buildButtonWidget(final UiPanel panel, final UiElement elem) {
+        if (panel.rootLayer == null) {
+            return;
+        }
+
+        final Map<String, Object> c = elem.config;
+        final int ex = intVal(c, "x", 0);
+        final int ey = intVal(c, "y", 0) + panel.contentOffsetY();
+        final int ew = intVal(c, "w", 80);
+        final int eh = intVal(c, "h", 24);
+        final String text = strVal(c, "text", "Button");
+        final int color = intVal(c, "color", 0xFFFFFF);
+
+        // Button background
+        final Widget bg = panel.rootLayer.createChild(panel.nextChildIndex++, WidgetType.RECTANGLE);
+        bg.setOriginalX(ex);
+        bg.setOriginalY(ey);
+        bg.setOriginalWidth(ew);
+        bg.setOriginalHeight(eh);
+        bg.setWidthMode(WidgetSizeMode.ABSOLUTE);
+        bg.setHeightMode(WidgetSizeMode.ABSOLUTE);
+        bg.setTextColor(0x3E3529);
+        bg.setFilled(true);
+        bg.setOpacity(0);
+        bg.revalidate();
+
+        // Button text (this is the clickable widget)
+        final Widget w = panel.rootLayer.createChild(panel.nextChildIndex++, WidgetType.TEXT);
+        w.setOriginalX(ex);
+        w.setOriginalY(ey);
+        w.setOriginalWidth(ew);
+        w.setOriginalHeight(eh);
+        w.setWidthMode(WidgetSizeMode.ABSOLUTE);
+        w.setHeightMode(WidgetSizeMode.ABSOLUTE);
+        w.setText(text);
+        w.setTextColor(color);
+        w.setTextShadowed(true);
+        w.setFontId(494);
+        w.setXTextAlignment(WidgetTextAlignment.CENTER);
+        w.setYTextAlignment(WidgetTextAlignment.CENTER);
+
+        // Set up actions
+        final int pId = panel.id;
+        final int eId = elem.id;
+
+        if (elem.clickRef != UiElement.NO_REF) {
+            w.setAction(0, text);
+        }
+
+        final Object actionLabelsObj = c.get("action_labels");
+        if (actionLabelsObj instanceof List<?> actionLabels) {
+            for (int i = 0; i < actionLabels.size(); i++) {
+                w.setAction(i + 1, (String) actionLabels.get(i));
+            }
+        }
+
+        w.setOnOpListener((JavaScriptCallback) ev -> {
+            final int op = ev.getOp();
+            clickQueue.add(new ClickEvent(pId, eId, op));
+        });
+        w.setHasListener(true);
+        w.revalidate();
+
+        elem.widget = w;
+    }
+
+    private void buildSpriteWidget(final UiPanel panel, final UiElement elem) {
+        if (panel.rootLayer == null) {
+            return;
+        }
+
+        final Map<String, Object> c = elem.config;
+        final int ex = intVal(c, "x", 0);
+        final int ey = intVal(c, "y", 0) + panel.contentOffsetY();
+        final int ew = intVal(c, "w", 20);
+        final int eh = intVal(c, "h", 20);
+        final int spriteId = intVal(c, "sprite", 0);
+
+        final Widget w = panel.rootLayer.createChild(panel.nextChildIndex++, WidgetType.GRAPHIC);
+        w.setOriginalX(ex);
+        w.setOriginalY(ey);
+        w.setOriginalWidth(ew);
+        w.setOriginalHeight(eh);
+        w.setWidthMode(WidgetSizeMode.ABSOLUTE);
+        w.setHeightMode(WidgetSizeMode.ABSOLUTE);
+        w.setSpriteId(spriteId);
+        w.revalidate();
+
+        elem.widget = w;
+    }
+
+    private void buildItemWidget(final UiPanel panel, final UiElement elem) {
+        if (panel.rootLayer == null) {
+            return;
+        }
+
+        final Map<String, Object> c = elem.config;
+        final int ex = intVal(c, "x", 0);
+        final int ey = intVal(c, "y", 0) + panel.contentOffsetY();
+        final int ew = intVal(c, "w", 36);
+        final int eh = intVal(c, "h", 32);
+        final int itemId = intVal(c, "item_id", 0);
+        final int quantity = intVal(c, "quantity", 1);
+
+        final Widget w = panel.rootLayer.createChild(panel.nextChildIndex++, WidgetType.GRAPHIC);
+        w.setOriginalX(ex);
+        w.setOriginalY(ey);
+        w.setOriginalWidth(ew);
+        w.setOriginalHeight(eh);
+        w.setWidthMode(WidgetSizeMode.ABSOLUTE);
+        w.setHeightMode(WidgetSizeMode.ABSOLUTE);
+        w.setItemId(itemId);
+        w.setItemQuantity(quantity);
+        w.revalidate();
+
+        elem.widget = w;
+    }
+
+    // -----------------------------------------------------------------------
+    // Click queue processing
+    // -----------------------------------------------------------------------
+
+    /**
+     * Drain pending click events and invoke Lua callbacks.
+     * Called from LuaActor.tick() before on_tick.
+     */
+    public void drainClicks() {
+        ClickEvent event;
+        while ((event = clickQueue.poll()) != null) {
+            try {
+                if (event.elementId() == -1) {
+                    // Close button click
+                    final UiPanel panel = panels.get(event.panelId());
+                    if (panel != null && panel.closeCallbackRef != UiElement.NO_REF) {
+                        lua.refGet(panel.closeCallbackRef);
+                        lua.pCall(0, 0);
+                    }
+                    continue;
+                }
+
+                final UiPanel panel = panels.get(event.panelId());
+                if (panel == null) {
+                    continue;
+                }
+
+                final UiElement elem = panel.elements.get(event.elementId());
+                if (elem == null) {
+                    continue;
+                }
+
+                final int op = event.actionIndex();
+
+                if (op == 1 && elem.clickRef != UiElement.NO_REF) {
+                    // Left-click (op 1 = first action)
+                    lua.refGet(elem.clickRef);
+                    lua.pCall(0, 0);
+                } else if (elem.actionRefs.containsKey(op)) {
+                    // Right-click action
+                    final int ref = elem.actionRefs.get(op);
+                    lua.refGet(ref);
+                    lua.pCall(0, 0);
+                }
+            } catch (final Exception e) {
+                log.error("UI click callback error: {}", e.getMessage());
+            }
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Lifecycle and cleanup
+    // -----------------------------------------------------------------------
+
+    /**
+     * Check if a widget group ID is a viewport interface and rebuild panels if so.
+     * Called from LuaActor.deliverEvent() on widget_loaded events.
+     */
+    public void onViewportReloaded(final int groupId) {
+        if (panels.isEmpty()) {
+            return;
+        }
+
+        boolean isViewport = false;
+        for (final int vgId : VIEWPORT_GROUP_IDS) {
+            if (groupId == vgId) {
+                isViewport = true;
+                break;
+            }
+        }
+
+        if (isViewport) {
+            rebuildAll();
+        }
+    }
+
+    /**
+     * Rebuild all panels after viewport parent change (e.g. fixed/resizable switch).
+     */
+    public void rebuildAll() {
+        for (final UiPanel panel : panels.values()) {
+            destroyPanelWidgets(panel);
+            buildPanel(panel);
+            for (final UiElement elem : panel.elementList()) {
+                buildElementWidget(panel, elem);
+            }
+        }
+    }
+
+    /**
+     * Destroy all panels and unref all callbacks. Called on actor stop.
+     */
+    public void destroyAll() {
+        for (final UiPanel panel : panels.values()) {
+            destroyPanelWidgets(panel);
+            unrefPanel(panel);
+        }
+        panels.clear();
+        clickQueue.clear();
+    }
+
+    private void destroyPanelById(final int panelId) {
+        final UiPanel panel = panels.remove(panelId);
+        if (panel != null) {
+            destroyPanelWidgets(panel);
+            unrefPanel(panel);
+        }
+    }
+
+    private void destroyPanelWidgets(final UiPanel panel) {
+        if (panel.rootLayer != null) {
+            panel.rootLayer.deleteAllChildren();
+            panel.rootLayer.setHidden(true);
+            panel.rootLayer.revalidate();
+            panel.rootLayer = null;
+        }
+
+        panel.background = null;
+        panel.titleBg = null;
+        panel.titleText = null;
+        panel.closeBtn = null;
+        panel.divider = null;
+
+        for (final UiElement elem : panel.elements.values()) {
+            elem.widget = null;
+        }
+
+        panel.nextChildIndex = 0;
+    }
+
+    private void unrefPanel(final UiPanel panel) {
+        if (lua == null) {
+            return;
+        }
+
+        if (panel.closeCallbackRef != UiElement.NO_REF) {
+            lua.unref(panel.closeCallbackRef);
+            panel.closeCallbackRef = UiElement.NO_REF;
+        }
+
+        for (final UiElement elem : panel.elements.values()) {
+            unrefElement(elem);
+        }
+    }
+
+    private void unrefElement(final UiElement elem) {
+        if (lua == null) {
+            return;
+        }
+
+        if (elem.clickRef != UiElement.NO_REF) {
+            lua.unref(elem.clickRef);
+            elem.clickRef = UiElement.NO_REF;
+        }
+
+        for (final int ref : elem.actionRefs.values()) {
+            lua.unref(ref);
+        }
+        elem.actionRefs.clear();
+    }
+
+    // -----------------------------------------------------------------------
+    // Lua panel table construction
+    // -----------------------------------------------------------------------
+
+    /**
+     * Push a Lua table representing a panel with method closures.
+     * Each method captures the panelId as an upvalue.
+     */
+    private void pushPanelTable(final Lua lua, final int panelId) {
+        lua.createTable(0, 16);
+
+        pushClosureMethod(lua, panelId, "text", this::addText);
+        pushClosureMethod(lua, panelId, "rect", this::addRect);
+        pushClosureMethod(lua, panelId, "button", this::addButton);
+        pushClosureMethod(lua, panelId, "sprite", this::addSprite);
+        pushClosureMethod(lua, panelId, "item", this::addItem);
+        pushClosureMethod(lua, panelId, "set", this::setElement);
+        pushClosureMethod(lua, panelId, "hide", this::hideElement);
+        pushClosureMethod(lua, panelId, "show", this::showElement);
+        pushClosureMethod(lua, panelId, "remove", this::removeElement);
+        pushClosureMethod(lua, panelId, "move", this::movePanel);
+        pushClosureMethod(lua, panelId, "resize", this::resizePanel);
+        pushClosureMethod(lua, panelId, "close", this::closePanel);
+        pushClosureMethod(lua, panelId, "id", this::panelId);
+    }
+
+    private interface PanelMethod {
+        int call(Lua lua, int panelId);
+    }
+
+    private void pushClosureMethod(final Lua lua, final int panelId,
+                                   final String name, final PanelMethod method) {
+        final int pid = panelId;
+        lua.push((party.iroiro.luajava.JFunction) l -> method.call(l, pid));
+        lua.setField(-2, name);
+    }
+
+    // -----------------------------------------------------------------------
+    // Helpers for reading opts tables
+    // -----------------------------------------------------------------------
+
+    private static String getStringField(final Lua lua, final int tableIndex, final String field) {
+        lua.getField(tableIndex, field);
+        final String val = lua.type(-1) == Lua.LuaType.STRING ? lua.toString(-1) : null;
+        lua.pop(1);
+        return val;
+    }
+
+    private static int getIntField(final Lua lua, final int tableIndex, final String field,
+                                   final int defaultVal) {
+        lua.getField(tableIndex, field);
+        final int val = lua.type(-1) == Lua.LuaType.NUMBER ? (int) lua.toInteger(-1) : defaultVal;
+        lua.pop(1);
+        return val;
+    }
+
+    private static boolean getBoolField(final Lua lua, final int tableIndex, final String field,
+                                        final boolean defaultVal) {
+        lua.getField(tableIndex, field);
+        final boolean val = lua.type(-1) == Lua.LuaType.BOOLEAN ? lua.toBoolean(-1) : defaultVal;
+        lua.pop(1);
+        return val;
+    }
+
+    private static int intVal(final Map<String, Object> map, final String key, final int def) {
+        final Object v = map.get(key);
+        return v instanceof Number n ? n.intValue() : def;
+    }
+
+    private static String strVal(final Map<String, Object> map, final String key, final String def) {
+        final Object v = map.get(key);
+        return v instanceof String s ? s : def;
+    }
+
+    private static boolean boolVal(final Map<String, Object> map, final String key,
+                                   final boolean def) {
+        final Object v = map.get(key);
+        return v instanceof Boolean b ? b : def;
+    }
+}
