@@ -6,10 +6,17 @@ from pathlib import Path
 
 import yaml
 
-from ragger.enums import Region, Skill, TaskDifficulty
+from ragger.enums import DiaryLocation, DiaryTier, Region, Skill, TaskDifficulty
 from ragger.experience import level_for_xp, xp_for_level
 from ragger.quest import Quest
-from ragger.requirements import DiaryRequirement, ItemRequirement, QuestRequirement, RegionRequirement, SkillRequirement
+from ragger.requirements import (
+    GroupDiaryRequirement,
+    GroupItemRequirement,
+    GroupQuestRequirement,
+    GroupRegionRequirement,
+    GroupSkillRequirement,
+    RequirementGroup,
+)
 
 
 @dataclass
@@ -60,9 +67,9 @@ class LeagueTask:
         query = """
             SELECT DISTINCT lt.id, lt.name, lt.description, lt.difficulty, lt.region
             FROM league_tasks lt
-            JOIN league_task_skill_requirements ltsr ON ltsr.league_task_id = lt.id
-            JOIN skill_requirements sr ON sr.id = ltsr.skill_requirement_id
-            WHERE sr.skill = ?
+            JOIN league_task_requirement_groups ltrg ON ltrg.league_task_id = lt.id
+            JOIN group_skill_requirements gsr ON gsr.group_id = ltrg.group_id
+            WHERE gsr.skill = ?
         """
         params: list[int] = [skill.value]
 
@@ -73,7 +80,7 @@ class LeagueTask:
             query += " AND lt.region = ?"
             params.append(region.value)
 
-        query += " ORDER BY sr.level, lt.difficulty"
+        query += " ORDER BY gsr.level, lt.difficulty"
         rows = conn.execute(query, params).fetchall()
         return [cls._from_row(row) for row in rows]
 
@@ -95,66 +102,69 @@ class LeagueTask:
             region=Region(row[4]),
         )
 
-    def skill_requirements(self, conn: sqlite3.Connection) -> list[SkillRequirement]:
-        rows = conn.execute(
-            """
-            SELECT sr.id, sr.skill, sr.level
-            FROM skill_requirements sr
-            JOIN league_task_skill_requirements ltsr ON ltsr.skill_requirement_id = sr.id
-            WHERE ltsr.league_task_id = ?
-            ORDER BY sr.level DESC
-            """,
-            (self.id,),
-        ).fetchall()
-        return [SkillRequirement(row[0], row[1], row[2]) for row in rows]
+    def requirement_groups(self, conn: sqlite3.Connection) -> list[RequirementGroup]:
+        return RequirementGroup.for_league_task(conn, self.id)
 
-    def quest_requirements(self, conn: sqlite3.Connection) -> list[QuestRequirement]:
+    def skill_requirements(self, conn: sqlite3.Connection) -> list[GroupSkillRequirement]:
         rows = conn.execute(
             """
-            SELECT qr.id, qr.required_quest_id, qr.partial
-            FROM quest_requirements qr
-            JOIN league_task_quest_requirements ltqr ON ltqr.quest_requirement_id = qr.id
-            WHERE ltqr.league_task_id = ?
+            SELECT gsr.id, gsr.group_id, gsr.skill, gsr.level, gsr.boostable
+            FROM group_skill_requirements gsr
+            JOIN league_task_requirement_groups ltrg ON ltrg.group_id = gsr.group_id
+            WHERE ltrg.league_task_id = ?
+            ORDER BY gsr.level DESC
             """,
             (self.id,),
         ).fetchall()
-        return [QuestRequirement(row[0], row[1], bool(row[2])) for row in rows]
+        return [GroupSkillRequirement(r[0], r[1], Skill(r[2]), r[3], bool(r[4])) for r in rows]
 
-    def item_requirements(self, conn: sqlite3.Connection) -> list[ItemRequirement]:
+    def quest_requirements(self, conn: sqlite3.Connection) -> list[GroupQuestRequirement]:
         rows = conn.execute(
             """
-            SELECT ir.id, ir.item_id, ir.quantity
-            FROM item_requirements ir
-            JOIN league_task_item_requirements ltir ON ltir.item_requirement_id = ir.id
-            WHERE ltir.league_task_id = ?
+            SELECT gqr.id, gqr.group_id, gqr.required_quest_id, gqr.partial
+            FROM group_quest_requirements gqr
+            JOIN league_task_requirement_groups ltrg ON ltrg.group_id = gqr.group_id
+            WHERE ltrg.league_task_id = ?
             """,
             (self.id,),
         ).fetchall()
-        return [ItemRequirement(*row) for row in rows]
+        return [GroupQuestRequirement(r[0], r[1], r[2], bool(r[3])) for r in rows]
 
-    def diary_requirements(self, conn: sqlite3.Connection) -> list[DiaryRequirement]:
+    def item_requirements(self, conn: sqlite3.Connection) -> list[GroupItemRequirement]:
         rows = conn.execute(
             """
-            SELECT dr.id, dr.location, dr.tier
-            FROM diary_requirements dr
-            JOIN league_task_diary_requirements ltdr ON ltdr.diary_requirement_id = dr.id
-            WHERE ltdr.league_task_id = ?
+            SELECT gir.id, gir.group_id, gir.item_id, gir.quantity
+            FROM group_item_requirements gir
+            JOIN league_task_requirement_groups ltrg ON ltrg.group_id = gir.group_id
+            WHERE ltrg.league_task_id = ?
             """,
             (self.id,),
         ).fetchall()
-        return [DiaryRequirement(row[0], row[1], row[2]) for row in rows]
+        return [GroupItemRequirement(r[0], r[1], r[2], r[3]) for r in rows]
 
-    def region_requirements(self, conn: sqlite3.Connection) -> list[RegionRequirement]:
+    def diary_requirements(self, conn: sqlite3.Connection) -> list[GroupDiaryRequirement]:
         rows = conn.execute(
             """
-            SELECT rr.id, rr.regions, rr.any_region
-            FROM region_requirements rr
-            JOIN league_task_region_requirements ltrr ON ltrr.region_requirement_id = rr.id
-            WHERE ltrr.league_task_id = ?
+            SELECT gdr.id, gdr.group_id, gdr.location, gdr.tier
+            FROM group_diary_requirements gdr
+            JOIN league_task_requirement_groups ltrg ON ltrg.group_id = gdr.group_id
+            WHERE ltrg.league_task_id = ?
             """,
             (self.id,),
         ).fetchall()
-        return [RegionRequirement(row[0], row[1], bool(row[2])) for row in rows]
+        return [GroupDiaryRequirement(r[0], r[1], DiaryLocation(r[2]), DiaryTier(r[3])) for r in rows]
+
+    def region_requirements(self, conn: sqlite3.Connection) -> list[GroupRegionRequirement]:
+        rows = conn.execute(
+            """
+            SELECT grr.id, grr.group_id, grr.region
+            FROM group_region_requirements grr
+            JOIN league_task_requirement_groups ltrg ON ltrg.group_id = grr.group_id
+            WHERE ltrg.league_task_id = ?
+            """,
+            (self.id,),
+        ).fetchall()
+        return [GroupRegionRequirement(r[0], r[1], Region(r[2])) for r in rows]
 
 
 @dataclass
@@ -328,17 +338,6 @@ class Account:
     def has_region(self, region: Region) -> bool:
         return region in self.unlocked_regions or region == Region.GENERAL
 
-    def _meets_region_reqs(self, reqs: list[RegionRequirement]) -> bool:
-        for rr in reqs:
-            regions = rr.region_list()
-            if rr.any_region:
-                if not any(self.has_region(r) for r in regions):
-                    return False
-            else:
-                if not all(self.has_region(r) for r in regions):
-                    return False
-        return True
-
     def available_quests(
         self,
         check_skills: bool = True,
@@ -386,12 +385,12 @@ class Account:
 
             if check_skills:
                 reqs = task.skill_requirements(self.conn)
-                if any(not self.has_skill(Skill(r.skill), r.level) for r in reqs):
+                if any(not self.has_skill(r.skill, r.level) for r in reqs):
                     continue
 
             if check_regions:
                 region_reqs = task.region_requirements(self.conn)
-                if not self._meets_region_reqs(region_reqs):
+                if any(not self.has_region(r.region) for r in region_reqs):
                     continue
 
             if check_quests:

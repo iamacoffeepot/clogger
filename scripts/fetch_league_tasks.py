@@ -12,8 +12,11 @@ from pathlib import Path
 from ragger.db import create_tables, get_connection
 from ragger.enums import DiaryLocation, DiaryTier, Region, TaskDifficulty
 from ragger.wiki import (
+    add_group_requirement,
+    create_requirement_group,
     fetch_page_wikitext_with_attribution,
-    link_requirement,
+    link_group_requirement,
+    link_requirement_group,
     parse_skill_requirements,
     strip_markup,
 )
@@ -115,15 +118,15 @@ class LeagueTaskData:
     quest_reqs: list[tuple[str, bool]] = field(default_factory=list)
     item_reqs: list[str] = field(default_factory=list)
     diary_reqs: list[tuple[DiaryLocation, DiaryTier]] = field(default_factory=list)
-    region_reqs: list[tuple[int, bool]] = field(default_factory=list)
+    region_reqs: list[tuple[list[Region], bool]] = field(default_factory=list)
 
 
 def parse_other_reqs(
     other_field: str,
-) -> tuple[list[tuple[str, bool]], list[str], list[tuple[int, bool]]]:
+) -> tuple[list[tuple[str, bool]], list[str], list[tuple[list[Region], bool]]]:
     quest_reqs: list[tuple[str, bool]] = []
     item_reqs: list[str] = []
-    region_reqs: list[tuple[int, bool]] = []
+    region_reqs: list[tuple[list[Region], bool]] = []
 
     # Quest requirements
     if "Completion of" in other_field or "SCP|Quest" in other_field:
@@ -169,11 +172,8 @@ def parse_other_reqs(
             pass
 
     if regions:
-        mask = 0
-        for r in regions:
-            mask |= r.mask
         is_any = "Either" in other_field or "either" in other_field or " or " in other_field or "one of" in other_field
-        region_reqs.append((mask, is_any))
+        region_reqs.append((regions, is_any))
 
     return quest_reqs, item_reqs, region_reqs
 
@@ -278,34 +278,45 @@ def ingest(db_path: Path, page: str = "Raging_Echoes_League/Tasks") -> None:
         league_task_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
 
         for skill_id, level in task.skill_reqs:
-            link_requirement(conn, "skill_requirements", {"skill": skill_id, "level": level},
-                             "league_task_skill_requirements", "league_task_id", league_task_id, "skill_requirement_id")
+            link_group_requirement(conn, "group_skill_requirements", {"skill": skill_id, "level": level},
+                                   "league_task_requirement_groups", "league_task_id", league_task_id)
             skill_req_count += 1
 
         for quest_name, partial in task.quest_reqs:
             req_quest_id = quest_ids.get(quest_name)
             if req_quest_id is None:
                 continue
-            link_requirement(conn, "quest_requirements", {"required_quest_id": req_quest_id, "partial": 1 if partial else 0},
-                             "league_task_quest_requirements", "league_task_id", league_task_id, "quest_requirement_id")
+            link_group_requirement(conn, "group_quest_requirements",
+                                   {"required_quest_id": req_quest_id, "partial": 1 if partial else 0},
+                                   "league_task_requirement_groups", "league_task_id", league_task_id)
             quest_req_count += 1
 
         for item_name in task.item_reqs:
             item_id = item_ids.get(item_name)
             if item_id is None:
                 continue
-            link_requirement(conn, "item_requirements", {"item_id": item_id, "quantity": 1},
-                             "league_task_item_requirements", "league_task_id", league_task_id, "item_requirement_id")
+            link_group_requirement(conn, "group_item_requirements", {"item_id": item_id, "quantity": 1},
+                                   "league_task_requirement_groups", "league_task_id", league_task_id)
             item_req_count += 1
 
         for diary_loc, diary_tier in task.diary_reqs:
-            link_requirement(conn, "diary_requirements", {"location": diary_loc.value, "tier": diary_tier.value},
-                             "league_task_diary_requirements", "league_task_id", league_task_id, "diary_requirement_id")
+            link_group_requirement(conn, "group_diary_requirements",
+                                   {"location": diary_loc.value, "tier": diary_tier.value},
+                                   "league_task_requirement_groups", "league_task_id", league_task_id)
             diary_req_count += 1
 
-        for mask, is_any in task.region_reqs:
-            link_requirement(conn, "region_requirements", {"regions": mask, "any_region": 1 if is_any else 0},
-                             "league_task_region_requirements", "league_task_id", league_task_id, "region_requirement_id")
+        for regions, is_any in task.region_reqs:
+            if is_any:
+                # OR: all regions in one group
+                group_id = create_requirement_group(conn)
+                for r in regions:
+                    add_group_requirement(conn, group_id, "group_region_requirements", {"region": r.value})
+                link_requirement_group(conn, "league_task_requirement_groups", "league_task_id", league_task_id, group_id)
+            else:
+                # AND: each region in its own group
+                for r in regions:
+                    link_group_requirement(conn, "group_region_requirements", {"region": r.value},
+                                           "league_task_requirement_groups", "league_task_id", league_task_id)
             region_req_count += 1
 
     conn.commit()

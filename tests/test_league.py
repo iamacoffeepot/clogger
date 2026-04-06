@@ -2,7 +2,8 @@ import sqlite3
 
 from ragger.enums import DiaryLocation, DiaryTier, Region, Skill, TaskDifficulty
 from ragger.league import LeagueTask
-from ragger.requirements import DiaryRequirement, ItemRequirement, QuestRequirement, SkillRequirement
+from ragger.requirements import GroupDiaryRequirement, GroupItemRequirement, GroupQuestRequirement, GroupSkillRequirement
+from ragger.wiki import link_group_requirement
 
 
 def _seed_tasks(conn: sqlite3.Connection) -> None:
@@ -70,14 +71,9 @@ def test_general_region(conn: sqlite3.Connection) -> None:
 def test_by_skill(conn: sqlite3.Connection) -> None:
     _seed_tasks(conn)
     task = LeagueTask.by_name(conn, "50 Wintertodt Kills")
-    conn.execute(
-        "INSERT INTO skill_requirements (skill, level) VALUES (?, ?)",
-        (Skill.FIREMAKING.value, 50),
-    )
-    req_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
-    conn.execute(
-        "INSERT INTO league_task_skill_requirements (league_task_id, skill_requirement_id) VALUES (?, ?)",
-        (task.id, req_id),
+    link_group_requirement(
+        conn, "group_skill_requirements", {"skill": Skill.FIREMAKING.value, "level": 50},
+        "league_task_requirement_groups", "league_task_id", task.id,
     )
     conn.commit()
 
@@ -88,16 +84,11 @@ def test_by_skill(conn: sqlite3.Connection) -> None:
 
 def test_by_skill_with_filters(conn: sqlite3.Connection) -> None:
     _seed_tasks(conn)
-    conn.execute(
-        "INSERT INTO skill_requirements (skill, level) VALUES (?, ?)",
-        (Skill.ATTACK.value, 10),
-    )
-    req_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
     for task_name in ("Kill a Goblin", "50 Wintertodt Kills"):
         task = LeagueTask.by_name(conn, task_name)
-        conn.execute(
-            "INSERT INTO league_task_skill_requirements (league_task_id, skill_requirement_id) VALUES (?, ?)",
-            (task.id, req_id),
+        link_group_requirement(
+            conn, "group_skill_requirements", {"skill": Skill.ATTACK.value, "level": 10},
+            "league_task_requirement_groups", "league_task_id", task.id,
         )
     conn.commit()
 
@@ -115,20 +106,15 @@ def test_by_skill_with_filters(conn: sqlite3.Connection) -> None:
 def test_skill_requirements(conn: sqlite3.Connection) -> None:
     _seed_tasks(conn)
     task = LeagueTask.by_name(conn, "50 Wintertodt Kills")
-    conn.execute(
-        "INSERT INTO skill_requirements (skill, level) VALUES (?, ?)",
-        (Skill.FIREMAKING.value, 50),
-    )
-    req_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
-    conn.execute(
-        "INSERT INTO league_task_skill_requirements (league_task_id, skill_requirement_id) VALUES (?, ?)",
-        (task.id, req_id),
+    link_group_requirement(
+        conn, "group_skill_requirements", {"skill": Skill.FIREMAKING.value, "level": 50},
+        "league_task_requirement_groups", "league_task_id", task.id,
     )
     conn.commit()
 
     reqs = task.skill_requirements(conn)
     assert len(reqs) == 1
-    assert isinstance(reqs[0], SkillRequirement)
+    assert isinstance(reqs[0], GroupSkillRequirement)
     assert reqs[0].skill == Skill.FIREMAKING
     assert reqs[0].level == 50
 
@@ -138,20 +124,15 @@ def test_quest_requirements(conn: sqlite3.Connection) -> None:
     task = LeagueTask.by_name(conn, "Kill a Goblin")
     conn.execute("INSERT INTO quests (name, points) VALUES (?, ?)", ("Goblin Diplomacy", 5))
     quest_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
-    conn.execute(
-        "INSERT INTO quest_requirements (required_quest_id, partial) VALUES (?, ?)",
-        (quest_id, 0),
-    )
-    req_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
-    conn.execute(
-        "INSERT INTO league_task_quest_requirements (league_task_id, quest_requirement_id) VALUES (?, ?)",
-        (task.id, req_id),
+    link_group_requirement(
+        conn, "group_quest_requirements", {"required_quest_id": quest_id},
+        "league_task_requirement_groups", "league_task_id", task.id,
     )
     conn.commit()
 
     reqs = task.quest_requirements(conn)
     assert len(reqs) == 1
-    assert isinstance(reqs[0], QuestRequirement)
+    assert isinstance(reqs[0], GroupQuestRequirement)
     assert reqs[0].required_quest_id == quest_id
 
 
@@ -160,39 +141,30 @@ def test_item_requirements(conn: sqlite3.Connection) -> None:
     task = LeagueTask.by_name(conn, "Kill a Goblin")
     conn.execute("INSERT INTO items (name) VALUES (?)", ("Bronze sword",))
     item_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
-    conn.execute(
-        "INSERT INTO item_requirements (item_id, quantity) VALUES (?, ?)",
-        (item_id, 1),
-    )
-    req_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
-    conn.execute(
-        "INSERT INTO league_task_item_requirements (league_task_id, item_requirement_id) VALUES (?, ?)",
-        (task.id, req_id),
+    link_group_requirement(
+        conn, "group_item_requirements", {"item_id": item_id, "quantity": 1},
+        "league_task_requirement_groups", "league_task_id", task.id,
     )
     conn.commit()
 
     reqs = task.item_requirements(conn)
     assert len(reqs) == 1
-    assert isinstance(reqs[0], ItemRequirement)
+    assert isinstance(reqs[0], GroupItemRequirement)
     assert reqs[0].item_id == item_id
 
 
 def test_diary_requirements(conn: sqlite3.Connection) -> None:
     _seed_tasks(conn)
     task = LeagueTask.by_name(conn, "50 Wintertodt Kills")
-    conn.execute(
-        "INSERT INTO diary_requirements (location, tier) VALUES (?, ?)",
-        (DiaryLocation.KOUREND_KEBOS.value, DiaryTier.EASY.value),
-    )
-    req_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
-    conn.execute(
-        "INSERT INTO league_task_diary_requirements (league_task_id, diary_requirement_id) VALUES (?, ?)",
-        (task.id, req_id),
+    link_group_requirement(
+        conn, "group_diary_requirements",
+        {"location": DiaryLocation.KOUREND_KEBOS.value, "tier": DiaryTier.EASY.value},
+        "league_task_requirement_groups", "league_task_id", task.id,
     )
     conn.commit()
 
     reqs = task.diary_requirements(conn)
     assert len(reqs) == 1
-    assert isinstance(reqs[0], DiaryRequirement)
+    assert isinstance(reqs[0], GroupDiaryRequirement)
     assert reqs[0].location == DiaryLocation.KOUREND_KEBOS
     assert reqs[0].tier == DiaryTier.EASY
