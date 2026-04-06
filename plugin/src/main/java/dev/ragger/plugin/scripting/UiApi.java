@@ -102,7 +102,7 @@ public class UiApi {
 
         panels.put(panelId, panel);
 
-        // Build the native widgets
+        // Build the native widgets for this panel only (appends to shared parent)
         buildPanel(panel);
 
         // Return a Lua table with panel methods (closures over panelId)
@@ -529,8 +529,6 @@ public class UiApi {
             log.warn("No viewport parent found for panel {}", panel.id);
             return;
         }
-
-        parent.deleteAllChildren();
 
         // Root LAYER (append to parent as dynamic child)
         final Widget root = parent.createChild(-1, WidgetType.LAYER);
@@ -959,8 +957,13 @@ public class UiApi {
      * Rebuild all panels after viewport parent change (e.g. fixed/resizable switch).
      */
     public void rebuildAll() {
+        // Destroy only this instance's panel root layers (not the entire parent)
         for (final UiPanel panel : panels.values()) {
             destroyPanelWidgets(panel);
+        }
+
+        // Rebuild all panels as new children of the parent
+        for (final UiPanel panel : panels.values()) {
             buildPanel(panel);
             for (final UiElement elem : panel.elementList()) {
                 buildElementWidget(panel, elem);
