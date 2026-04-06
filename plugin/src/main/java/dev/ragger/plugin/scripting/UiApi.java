@@ -70,10 +70,6 @@ public class UiApi {
         lua.setGlobal("ui");
     }
 
-    // -----------------------------------------------------------------------
-    // Lua methods — ui:create(), ui:list(), ui:destroy()
-    // -----------------------------------------------------------------------
-
     /**
      * ui:create(opts) -> panel table
      * opts: { title, x, y, width, height, closeable, on_close }
@@ -137,10 +133,6 @@ public class UiApi {
         destroyPanelById(panelId);
         return 0;
     }
-
-    // -----------------------------------------------------------------------
-    // Panel methods — called from Lua panel table closures
-    // -----------------------------------------------------------------------
 
     private int addText(final Lua lua, final int panelId) {
         final UiPanel panel = panels.get(panelId);
@@ -445,10 +437,6 @@ public class UiApi {
         return 1;
     }
 
-    // -----------------------------------------------------------------------
-    // Widget building
-    // -----------------------------------------------------------------------
-
     /**
      * Parent widget candidates for HUD panels, in priority order.
      * VIEWPORT_TRACKER_BACK is a full-size overlay layer on top of the game viewport.
@@ -666,10 +654,6 @@ public class UiApi {
         }
     }
 
-    // -----------------------------------------------------------------------
-    // Drag tracking
-    // -----------------------------------------------------------------------
-
     /**
      * Update the actively dragged panel's position, or end the drag if the
      * mouse button was released. Called every frame from LuaActor.frame().
@@ -705,10 +689,6 @@ public class UiApi {
             draggingPanel.rootLayer.revalidate();
         }
     }
-
-    // -----------------------------------------------------------------------
-    // Click queue processing
-    // -----------------------------------------------------------------------
 
     /**
      * Drain pending click events and invoke Lua callbacks.
@@ -755,10 +735,6 @@ public class UiApi {
             }
         }
     }
-
-    // -----------------------------------------------------------------------
-    // Lifecycle and cleanup
-    // -----------------------------------------------------------------------
 
     /**
      * Check if a widget group ID is a viewport interface and rebuild panels if so.
@@ -873,10 +849,6 @@ public class UiApi {
         elem.actionRefs.clear();
     }
 
-    // -----------------------------------------------------------------------
-    // Lua panel table construction
-    // -----------------------------------------------------------------------
-
     /**
      * Push a Lua table representing a panel with method closures.
      * Each method captures the panelId as an upvalue.
@@ -908,9 +880,4 @@ public class UiApi {
         lua.push((JFunction) l -> method.call(l, panelId));
         lua.setField(-2, name);
     }
-
-    // -----------------------------------------------------------------------
-    // Helpers for reading opts tables
-    // -----------------------------------------------------------------------
-
 }
