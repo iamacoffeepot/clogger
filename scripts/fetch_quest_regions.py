@@ -100,7 +100,7 @@ def ingest(db_path: Path) -> None:
         throttle()
 
     print("Recording attributions...")
-    record_attributions_batch(conn, "quest_region_requirements", list(quest_ids.keys()))
+    record_attributions_batch(conn, "quest_requirement_groups", list(quest_ids.keys()))
 
     conn.commit()
     print(f"Inserted {req_count} quest region requirements ({no_region} quests have no region data)")

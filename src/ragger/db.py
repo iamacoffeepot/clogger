@@ -1,7 +1,7 @@
 import sqlite3
 from pathlib import Path
 
-from ragger.enums import ALL_REGIONS_MASK, ALL_SKILLS_MASK, ActivityType, DiaryLocation, DiaryTier, EquipmentSlot, Region, ShopType, Skill, TaskDifficulty
+from ragger.enums import ALL_SKILLS_MASK, ActivityType, DiaryLocation, DiaryTier, EquipmentSlot, Region, ShopType, Skill, TaskDifficulty
 
 _skill_ids = ", ".join(str(s.value) for s in Skill)
 _region_ids = ", ".join(str(r.value) for r in Region)
@@ -38,42 +38,11 @@ SCHEMAS: list[str] = [
     )
     """,
     f"""
-    CREATE TABLE IF NOT EXISTS skill_requirements (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        skill INTEGER NOT NULL CHECK(skill IN ({_skill_ids})),
-        level INTEGER NOT NULL CHECK(level BETWEEN 1 AND 99),
-        UNIQUE(skill, level)
-    )
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS quest_point_requirements (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        points INTEGER NOT NULL UNIQUE
-    )
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS item_requirements (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        item_id INTEGER NOT NULL,
-        quantity INTEGER NOT NULL DEFAULT 1,
-        FOREIGN KEY (item_id) REFERENCES items(id),
-        UNIQUE(item_id, quantity)
-    )
-    """,
-    f"""
     CREATE TABLE IF NOT EXISTS diary_tasks (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         location TEXT NOT NULL CHECK(location IN ({_diary_location_values})),
         tier TEXT NOT NULL CHECK(tier IN ({_diary_tier_values})),
         description TEXT NOT NULL
-    )
-    """,
-    f"""
-    CREATE TABLE IF NOT EXISTS diary_requirements (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        location TEXT NOT NULL CHECK(location IN ({_diary_location_values})),
-        tier TEXT NOT NULL CHECK(tier IN ({_diary_tier_values})),
-        UNIQUE(location, tier)
     )
     """,
     f"""
@@ -83,59 +52,6 @@ SCHEMAS: list[str] = [
         description TEXT NOT NULL,
         difficulty INTEGER NOT NULL CHECK(difficulty IN ({_difficulty_ids})),
         region INTEGER NOT NULL CHECK(region IN ({_region_ids}))
-    )
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS league_task_skill_requirements (
-        league_task_id INTEGER NOT NULL,
-        skill_requirement_id INTEGER NOT NULL,
-        PRIMARY KEY (league_task_id, skill_requirement_id),
-        FOREIGN KEY (league_task_id) REFERENCES league_tasks(id),
-        FOREIGN KEY (skill_requirement_id) REFERENCES skill_requirements(id)
-    )
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS league_task_quest_requirements (
-        league_task_id INTEGER NOT NULL,
-        quest_requirement_id INTEGER NOT NULL,
-        PRIMARY KEY (league_task_id, quest_requirement_id),
-        FOREIGN KEY (league_task_id) REFERENCES league_tasks(id),
-        FOREIGN KEY (quest_requirement_id) REFERENCES quest_requirements(id)
-    )
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS league_task_item_requirements (
-        league_task_id INTEGER NOT NULL,
-        item_requirement_id INTEGER NOT NULL,
-        PRIMARY KEY (league_task_id, item_requirement_id),
-        FOREIGN KEY (league_task_id) REFERENCES league_tasks(id),
-        FOREIGN KEY (item_requirement_id) REFERENCES item_requirements(id)
-    )
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS league_task_diary_requirements (
-        league_task_id INTEGER NOT NULL,
-        diary_requirement_id INTEGER NOT NULL,
-        PRIMARY KEY (league_task_id, diary_requirement_id),
-        FOREIGN KEY (league_task_id) REFERENCES league_tasks(id),
-        FOREIGN KEY (diary_requirement_id) REFERENCES diary_requirements(id)
-    )
-    """,
-    f"""
-    CREATE TABLE IF NOT EXISTS region_requirements (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        regions INTEGER NOT NULL CHECK(regions > 0 AND regions <= {ALL_REGIONS_MASK}),
-        any_region INTEGER NOT NULL DEFAULT 0,
-        UNIQUE(regions, any_region)
-    )
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS league_task_region_requirements (
-        league_task_id INTEGER NOT NULL,
-        region_requirement_id INTEGER NOT NULL,
-        PRIMARY KEY (league_task_id, region_requirement_id),
-        FOREIGN KEY (league_task_id) REFERENCES league_tasks(id),
-        FOREIGN KEY (region_requirement_id) REFERENCES region_requirements(id)
     )
     """,
     """
@@ -269,78 +185,6 @@ SCHEMAS: list[str] = [
         PRIMARY KEY (quest_id, item_reward_id),
         FOREIGN KEY (quest_id) REFERENCES quests(id),
         FOREIGN KEY (item_reward_id) REFERENCES item_rewards(id)
-    )
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS quest_region_requirements (
-        quest_id INTEGER NOT NULL,
-        region_requirement_id INTEGER NOT NULL,
-        PRIMARY KEY (quest_id, region_requirement_id),
-        FOREIGN KEY (quest_id) REFERENCES quests(id),
-        FOREIGN KEY (region_requirement_id) REFERENCES region_requirements(id)
-    )
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS quest_requirements (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        required_quest_id INTEGER NOT NULL,
-        partial INTEGER NOT NULL DEFAULT 0,
-        FOREIGN KEY (required_quest_id) REFERENCES quests(id),
-        UNIQUE(required_quest_id, partial)
-    )
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS quest_quest_point_requirements (
-        quest_id INTEGER NOT NULL,
-        quest_point_requirement_id INTEGER NOT NULL,
-        PRIMARY KEY (quest_id, quest_point_requirement_id),
-        FOREIGN KEY (quest_id) REFERENCES quests(id),
-        FOREIGN KEY (quest_point_requirement_id) REFERENCES quest_point_requirements(id)
-    )
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS quest_skill_requirements (
-        quest_id INTEGER NOT NULL,
-        skill_requirement_id INTEGER NOT NULL,
-        PRIMARY KEY (quest_id, skill_requirement_id),
-        FOREIGN KEY (quest_id) REFERENCES quests(id),
-        FOREIGN KEY (skill_requirement_id) REFERENCES skill_requirements(id)
-    )
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS diary_task_skill_requirements (
-        diary_task_id INTEGER NOT NULL,
-        skill_requirement_id INTEGER NOT NULL,
-        PRIMARY KEY (diary_task_id, skill_requirement_id),
-        FOREIGN KEY (diary_task_id) REFERENCES diary_tasks(id),
-        FOREIGN KEY (skill_requirement_id) REFERENCES skill_requirements(id)
-    )
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS diary_task_quest_requirements (
-        diary_task_id INTEGER NOT NULL,
-        quest_requirement_id INTEGER NOT NULL,
-        PRIMARY KEY (diary_task_id, quest_requirement_id),
-        FOREIGN KEY (diary_task_id) REFERENCES diary_tasks(id),
-        FOREIGN KEY (quest_requirement_id) REFERENCES quest_requirements(id)
-    )
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS diary_task_item_requirements (
-        diary_task_id INTEGER NOT NULL,
-        item_requirement_id INTEGER NOT NULL,
-        PRIMARY KEY (diary_task_id, item_requirement_id),
-        FOREIGN KEY (diary_task_id) REFERENCES diary_tasks(id),
-        FOREIGN KEY (item_requirement_id) REFERENCES item_requirements(id)
-    )
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS quest_quest_requirements (
-        quest_id INTEGER NOT NULL,
-        quest_requirement_id INTEGER NOT NULL,
-        PRIMARY KEY (quest_id, quest_requirement_id),
-        FOREIGN KEY (quest_id) REFERENCES quests(id),
-        FOREIGN KEY (quest_requirement_id) REFERENCES quest_requirements(id)
     )
     """,
     f"""

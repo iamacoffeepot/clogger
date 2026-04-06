@@ -129,7 +129,7 @@ def ingest(db_path: Path) -> None:
         diary_tasks[(row[1], row[2], row[3])] = (row[0], row[3])
 
     print("Fetching Achievement Diary page...")
-    wikitext = fetch_page_wikitext_with_attribution(conn, "Achievement Diary", "diary_task_item_requirements")
+    wikitext = fetch_page_wikitext_with_attribution(conn, "Achievement Diary", "diary_task_requirement_groups")
     parsed = parse_diary_item_requirements(wikitext)
 
     matched = 0
