@@ -21,7 +21,12 @@ SCHEMAS: list[str] = [
     """
     CREATE TABLE IF NOT EXISTS items (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL UNIQUE
+        name TEXT NOT NULL UNIQUE,
+        members INTEGER,
+        tradeable INTEGER,
+        weight REAL,
+        game_id INTEGER,
+        examine TEXT
     )
     """,
     f"""
@@ -439,11 +444,6 @@ SCHEMAS: list[str] = [
         item_id INTEGER,
         slot TEXT,
         two_handed INTEGER NOT NULL DEFAULT 0,
-        members INTEGER,
-        tradeable INTEGER,
-        weight REAL,
-        game_id INTEGER,
-        examine TEXT,
         attack_stab INTEGER,
         attack_slash INTEGER,
         attack_crush INTEGER,

@@ -151,6 +151,12 @@ from ragger.item import Item
 
 Item.all(conn) -> list[Item]
 Item.by_name(conn, name) -> Item | None
+Item.search(conn, name) -> list[Item]
+item.members -> bool | None
+item.tradeable -> bool | None
+item.weight -> float | None
+item.game_id -> int | None
+item.examine -> str | None
 ```
 
 ### Equipment (`src/ragger/equipment.py`)
@@ -166,10 +172,6 @@ Equipment.for_item(conn, item_id) -> list[Equipment]
 equipment.slot -> EquipmentSlot | None
 equipment.two_handed -> bool                           # True for 2h weapons
 equipment.combat_style -> CombatStyle | None
-equipment.members -> bool | None
-equipment.tradeable -> bool | None
-equipment.weight -> float | None
-equipment.game_id -> int | None
 equipment.item_id -> int | None                        # FK to items table
 # Attack bonuses: attack_stab, attack_slash, attack_crush, attack_magic, attack_ranged
 # Defence bonuses: defence_stab, defence_slash, defence_crush, defence_magic, defence_ranged

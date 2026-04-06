@@ -39,27 +39,6 @@ def parse_int(val: str | None) -> int | None:
         return None
 
 
-def parse_float(val: str | None) -> float | None:
-    if not val:
-        return None
-    val = val.strip().replace(",", "").replace("kg", "").strip()
-    try:
-        return float(val)
-    except ValueError:
-        return None
-
-
-def parse_bool(val: str | None) -> int | None:
-    if not val:
-        return None
-    cleaned = val.strip().lower()
-    if cleaned in ("yes", "true", "1"):
-        return 1
-    if cleaned in ("no", "false", "0"):
-        return 0
-    return None
-
-
 def get_versions(block: str) -> list[str]:
     """Detect how many versions an equipment item has."""
     versions = []
@@ -128,21 +107,6 @@ def parse_equipment(name: str, wikitext: str) -> list[dict]:
             if versioned_name:
                 item_name = strip_wiki_links(versioned_name)
 
-        # Metadata from Infobox Item
-        members = None
-        tradeable = None
-        weight = None
-        game_id = None
-        examine = None
-        if item_block:
-            members = parse_bool(parse_versioned_param(item_block, "members", v))
-            tradeable = parse_bool(parse_versioned_param(item_block, "tradeable", v))
-            weight = parse_float(parse_versioned_param(item_block, "weight", v))
-            game_id = parse_int(parse_versioned_param(item_block, "id", v))
-            examine = parse_versioned_param(item_block, "examine", v)
-            if examine:
-                examine = strip_wiki_links(examine)
-
         slot_val, two_handed = parse_slot(parse_versioned_param(bonuses_block, "slot", v))
 
         equipment = {
@@ -150,11 +114,6 @@ def parse_equipment(name: str, wikitext: str) -> list[dict]:
             "version": version_label,
             "slot": slot_val,
             "two_handed": two_handed,
-            "members": members,
-            "tradeable": tradeable,
-            "weight": weight,
-            "game_id": game_id,
-            "examine": examine,
             "attack_stab": parse_int(parse_versioned_param(bonuses_block, "astab", v)),
             "attack_slash": parse_int(parse_versioned_param(bonuses_block, "aslash", v)),
             "attack_crush": parse_int(parse_versioned_param(bonuses_block, "acrush", v)),
@@ -180,8 +139,7 @@ def parse_equipment(name: str, wikitext: str) -> list[dict]:
 
 
 EQUIPMENT_COLUMNS = [
-    "name", "version", "item_id", "slot", "two_handed", "members", "tradeable", "weight",
-    "game_id", "examine",
+    "name", "version", "item_id", "slot", "two_handed",
     "attack_stab", "attack_slash", "attack_crush", "attack_magic", "attack_ranged",
     "defence_stab", "defence_slash", "defence_crush", "defence_magic", "defence_ranged",
     "melee_strength", "ranged_strength", "magic_damage", "prayer",

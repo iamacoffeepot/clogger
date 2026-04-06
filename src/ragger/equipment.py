@@ -14,11 +14,6 @@ class Equipment:
     item_id: int | None
     slot: EquipmentSlot | None
     two_handed: bool
-    members: bool | None
-    tradeable: bool | None
-    weight: float | None
-    game_id: int | None
-    examine: str | None
     attack_stab: int | None
     attack_slash: int | None
     attack_crush: int | None
@@ -38,7 +33,7 @@ class Equipment:
     combat_style: CombatStyle | None
 
     _COLS = (
-        "id, name, version, item_id, slot, two_handed, members, tradeable, weight, game_id, examine, "
+        "id, name, version, item_id, slot, two_handed, "
         "attack_stab, attack_slash, attack_crush, attack_magic, attack_ranged, "
         "defence_stab, defence_slash, defence_crush, defence_magic, defence_ranged, "
         "melee_strength, ranged_strength, magic_damage, prayer, "
@@ -114,26 +109,21 @@ class Equipment:
             item_id=row[3],
             slot=EquipmentSlot.from_label(row[4]) if row[4] else None,
             two_handed=bool(row[5]),
-            members=bool(row[6]) if row[6] is not None else None,
-            tradeable=bool(row[7]) if row[7] is not None else None,
-            weight=row[8],
-            game_id=row[9],
-            examine=row[10],
-            attack_stab=row[11],
-            attack_slash=row[12],
-            attack_crush=row[13],
-            attack_magic=row[14],
-            attack_ranged=row[15],
-            defence_stab=row[16],
-            defence_slash=row[17],
-            defence_crush=row[18],
-            defence_magic=row[19],
-            defence_ranged=row[20],
-            melee_strength=row[21],
-            ranged_strength=row[22],
-            magic_damage=row[23],
-            prayer=row[24],
-            speed=row[25],
-            attack_range=row[26],
-            combat_style=CombatStyle.from_label(row[27]) if row[27] else None,
+            attack_stab=row[6],
+            attack_slash=row[7],
+            attack_crush=row[8],
+            attack_magic=row[9],
+            attack_ranged=row[10],
+            defence_stab=row[11],
+            defence_slash=row[12],
+            defence_crush=row[13],
+            defence_magic=row[14],
+            defence_ranged=row[15],
+            melee_strength=row[16],
+            ranged_strength=row[17],
+            magic_damage=row[18],
+            prayer=row[19],
+            speed=row[20],
+            attack_range=row[21],
+            combat_style=CombatStyle.from_label(row[22]) if row[22] else None,
         )
