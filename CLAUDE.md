@@ -405,7 +405,7 @@ activity.game_vars(conn) -> list[GameVariable]          # associated game variab
 ### Recipe (`src/ragger/recipe.py`)
 
 ```python
-from ragger.recipe import Recipe, RecipeSkill, RecipeInputItem, RecipeInputCurrency, RecipeOutputItem, RecipeOutputObject, RecipeTool
+from ragger.recipe import Recipe, RecipeSkill, RecipeInputItem, RecipeInputObject, RecipeInputCurrency, RecipeOutputItem, RecipeOutputObject, RecipeTool
 
 Recipe.all(conn) -> list[Recipe]
 Recipe.by_name(conn, name) -> list[Recipe]             # multiple methods for same output
@@ -416,6 +416,7 @@ Recipe.at_facility(conn, facility) -> list[Recipe]     # recipes requiring a fac
 Recipe.search(conn, name) -> list[Recipe]              # partial name match
 recipe.skills(conn) -> list[RecipeSkill]               # skill requirements and XP
 recipe.input_items(conn) -> list[RecipeInputItem]      # consumed items
+recipe.input_objects(conn) -> list[RecipeInputObject]  # consumed objects (construction upgrades, etc.)
 recipe.input_currencies(conn) -> list[RecipeInputCurrency]  # consumed currencies
 recipe.output_items(conn) -> list[RecipeOutputItem]    # produced items
 recipe.output_objects(conn) -> list[RecipeOutputObject] # produced objects (construction, etc.)

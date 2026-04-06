@@ -216,6 +216,7 @@ def ingest(db_path: Path) -> None:
     conn.execute("DELETE FROM recipe_output_objects")
     conn.execute("DELETE FROM recipe_output_items")
     conn.execute("DELETE FROM recipe_input_currencies")
+    conn.execute("DELETE FROM recipe_input_objects")
     conn.execute("DELETE FROM recipe_input_items")
     conn.execute("DELETE FROM recipe_skills")
     conn.execute("DELETE FROM recipes")
@@ -249,10 +250,17 @@ def ingest(db_path: Path) -> None:
                 )
 
             for inp in recipe["input_items"]:
-                conn.execute(
-                    "INSERT INTO recipe_input_items (recipe_id, item_id, item_name, quantity) VALUES (?, ?, ?, ?)",
-                    (recipe_id, resolve_item(inp["item_name"]), inp["item_name"], inp["quantity"]),
-                )
+                item_id = resolve_item(inp["item_name"])
+                if item_id is not None:
+                    conn.execute(
+                        "INSERT INTO recipe_input_items (recipe_id, item_id, item_name, quantity) VALUES (?, ?, ?, ?)",
+                        (recipe_id, item_id, inp["item_name"], inp["quantity"]),
+                    )
+                else:
+                    conn.execute(
+                        "INSERT INTO recipe_input_objects (recipe_id, object_name) VALUES (?, ?)",
+                        (recipe_id, inp["item_name"]),
+                    )
 
             for inp in recipe["input_currencies"]:
                 conn.execute(
@@ -286,8 +294,9 @@ def ingest(db_path: Path) -> None:
     print(f"Inserted {recipe_count} recipes")
 
     # Record attributions
-    table_names = ["recipes", "recipe_skills", "recipe_input_items", "recipe_input_currencies",
-                    "recipe_output_items", "recipe_output_objects", "recipe_tools"]
+    table_names = ["recipes", "recipe_skills", "recipe_input_items", "recipe_input_objects",
+                    "recipe_input_currencies", "recipe_output_items", "recipe_output_objects",
+                    "recipe_tools"]
     record_attributions_batch(conn, table_names, list(all_wikitext.keys()))
     conn.commit()
     conn.close()

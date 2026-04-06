@@ -22,6 +22,11 @@ class RecipeInputItem:
 
 
 @dataclass
+class RecipeInputObject:
+    object_name: str
+
+
+@dataclass
 class RecipeInputCurrency:
     currency: str
     quantity: int
@@ -150,6 +155,13 @@ class Recipe:
             (self.id,),
         ).fetchall()
         return [RecipeInputItem(item_id=row[0], item_name=row[1], quantity=row[2]) for row in rows]
+
+    def input_objects(self, conn: sqlite3.Connection) -> list[RecipeInputObject]:
+        rows = conn.execute(
+            "SELECT object_name FROM recipe_input_objects WHERE recipe_id = ? ORDER BY object_name",
+            (self.id,),
+        ).fetchall()
+        return [RecipeInputObject(object_name=row[0]) for row in rows]
 
     def input_currencies(self, conn: sqlite3.Connection) -> list[RecipeInputCurrency]:
         rows = conn.execute(

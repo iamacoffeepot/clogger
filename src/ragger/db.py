@@ -504,6 +504,13 @@ SCHEMAS: list[str] = [
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS recipe_input_objects (
+        recipe_id INTEGER NOT NULL,
+        object_name TEXT NOT NULL,
+        FOREIGN KEY (recipe_id) REFERENCES recipes(id)
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS recipe_input_currencies (
         recipe_id INTEGER NOT NULL,
         currency TEXT NOT NULL,
