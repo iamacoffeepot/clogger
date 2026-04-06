@@ -15,6 +15,7 @@ from ragger.wiki import (
     extract_section,
     fetch_category_members,
     fetch_page_wikitext,
+    link_group_requirement,
     link_requirement,
     parse_skill_requirements,
     record_attributions_batch,
@@ -239,16 +240,16 @@ def ingest(db_path: Path) -> None:
     for q in quest_data:
         if q.quest_point_req is not None:
             quest_id = quest_ids[q.name]
-            link_requirement(conn, "quest_point_requirements", {"points": q.quest_point_req},
-                             "quest_quest_point_requirements", "quest_id", quest_id, "quest_point_requirement_id")
+            link_group_requirement(conn, "group_quest_point_requirements", {"points": q.quest_point_req},
+                                   "quest_requirement_groups", "quest_id", quest_id)
             qp_req_count += 1
 
     skill_req_count = 0
     for q in quest_data:
         quest_id = quest_ids[q.name]
         for skill_id, level in q.skill_reqs:
-            link_requirement(conn, "skill_requirements", {"skill": skill_id, "level": level},
-                             "quest_skill_requirements", "quest_id", quest_id, "skill_requirement_id")
+            link_group_requirement(conn, "group_skill_requirements", {"skill": skill_id, "level": level},
+                                   "quest_requirement_groups", "quest_id", quest_id)
             skill_req_count += 1
 
     req_count = 0
@@ -258,8 +259,9 @@ def ingest(db_path: Path) -> None:
             req_quest_id = quest_ids.get(req_name)
             if req_quest_id is None:
                 continue
-            link_requirement(conn, "quest_requirements", {"required_quest_id": req_quest_id, "partial": 1 if partial else 0},
-                             "quest_quest_requirements", "quest_id", quest_id, "quest_requirement_id")
+            link_group_requirement(conn, "group_quest_requirements",
+                                   {"required_quest_id": req_quest_id, "partial": 1 if partial else 0},
+                                   "quest_requirement_groups", "quest_id", quest_id)
             req_count += 1
 
     conn.commit()

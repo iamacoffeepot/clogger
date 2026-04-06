@@ -3,6 +3,7 @@ from pathlib import Path
 
 from ragger.enums import Region
 from ragger.league import LeagueConfig
+from ragger.wiki import link_group_requirement
 
 
 def _seed_quests(conn: sqlite3.Connection) -> None:
@@ -16,15 +17,10 @@ def _seed_quests(conn: sqlite3.Connection) -> None:
     )
     # A requires B
     b_id = conn.execute("SELECT id FROM quests WHERE name = 'Quest B'").fetchone()[0]
-    conn.execute(
-        "INSERT INTO quest_requirements (required_quest_id, partial) VALUES (?, 0)",
-        (b_id,),
-    )
-    req_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
     a_id = conn.execute("SELECT id FROM quests WHERE name = 'Quest A'").fetchone()[0]
-    conn.execute(
-        "INSERT INTO quest_quest_requirements (quest_id, quest_requirement_id) VALUES (?, ?)",
-        (a_id, req_id),
+    link_group_requirement(
+        conn, "group_quest_requirements", {"required_quest_id": b_id},
+        "quest_requirement_groups", "quest_id", a_id,
     )
     conn.commit()
 

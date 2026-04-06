@@ -12,7 +12,7 @@ from pathlib import Path
 
 from ragger.db import create_tables, get_connection
 from ragger.enums import Region
-from ragger.wiki import fetch_page_wikitext, record_attributions_batch, throttle
+from ragger.wiki import fetch_page_wikitext, link_group_requirement, record_attributions_batch, throttle
 
 REGION_REQ_PATTERN = re.compile(r"\{\{RE\|(\w[\w\s]*)\}\}")
 
@@ -86,19 +86,17 @@ def ingest(db_path: Path) -> None:
             no_region += 1
             continue
 
-        conn.execute(
-            "INSERT OR IGNORE INTO region_requirements (regions, any_region) VALUES (?, ?)",
-            (mask, 0),
-        )
-        req_id = conn.execute(
-            "SELECT id FROM region_requirements WHERE regions = ? AND any_region = 0",
-            (mask,),
-        ).fetchone()[0]
-        conn.execute(
-            "INSERT OR IGNORE INTO quest_region_requirements (quest_id, region_requirement_id) VALUES (?, ?)",
-            (quest_id, req_id),
-        )
-        req_count += 1
+        for region in Region:
+            if mask & region.mask:
+                link_group_requirement(
+                    conn,
+                    "group_region_requirements",
+                    {"region": region.value},
+                    "quest_requirement_groups",
+                    "quest_id",
+                    quest_id,
+                )
+                req_count += 1
         throttle()
 
     print("Recording attributions...")

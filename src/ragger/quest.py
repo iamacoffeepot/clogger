@@ -3,9 +3,15 @@ from __future__ import annotations
 import sqlite3
 from dataclasses import dataclass
 
-from ragger.enums import ContentCategory, Region
+from ragger.enums import ContentCategory, Region, Skill
 from ragger.game_variable import GameVariable
-from ragger.requirements import QuestPointRequirement, QuestRequirement, RegionRequirement, SkillRequirement
+from ragger.requirements import (
+    GroupQuestPointRequirement,
+    GroupQuestRequirement,
+    GroupRegionRequirement,
+    GroupSkillRequirement,
+    RequirementGroup,
+)
 from ragger.rewards import ExperienceReward, ItemReward
 from ragger.utils import snake_case
 
@@ -52,54 +58,57 @@ class Quest:
         ).fetchall()
         return [ItemReward(*row) for row in rows]
 
-    def skill_requirements(self, conn: sqlite3.Connection) -> list[SkillRequirement]:
+    def requirement_groups(self, conn: sqlite3.Connection) -> list[RequirementGroup]:
+        return RequirementGroup.for_quest(conn, self.id)
+
+    def skill_requirements(self, conn: sqlite3.Connection) -> list[GroupSkillRequirement]:
         rows = conn.execute(
             """
-            SELECT sr.id, sr.skill, sr.level
-            FROM skill_requirements sr
-            JOIN quest_skill_requirements qsr ON qsr.skill_requirement_id = sr.id
-            WHERE qsr.quest_id = ?
-            ORDER BY sr.level DESC
+            SELECT gsr.id, gsr.group_id, gsr.skill, gsr.level, gsr.boostable
+            FROM group_skill_requirements gsr
+            JOIN quest_requirement_groups qrg ON qrg.group_id = gsr.group_id
+            WHERE qrg.quest_id = ?
+            ORDER BY gsr.level DESC
             """,
             (self.id,),
         ).fetchall()
-        return [SkillRequirement(row[0], row[1], row[2]) for row in rows]
+        return [GroupSkillRequirement(r[0], r[1], Skill(r[2]), r[3], bool(r[4])) for r in rows]
 
-    def quest_requirements(self, conn: sqlite3.Connection) -> list[QuestRequirement]:
+    def quest_requirements(self, conn: sqlite3.Connection) -> list[GroupQuestRequirement]:
         rows = conn.execute(
             """
-            SELECT qr.id, qr.required_quest_id, qr.partial
-            FROM quest_requirements qr
-            JOIN quest_quest_requirements qqr ON qqr.quest_requirement_id = qr.id
-            WHERE qqr.quest_id = ?
+            SELECT gqr.id, gqr.group_id, gqr.required_quest_id, gqr.partial
+            FROM group_quest_requirements gqr
+            JOIN quest_requirement_groups qrg ON qrg.group_id = gqr.group_id
+            WHERE qrg.quest_id = ?
             """,
             (self.id,),
         ).fetchall()
-        return [QuestRequirement(row[0], row[1], bool(row[2])) for row in rows]
+        return [GroupQuestRequirement(r[0], r[1], r[2], bool(r[3])) for r in rows]
 
-    def quest_point_requirement(self, conn: sqlite3.Connection) -> QuestPointRequirement | None:
+    def quest_point_requirement(self, conn: sqlite3.Connection) -> GroupQuestPointRequirement | None:
         row = conn.execute(
             """
-            SELECT qpr.id, qpr.points
-            FROM quest_point_requirements qpr
-            JOIN quest_quest_point_requirements qqpr ON qqpr.quest_point_requirement_id = qpr.id
-            WHERE qqpr.quest_id = ?
+            SELECT gqpr.id, gqpr.group_id, gqpr.points
+            FROM group_quest_point_requirements gqpr
+            JOIN quest_requirement_groups qrg ON qrg.group_id = gqpr.group_id
+            WHERE qrg.quest_id = ?
             """,
             (self.id,),
         ).fetchone()
-        return QuestPointRequirement(*row) if row else None
+        return GroupQuestPointRequirement(row[0], row[1], row[2]) if row else None
 
-    def region_requirements(self, conn: sqlite3.Connection) -> list[RegionRequirement]:
+    def region_requirements(self, conn: sqlite3.Connection) -> list[GroupRegionRequirement]:
         rows = conn.execute(
             """
-            SELECT rr.id, rr.regions, rr.any_region
-            FROM region_requirements rr
-            JOIN quest_region_requirements qrr ON qrr.region_requirement_id = rr.id
-            WHERE qrr.quest_id = ?
+            SELECT grr.id, grr.group_id, grr.region
+            FROM group_region_requirements grr
+            JOIN quest_requirement_groups qrg ON qrg.group_id = grr.group_id
+            WHERE qrg.quest_id = ?
             """,
             (self.id,),
         ).fetchall()
-        return [RegionRequirement(row[0], row[1], bool(row[2])) for row in rows]
+        return [GroupRegionRequirement(r[0], r[1], Region(r[2])) for r in rows]
 
     def requirement_chain(self, conn: sqlite3.Connection) -> list[Quest]:
         """Recursively resolve all quests required to complete this quest."""
@@ -111,9 +120,9 @@ class Quest:
                 """
                 SELECT q.id, q.name, q.points
                 FROM quests q
-                JOIN quest_requirements qr ON qr.required_quest_id = q.id
-                JOIN quest_quest_requirements qqr ON qqr.quest_requirement_id = qr.id
-                WHERE qqr.quest_id = ?
+                JOIN group_quest_requirements gqr ON gqr.required_quest_id = q.id
+                JOIN quest_requirement_groups qrg ON qrg.group_id = gqr.group_id
+                WHERE qrg.quest_id = ?
                 """,
                 (quest_id,),
             ).fetchall()
@@ -136,9 +145,9 @@ class Quest:
                 """
                 SELECT q.id, q.name
                 FROM quests q
-                JOIN quest_requirements qr ON qr.required_quest_id = q.id
-                JOIN quest_quest_requirements qqr ON qqr.quest_requirement_id = qr.id
-                WHERE qqr.quest_id = ?
+                JOIN group_quest_requirements gqr ON gqr.required_quest_id = q.id
+                JOIN quest_requirement_groups qrg ON qrg.group_id = gqr.group_id
+                WHERE qrg.quest_id = ?
                 ORDER BY q.name
                 """,
                 (quest_id,),

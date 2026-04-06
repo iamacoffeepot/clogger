@@ -353,12 +353,12 @@ class Account:
 
             if check_skills:
                 reqs = quest.skill_requirements(self.conn)
-                if any(not self.has_skill(Skill(r.skill), r.level) for r in reqs):
+                if any(not self.has_skill(r.skill, r.level) for r in reqs):
                     continue
 
             if check_regions:
                 region_reqs = quest.region_requirements(self.conn)
-                if not self._meets_region_reqs(region_reqs):
+                if any(not self.has_region(r.region) for r in region_reqs):
                     continue
 
             if check_quests:

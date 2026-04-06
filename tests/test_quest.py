@@ -2,8 +2,9 @@ import sqlite3
 
 from ragger.enums import Skill
 from ragger.quest import Quest
-from ragger.requirements import QuestPointRequirement, QuestRequirement, SkillRequirement
+from ragger.requirements import GroupQuestPointRequirement, GroupQuestRequirement, GroupSkillRequirement
 from ragger.rewards import ExperienceReward, ItemReward
+from ragger.wiki import link_group_requirement
 
 
 def _seed_quests(conn: sqlite3.Connection) -> None:
@@ -81,20 +82,19 @@ def test_item_rewards(conn: sqlite3.Connection) -> None:
 def test_skill_requirements(conn: sqlite3.Connection) -> None:
     _seed_quests(conn)
     quest = Quest.by_name(conn, "Dragon Slayer I")
-    conn.execute(
-        "INSERT INTO skill_requirements (skill, level) VALUES (?, ?)",
-        (Skill.MINING.value, 40),
-    )
-    req_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
-    conn.execute(
-        "INSERT INTO quest_skill_requirements (quest_id, skill_requirement_id) VALUES (?, ?)",
-        (quest.id, req_id),
+    link_group_requirement(
+        conn,
+        "group_skill_requirements",
+        {"skill": Skill.MINING.value, "level": 40},
+        "quest_requirement_groups",
+        "quest_id",
+        quest.id,
     )
     conn.commit()
 
     reqs = quest.skill_requirements(conn)
     assert len(reqs) == 1
-    assert isinstance(reqs[0], SkillRequirement)
+    assert isinstance(reqs[0], GroupSkillRequirement)
     assert reqs[0].skill == Skill.MINING
     assert reqs[0].level == 40
 
@@ -103,20 +103,19 @@ def test_quest_requirements(conn: sqlite3.Connection) -> None:
     _seed_quests(conn)
     ds1 = Quest.by_name(conn, "Dragon Slayer I")
     lc = Quest.by_name(conn, "Lost City")
-    conn.execute(
-        "INSERT INTO quest_requirements (required_quest_id, partial) VALUES (?, ?)",
-        (lc.id, 0),
-    )
-    req_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
-    conn.execute(
-        "INSERT INTO quest_quest_requirements (quest_id, quest_requirement_id) VALUES (?, ?)",
-        (ds1.id, req_id),
+    link_group_requirement(
+        conn,
+        "group_quest_requirements",
+        {"required_quest_id": lc.id},
+        "quest_requirement_groups",
+        "quest_id",
+        ds1.id,
     )
     conn.commit()
 
     reqs = ds1.quest_requirements(conn)
     assert len(reqs) == 1
-    assert isinstance(reqs[0], QuestRequirement)
+    assert isinstance(reqs[0], GroupQuestRequirement)
     assert reqs[0].required_quest_id == lc.id
     assert reqs[0].partial is False
 
@@ -124,17 +123,19 @@ def test_quest_requirements(conn: sqlite3.Connection) -> None:
 def test_quest_point_requirement(conn: sqlite3.Connection) -> None:
     _seed_quests(conn)
     quest = Quest.by_name(conn, "Dragon Slayer I")
-    conn.execute("INSERT INTO quest_point_requirements (points) VALUES (?)", (32,))
-    req_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
-    conn.execute(
-        "INSERT INTO quest_quest_point_requirements (quest_id, quest_point_requirement_id) VALUES (?, ?)",
-        (quest.id, req_id),
+    link_group_requirement(
+        conn,
+        "group_quest_point_requirements",
+        {"points": 32},
+        "quest_requirement_groups",
+        "quest_id",
+        quest.id,
     )
     conn.commit()
 
     req = quest.quest_point_requirement(conn)
     assert req is not None
-    assert isinstance(req, QuestPointRequirement)
+    assert isinstance(req, GroupQuestPointRequirement)
     assert req.points == 32
 
 
@@ -155,25 +156,14 @@ def test_requirement_chain(conn: sqlite3.Connection) -> None:
     c = Quest.by_name(conn, "Quest C")
 
     # A requires B
-    conn.execute(
-        "INSERT INTO quest_requirements (required_quest_id, partial) VALUES (?, ?)",
-        (b.id, 0),
+    link_group_requirement(
+        conn, "group_quest_requirements", {"required_quest_id": b.id},
+        "quest_requirement_groups", "quest_id", a.id,
     )
-    req_b_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
-    conn.execute(
-        "INSERT INTO quest_quest_requirements (quest_id, quest_requirement_id) VALUES (?, ?)",
-        (a.id, req_b_id),
-    )
-
     # B requires C
-    conn.execute(
-        "INSERT INTO quest_requirements (required_quest_id, partial) VALUES (?, ?)",
-        (c.id, 0),
-    )
-    req_c_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
-    conn.execute(
-        "INSERT INTO quest_quest_requirements (quest_id, quest_requirement_id) VALUES (?, ?)",
-        (b.id, req_c_id),
+    link_group_requirement(
+        conn, "group_quest_requirements", {"required_quest_id": c.id},
+        "quest_requirement_groups", "quest_id", b.id,
     )
     conn.commit()
 
@@ -195,23 +185,13 @@ def test_requirement_tree(conn: sqlite3.Connection) -> None:
     b = Quest.by_name(conn, "Quest B")
     c = Quest.by_name(conn, "Quest C")
 
-    conn.execute(
-        "INSERT INTO quest_requirements (required_quest_id, partial) VALUES (?, ?)",
-        (b.id, 0),
+    link_group_requirement(
+        conn, "group_quest_requirements", {"required_quest_id": b.id},
+        "quest_requirement_groups", "quest_id", a.id,
     )
-    req_b_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
-    conn.execute(
-        "INSERT INTO quest_quest_requirements (quest_id, quest_requirement_id) VALUES (?, ?)",
-        (a.id, req_b_id),
-    )
-    conn.execute(
-        "INSERT INTO quest_requirements (required_quest_id, partial) VALUES (?, ?)",
-        (c.id, 0),
-    )
-    req_c_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
-    conn.execute(
-        "INSERT INTO quest_quest_requirements (quest_id, quest_requirement_id) VALUES (?, ?)",
-        (b.id, req_c_id),
+    link_group_requirement(
+        conn, "group_quest_requirements", {"required_quest_id": c.id},
+        "quest_requirement_groups", "quest_id", b.id,
     )
     conn.commit()
 
