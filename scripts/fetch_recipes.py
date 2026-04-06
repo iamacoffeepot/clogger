@@ -192,19 +192,23 @@ def ingest(db_path: Path) -> None:
     pages = fetch_template_users("Recipe")
     print(f"Found {len(pages)} pages")
 
-    # Build item name -> id lookup with dose/charge suffix fallback
+    # Build item name -> id lookup with fallback strategies
     item_rows = conn.execute("SELECT id, name FROM items").fetchall()
     item_lookup: dict[str, int] = {name: id for id, name in item_rows}
-    _dose_pattern = re.compile(r"^(.+?)\s*\((\d+)\)$")
+    _paren_suffix = re.compile(r"^(.+?)\s*\([^)]+\)$")
 
     def resolve_item(name: str) -> int | None:
+        # Exact match
         item_id = item_lookup.get(name)
         if item_id is not None:
             return item_id
-        # Strip dose/charge suffix: "Super restore(4)" -> "Super restore"
-        m = _dose_pattern.match(name)
+        # Strip any parenthesized suffix: "Super restore(4)", "Granite (5kg)",
+        # "Pharaoh's sceptre (uncharged)", "Apple seedling (w)", etc.
+        m = _paren_suffix.match(name)
         if m:
-            return item_lookup.get(m.group(1).strip())
+            item_id = item_lookup.get(m.group(1).strip())
+            if item_id is not None:
+                return item_id
         return None
 
     # Clear existing recipe data for clean re-import
