@@ -494,7 +494,7 @@ SCHEMAS: list[str] = [
     )
     """,
     """
-    CREATE TABLE IF NOT EXISTS recipe_inputs (
+    CREATE TABLE IF NOT EXISTS recipe_input_items (
         recipe_id INTEGER NOT NULL,
         item_id INTEGER,
         item_name TEXT NOT NULL,
@@ -504,13 +504,28 @@ SCHEMAS: list[str] = [
     )
     """,
     """
-    CREATE TABLE IF NOT EXISTS recipe_outputs (
+    CREATE TABLE IF NOT EXISTS recipe_input_currencies (
+        recipe_id INTEGER NOT NULL,
+        currency TEXT NOT NULL,
+        quantity INTEGER NOT NULL DEFAULT 1,
+        FOREIGN KEY (recipe_id) REFERENCES recipes(id)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS recipe_output_items (
         recipe_id INTEGER NOT NULL,
         item_id INTEGER,
         item_name TEXT NOT NULL,
         quantity INTEGER NOT NULL DEFAULT 1,
         FOREIGN KEY (recipe_id) REFERENCES recipes(id),
         FOREIGN KEY (item_id) REFERENCES items(id)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS recipe_output_objects (
+        recipe_id INTEGER NOT NULL,
+        object_name TEXT NOT NULL,
+        FOREIGN KEY (recipe_id) REFERENCES recipes(id)
     )
     """,
     """

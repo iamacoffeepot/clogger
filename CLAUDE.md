@@ -405,7 +405,7 @@ activity.game_vars(conn) -> list[GameVariable]          # associated game variab
 ### Recipe (`src/ragger/recipe.py`)
 
 ```python
-from ragger.recipe import Recipe, RecipeSkill, RecipeInput, RecipeOutput, RecipeTool
+from ragger.recipe import Recipe, RecipeSkill, RecipeInputItem, RecipeInputCurrency, RecipeOutputItem, RecipeOutputObject, RecipeTool
 
 Recipe.all(conn) -> list[Recipe]
 Recipe.by_name(conn, name) -> list[Recipe]             # multiple methods for same output
@@ -415,8 +415,10 @@ Recipe.using(conn, item_name) -> list[Recipe]          # recipes that consume an
 Recipe.at_facility(conn, facility) -> list[Recipe]     # recipes requiring a facility
 Recipe.search(conn, name) -> list[Recipe]              # partial name match
 recipe.skills(conn) -> list[RecipeSkill]               # skill requirements and XP
-recipe.inputs(conn) -> list[RecipeInput]               # consumed materials
-recipe.outputs(conn) -> list[RecipeOutput]             # produced items (only resolved items)
+recipe.input_items(conn) -> list[RecipeInputItem]      # consumed items
+recipe.input_currencies(conn) -> list[RecipeInputCurrency]  # consumed currencies
+recipe.output_items(conn) -> list[RecipeOutputItem]    # produced items
+recipe.output_objects(conn) -> list[RecipeOutputObject] # produced objects (construction, etc.)
 recipe.tools(conn) -> list[RecipeTool]                 # non-consumed tools
 recipe.name -> str                                     # what the recipe creates
 recipe.members -> bool

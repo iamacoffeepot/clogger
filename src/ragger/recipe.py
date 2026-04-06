@@ -15,17 +15,28 @@ class RecipeSkill:
 
 
 @dataclass
-class RecipeInput:
+class RecipeInputItem:
     item_id: int | None
     item_name: str
     quantity: int
 
 
 @dataclass
-class RecipeOutput:
+class RecipeInputCurrency:
+    currency: str
+    quantity: int
+
+
+@dataclass
+class RecipeOutputItem:
     item_id: int | None
     item_name: str
     quantity: int
+
+
+@dataclass
+class RecipeOutputObject:
+    object_name: str
 
 
 @dataclass
@@ -54,6 +65,15 @@ class Recipe:
         return [cls._from_row(row) for row in rows]
 
     @classmethod
+    def by_name(cls, conn: sqlite3.Connection, name: str) -> list[Recipe]:
+        """Find recipes by name (may have multiple methods for same output)."""
+        rows = conn.execute(
+            f"SELECT {cls._COLS} FROM recipes WHERE name = ? ORDER BY id",
+            (name,),
+        ).fetchall()
+        return [cls._from_row(row) for row in rows]
+
+    @classmethod
     def by_skill(cls, conn: sqlite3.Connection, skill: Skill) -> list[Recipe]:
         rows = conn.execute(
             f"""SELECT DISTINCT r.{cls._COLS.replace(', ', ', r.')}
@@ -71,7 +91,7 @@ class Recipe:
         rows = conn.execute(
             f"""SELECT r.{cls._COLS.replace(', ', ', r.')}
                 FROM recipes r
-                JOIN recipe_outputs ro ON ro.recipe_id = r.id
+                JOIN recipe_output_items ro ON ro.recipe_id = r.id
                 WHERE ro.item_name = ?
                 ORDER BY r.id""",
             (item_name,),
@@ -84,7 +104,7 @@ class Recipe:
         rows = conn.execute(
             f"""SELECT r.{cls._COLS.replace(', ', ', r.')}
                 FROM recipes r
-                JOIN recipe_inputs ri ON ri.recipe_id = r.id
+                JOIN recipe_input_items ri ON ri.recipe_id = r.id
                 WHERE ri.item_name = ?
                 ORDER BY r.id""",
             (item_name,),
@@ -97,6 +117,15 @@ class Recipe:
         rows = conn.execute(
             f"SELECT {cls._COLS} FROM recipes WHERE facilities = ? ORDER BY id",
             (facility,),
+        ).fetchall()
+        return [cls._from_row(row) for row in rows]
+
+    @classmethod
+    def search(cls, conn: sqlite3.Connection, name: str) -> list[Recipe]:
+        """Find recipes whose name matches a partial string."""
+        rows = conn.execute(
+            f"SELECT {cls._COLS} FROM recipes WHERE name LIKE ? ORDER BY name, id",
+            (f"%{name}%",),
         ).fetchall()
         return [cls._from_row(row) for row in rows]
 
@@ -115,19 +144,33 @@ class Recipe:
             for row in rows
         ]
 
-    def inputs(self, conn: sqlite3.Connection) -> list[RecipeInput]:
+    def input_items(self, conn: sqlite3.Connection) -> list[RecipeInputItem]:
         rows = conn.execute(
-            "SELECT item_id, item_name, quantity FROM recipe_inputs WHERE recipe_id = ? ORDER BY item_name",
+            "SELECT item_id, item_name, quantity FROM recipe_input_items WHERE recipe_id = ? ORDER BY item_name",
             (self.id,),
         ).fetchall()
-        return [RecipeInput(item_id=row[0], item_name=row[1], quantity=row[2]) for row in rows]
+        return [RecipeInputItem(item_id=row[0], item_name=row[1], quantity=row[2]) for row in rows]
 
-    def outputs(self, conn: sqlite3.Connection) -> list[RecipeOutput]:
+    def input_currencies(self, conn: sqlite3.Connection) -> list[RecipeInputCurrency]:
         rows = conn.execute(
-            "SELECT item_id, item_name, quantity FROM recipe_outputs WHERE recipe_id = ? ORDER BY item_name",
+            "SELECT currency, quantity FROM recipe_input_currencies WHERE recipe_id = ? ORDER BY currency",
             (self.id,),
         ).fetchall()
-        return [RecipeOutput(item_id=row[0], item_name=row[1], quantity=row[2]) for row in rows]
+        return [RecipeInputCurrency(currency=row[0], quantity=row[1]) for row in rows]
+
+    def output_items(self, conn: sqlite3.Connection) -> list[RecipeOutputItem]:
+        rows = conn.execute(
+            "SELECT item_id, item_name, quantity FROM recipe_output_items WHERE recipe_id = ? ORDER BY item_name",
+            (self.id,),
+        ).fetchall()
+        return [RecipeOutputItem(item_id=row[0], item_name=row[1], quantity=row[2]) for row in rows]
+
+    def output_objects(self, conn: sqlite3.Connection) -> list[RecipeOutputObject]:
+        rows = conn.execute(
+            "SELECT object_name FROM recipe_output_objects WHERE recipe_id = ? ORDER BY object_name",
+            (self.id,),
+        ).fetchall()
+        return [RecipeOutputObject(object_name=row[0]) for row in rows]
 
     def tools(self, conn: sqlite3.Connection) -> list[RecipeTool]:
         rows = conn.execute(
@@ -135,24 +178,6 @@ class Recipe:
             (self.id,),
         ).fetchall()
         return [RecipeTool(tool_group=row[0], item_id=row[1], item_name=row[2]) for row in rows]
-
-    @classmethod
-    def by_name(cls, conn: sqlite3.Connection, name: str) -> list[Recipe]:
-        """Find recipes by name (may have multiple methods for same output)."""
-        rows = conn.execute(
-            f"SELECT {cls._COLS} FROM recipes WHERE name = ? ORDER BY id",
-            (name,),
-        ).fetchall()
-        return [cls._from_row(row) for row in rows]
-
-    @classmethod
-    def search(cls, conn: sqlite3.Connection, name: str) -> list[Recipe]:
-        """Find recipes whose name matches a partial string."""
-        rows = conn.execute(
-            f"SELECT {cls._COLS} FROM recipes WHERE name LIKE ? ORDER BY name, id",
-            (f"%{name}%",),
-        ).fetchall()
-        return [cls._from_row(row) for row in rows]
 
     @classmethod
     def _from_row(cls, row: tuple) -> Recipe:

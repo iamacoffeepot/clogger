@@ -90,7 +90,8 @@ def parse_recipe(block: str, page_name: str) -> dict | None:
         "notes": parse_template_param(block, "notes"),
         "facilities": parse_template_param(block, "facilities"),
         "skills": [],
-        "inputs": [],
+        "input_items": [],
+        "input_currencies": [],
         "outputs": [],
         "tools": [],
     }
@@ -112,19 +113,26 @@ def parse_recipe(block: str, page_name: str) -> dict | None:
             })
         i += 1
 
-    # Parse inputs (mat1, mat2, ...)
+    # Parse inputs (mat1, mat2, ...) — route to items or currencies
     i = 1
     while True:
         mat = parse_template_param(block, f"mat{i}")
-        if not mat:
+        currency = parse_template_param(block, f"mat{i}currency")
+        if not mat and not currency:
             break
-        item_name = clean_page_reference(strip_wiki_links(mat.strip()), page_name)
-        if item_name:
-            quantity = parse_int(parse_template_param(block, f"mat{i}quantity")) or 1
-            recipe["inputs"].append({
-                "item_name": item_name,
+        quantity = parse_int(parse_template_param(block, f"mat{i}quantity")) or 1
+        if currency:
+            recipe["input_currencies"].append({
+                "currency": clean_page_reference(strip_wiki_links(currency.strip()), page_name),
                 "quantity": quantity,
             })
+        elif mat:
+            item_name = clean_page_reference(strip_wiki_links(mat.strip()), page_name)
+            if item_name:
+                recipe["input_items"].append({
+                    "item_name": item_name,
+                    "quantity": quantity,
+                })
         i += 1
 
     # Recipe name from output1 (what this recipe creates)
@@ -201,8 +209,10 @@ def ingest(db_path: Path) -> None:
 
     # Clear existing recipe data for clean re-import
     conn.execute("DELETE FROM recipe_tools")
-    conn.execute("DELETE FROM recipe_outputs")
-    conn.execute("DELETE FROM recipe_inputs")
+    conn.execute("DELETE FROM recipe_output_objects")
+    conn.execute("DELETE FROM recipe_output_items")
+    conn.execute("DELETE FROM recipe_input_currencies")
+    conn.execute("DELETE FROM recipe_input_items")
     conn.execute("DELETE FROM recipe_skills")
     conn.execute("DELETE FROM recipes")
     conn.commit()
@@ -234,20 +244,30 @@ def ingest(db_path: Path) -> None:
                     (recipe_id, skill["skill"], skill["level"], skill["xp"], skill["boostable"]),
                 )
 
-            for inp in recipe["inputs"]:
+            for inp in recipe["input_items"]:
                 conn.execute(
-                    "INSERT INTO recipe_inputs (recipe_id, item_id, item_name, quantity) VALUES (?, ?, ?, ?)",
+                    "INSERT INTO recipe_input_items (recipe_id, item_id, item_name, quantity) VALUES (?, ?, ?, ?)",
                     (recipe_id, resolve_item(inp["item_name"]), inp["item_name"], inp["quantity"]),
+                )
+
+            for inp in recipe["input_currencies"]:
+                conn.execute(
+                    "INSERT INTO recipe_input_currencies (recipe_id, currency, quantity) VALUES (?, ?, ?)",
+                    (recipe_id, inp["currency"], inp["quantity"]),
                 )
 
             for out in recipe["outputs"]:
                 item_id = resolve_item(out["item_name"])
-                if item_id is None:
-                    continue
-                conn.execute(
-                    "INSERT INTO recipe_outputs (recipe_id, item_id, item_name, quantity) VALUES (?, ?, ?, ?)",
-                    (recipe_id, item_id, out["item_name"], out["quantity"]),
-                )
+                if item_id is not None:
+                    conn.execute(
+                        "INSERT INTO recipe_output_items (recipe_id, item_id, item_name, quantity) VALUES (?, ?, ?, ?)",
+                        (recipe_id, item_id, out["item_name"], out["quantity"]),
+                    )
+                else:
+                    conn.execute(
+                        "INSERT INTO recipe_output_objects (recipe_id, object_name) VALUES (?, ?)",
+                        (recipe_id, out["item_name"]),
+                    )
 
 
             for tool in recipe["tools"]:
@@ -262,7 +282,8 @@ def ingest(db_path: Path) -> None:
     print(f"Inserted {recipe_count} recipes")
 
     # Record attributions
-    table_names = ["recipes", "recipe_skills", "recipe_inputs", "recipe_outputs", "recipe_tools"]
+    table_names = ["recipes", "recipe_skills", "recipe_input_items", "recipe_input_currencies",
+                    "recipe_output_items", "recipe_output_objects", "recipe_tools"]
     record_attributions_batch(conn, table_names, list(all_wikitext.keys()))
     conn.commit()
     conn.close()
