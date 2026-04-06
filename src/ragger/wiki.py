@@ -209,6 +209,70 @@ def extract_template(wikitext: str, template_name: str) -> str | None:
     return None
 
 
+def extract_all_templates(wikitext: str, template_name: str) -> list[str]:
+    """Extract all occurrences of a template from wikitext.
+
+    Like extract_template but returns every match, not just the first.
+    Useful for pages with multiple {{Recipe}} blocks, etc.
+    """
+    results: list[str] = []
+    search_from = 0
+    prefix = "{{" + template_name
+    while True:
+        start = wikitext.find(prefix, search_from)
+        if start == -1:
+            break
+        depth = 0
+        i = start
+        while i < len(wikitext):
+            if wikitext[i:i + 2] == "{{":
+                depth += 1
+                i += 2
+            elif wikitext[i:i + 2] == "}}":
+                depth -= 1
+                if depth == 0:
+                    results.append(wikitext[start + len(prefix):i])
+                    search_from = i + 2
+                    break
+                i += 2
+            else:
+                i += 1
+        else:
+            break
+    return results
+
+
+def fetch_template_users(template_name: str) -> list[str]:
+    """Fetch all mainspace pages that transclude a given template.
+
+    Uses the embeddedin API with pagination (500 per request).
+    """
+    pages: list[str] = []
+    params = {
+        "action": "query",
+        "list": "embeddedin",
+        "eititle": f"Template:{template_name}",
+        "eilimit": "500",
+        "einamespace": "0",
+        "format": "json",
+    }
+
+    while True:
+        resp = requests.get(API_URL, params=params, headers=HEADERS)
+        resp.raise_for_status()
+        data = resp.json()
+
+        for item in data["query"]["embeddedin"]:
+            pages.append(item["title"])
+
+        if "continue" in data:
+            params["eicontinue"] = data["continue"]["eicontinue"]
+        else:
+            break
+
+    return sorted(pages)
+
+
 def extract_section(wikitext: str, field_name: str) -> str:
     """Extract a |field= section from a template, handling nested braces.
 

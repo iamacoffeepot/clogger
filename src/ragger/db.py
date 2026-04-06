@@ -472,6 +472,59 @@ SCHEMAS: list[str] = [
         UNIQUE(name, version)
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS recipes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        members INTEGER NOT NULL DEFAULT 1,
+        ticks INTEGER,
+        notes TEXT,
+        facilities TEXT
+    )
+    """,
+    f"""
+    CREATE TABLE IF NOT EXISTS recipe_skills (
+        recipe_id INTEGER NOT NULL,
+        skill INTEGER NOT NULL CHECK(skill IN ({_skill_ids})),
+        level INTEGER NOT NULL,
+        xp REAL NOT NULL DEFAULT 0,
+        boostable INTEGER,
+        FOREIGN KEY (recipe_id) REFERENCES recipes(id),
+        PRIMARY KEY (recipe_id, skill)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS recipe_inputs (
+        recipe_id INTEGER NOT NULL,
+        item_id INTEGER,
+        item_name TEXT NOT NULL,
+        quantity INTEGER NOT NULL DEFAULT 1,
+        FOREIGN KEY (recipe_id) REFERENCES recipes(id),
+        FOREIGN KEY (item_id) REFERENCES items(id)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS recipe_outputs (
+        recipe_id INTEGER NOT NULL,
+        item_id INTEGER,
+        item_name TEXT NOT NULL,
+        quantity INTEGER NOT NULL DEFAULT 1,
+        FOREIGN KEY (recipe_id) REFERENCES recipes(id),
+        FOREIGN KEY (item_id) REFERENCES items(id)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS recipe_tools (
+        recipe_id INTEGER NOT NULL,
+        -- Tools are grouped by tool_group. All groups are AND'd together;
+        -- items within the same group are OR'd (alternatives).
+        -- E.g. group 0: Knife AND group 1: (Air tiara OR Air talisman)
+        tool_group INTEGER NOT NULL DEFAULT 0,
+        item_id INTEGER,
+        item_name TEXT NOT NULL,
+        FOREIGN KEY (recipe_id) REFERENCES recipes(id),
+        FOREIGN KEY (item_id) REFERENCES items(id)
+    )
+    """,
 ]
 
 

@@ -43,19 +43,20 @@ Pipeline order (managed by `fetch_all.py`):
 14. `fetch_charter_ships.py` — Parses charter ship dock coordinates from Trader Stan's Trading Post
 15. `fetch_magic_teleports.py` — Parses all spellbook teleports (Standard, Ancient, Lunar) and item teleports (jewellery, etc.)
 16. `fetch_activities.py` — Pulls activities/minigames with type, coordinates, skills bitmask, and region from Category:Activities
-17. `link_shop_locations.py` — Links shops to locations by matching location text
-18. `link_activity_locations.py` — Links activities to locations by matching location text
-19. `link_facilities.py` — Derives facility bitmasks on locations from nearest facility coordinates
-20. `compute_walkability.py` — Computes walkable connections via Voronoi edge flood fill and map tile collision data. Supports `--area-threshold`, `--edge-samples`, `--resolution`, `--debug` flags.
+17. `fetch_npcs.py` — Pulls non-combat NPC data (name, version, location, options, region) from Category:Non-player characters
+18. `fetch_recipes.py` — Pulls item recipes from all pages using {{Recipe}} template (skills, inputs, outputs, tools, ticks, facilities)
+19. `fetch_wiki_vars.py` — Scrapes RuneScape:Varplayer/* and RuneScape:Varbit/* wiki pages for descriptions, content links, var class, and value annotations (quest stages, etc.)
+20. `link_shop_locations.py` — Links shops to locations by matching location text
+21. `link_activity_locations.py` — Links activities to locations by matching location text
+22. `link_facilities.py` — Derives facility bitmasks on locations from nearest facility coordinates
+23. `compute_walkability.py` — Computes walkable connections via Voronoi edge flood fill and map tile collision data. Supports `--area-threshold`, `--edge-samples`, `--resolution`, `--debug` flags.
 
 ### Utility scripts
 
 - `import_map_squares.py` — Imports map square images from `data/map-squares.zip` into the `map_squares` table. One-time setup.
 - `import_game_vars.py` — Imports game var JSON from `data/game-vars/` (produced by `dumpGameVariables`) into the `game_vars` table. Re-run after updating RuneLite.
 - `classify_game_vars.py` — Classifies game variable names using Claude CLI. Tags vars with content categories and functional tags. Supports `--workers`, `--batch-size`, `--session-reset`, `--model`, `--reclassify` flags.
-20. `fetch_league_tasks.py` — Pulls league tasks (with `--league` flag)
-21. `fetch_npcs.py` — Pulls non-combat NPC data (name, version, location, options, region) from Category:Non-player characters
-22. `fetch_wiki_vars.py` — Scrapes RuneScape:Varplayer/* and RuneScape:Varbit/* wiki pages for descriptions, content links, var class, and value annotations (quest stages, etc.)
+- `fetch_league_tasks.py` — Pulls league tasks (with `--league` flag)
 
 ## Cache Dump Tool
 
@@ -399,6 +400,31 @@ activity.players -> str | None
 activity.skills -> int                                 # bitmask
 activity.region -> Region | None
 activity.game_vars(conn) -> list[GameVariable]          # associated game variables
+```
+
+### Recipe (`src/ragger/recipe.py`)
+
+```python
+from ragger.recipe import Recipe, RecipeSkill, RecipeInput, RecipeOutput, RecipeTool
+
+Recipe.all(conn) -> list[Recipe]
+Recipe.by_skill(conn, skill) -> list[Recipe]           # recipes using a specific skill
+Recipe.for_item(conn, item_name) -> list[Recipe]       # recipes that produce an item
+Recipe.using(conn, item_name) -> list[Recipe]          # recipes that consume an item as input
+Recipe.at_facility(conn, facility) -> list[Recipe]     # recipes requiring a facility
+Recipe.search_output(conn, name) -> list[Recipe]       # partial output name match
+recipe.skills(conn) -> list[RecipeSkill]               # skill requirements and XP
+recipe.inputs(conn) -> list[RecipeInput]               # consumed materials
+recipe.outputs(conn) -> list[RecipeOutput]             # produced items
+recipe.tools(conn) -> list[RecipeTool]                 # non-consumed tools
+recipe.members -> bool
+recipe.ticks -> int | None                             # game ticks per action
+recipe.notes -> str | None                             # quest/other requirements
+recipe.facilities -> str | None                        # required facility (Furnace, Anvil, etc.)
+
+# RecipeTool.tool_group groups alternatives: all groups are AND'd together;
+# items within the same group are OR'd.
+# E.g. group 0: Knife AND group 1: (Air tiara OR Air talisman)
 ```
 
 ### Npc (`src/ragger/npc.py`)
