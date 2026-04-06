@@ -65,6 +65,14 @@ def parse_league_region(wikitext: str) -> int:
         except KeyError:
             pass
 
+    # "Not completable, as it requires access to <Region>"
+    access_match = re.search(r"requires access to (\w[\w\s]*?)\.?\s*$", field, re.MULTILINE)
+    if access_match:
+        try:
+            return Region.from_label(access_match.group(1).strip()).mask
+        except KeyError:
+            pass
+
     return 0
 
 
