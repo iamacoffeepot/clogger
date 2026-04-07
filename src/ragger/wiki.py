@@ -12,6 +12,8 @@ THROTTLE_DELAY = float(os.environ.get("RAGGER_THROTTLE", DEFAULT_THROTTLE))
 
 from ragger.enums import Region, Skill
 
+# Maximum pages per MediaWiki API batch request (action=query limit).
+WIKI_BATCH_SIZE = 50
 API_URL = "https://oldschool.runescape.wiki/api.php"
 USER_AGENT = "ragger/0.2 (https://github.com/iamacoffeepot/ragger) OSRS Leagues planner"
 HEADERS = {"User-Agent": USER_AGENT}
@@ -139,15 +141,15 @@ def fetch_page_wikitext(page: str) -> str:
 
 
 def fetch_pages_wikitext_batch(pages: list[str]) -> dict[str, str]:
-    """Fetch raw wikitext for up to 50 pages in a single API call.
+    """Fetch raw wikitext for up to WIKI_BATCH_SIZE pages in a single API call.
 
     Returns a dict mapping page title to wikitext.
     Uses action=query with revisions prop (supports batching).
     """
     result: dict[str, str] = {}
 
-    for i in range(0, len(pages), 50):
-        batch = pages[i:i + 50]
+    for i in range(0, len(pages), WIKI_BATCH_SIZE):
+        batch = pages[i:i + WIKI_BATCH_SIZE]
         params = {
             "action": "query",
             "titles": "|".join(batch),
@@ -543,7 +545,7 @@ def link_group_requirement(
 
 
 def fetch_contributors_batch(pages: list[str]) -> dict[str, list[str]]:
-    """Fetch contributors for up to 50 pages in a single API call.
+    """Fetch contributors for up to WIKI_BATCH_SIZE pages in a single API call.
 
     Returns a dict mapping page title to list of contributor names.
     """
@@ -602,12 +604,12 @@ def record_attributions_batch(
     """Fetch contributors for a batch of pages and record attributions.
 
     table_names can be a single string or a list of table names to attribute.
-    Pages are processed in batches of 50 (API limit).
+    Pages are processed in batches of WIKI_BATCH_SIZE (API limit).
     """
     if isinstance(table_names, str):
         table_names = [table_names]
-    for i in range(0, len(pages), 50):
-        batch = pages[i:i + 50]
+    for i in range(0, len(pages), WIKI_BATCH_SIZE):
+        batch = pages[i:i + WIKI_BATCH_SIZE]
         contributors = fetch_contributors_batch(batch)
         for page, authors in contributors.items():
             for table_name in table_names:

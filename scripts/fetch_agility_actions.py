@@ -18,6 +18,7 @@ from ragger.action import Action
 from ragger.db import create_tables, get_connection
 from ragger.enums import Skill
 from ragger.wiki import (
+    WIKI_BATCH_SIZE,
     add_group_requirement,
     clean_name,
     create_requirement_group,
@@ -34,6 +35,11 @@ from ragger.wiki import (
     strip_wiki_links,
     throttle,
 )
+
+# Key used in source_actions to identify rows belonging to this script.
+_SOURCE = "agility"
+# Wiki template name whose transclusions are fetched and parsed.
+_TEMPLATE = "Agility info"
 
 
 def parse_agility_actions(block: str, page_name: str) -> list[dict]:
@@ -174,18 +180,17 @@ def ingest(db_path: Path) -> None:
     create_tables(db_path)
     conn = get_connection(db_path)
 
-    # Find all pages that transclude Template:Agility info
-    print("Finding pages with {{Agility info}}...")
-    pages = fetch_template_users("Agility info")
+    print(f"Finding pages with {{{{{_TEMPLATE}}}}}...")
+    pages = fetch_template_users(_TEMPLATE)
     print(f"Found {len(pages)} pages")
 
-    Action.delete_by_source(conn, "agility")
+    Action.delete_by_source(conn, _SOURCE)
     conn.commit()
 
     # Fetch wikitext in batches of 50
     all_wikitext: dict[str, str] = {}
-    for i in range(0, len(pages), 50):
-        batch = pages[i:i + 50]
+    for i in range(0, len(pages), WIKI_BATCH_SIZE):
+        batch = pages[i:i + WIKI_BATCH_SIZE]
         print(f"  Fetching pages {i + 1}-{i + len(batch)} of {len(pages)}...")
         all_wikitext.update(fetch_pages_wikitext_batch(batch))
 
@@ -194,7 +199,7 @@ def ingest(db_path: Path) -> None:
     # Parse all actions
     all_actions: list[dict] = []
     for page_name, wikitext in all_wikitext.items():
-        blocks = extract_all_templates(wikitext, "Agility info")
+        blocks = extract_all_templates(wikitext, _TEMPLATE)
         for block in blocks:
             all_actions.extend(parse_agility_actions(block, page_name))
 
@@ -217,8 +222,8 @@ def ingest(db_path: Path) -> None:
         )
         action_id = cursor.lastrowid
         conn.execute(
-            "INSERT INTO source_actions (source, action_id) VALUES ('agility', ?)",
-            (action_id,),
+            "INSERT INTO source_actions (source, action_id) VALUES (?, ?)",
+            (_SOURCE, action_id),
         )
 
         # Skills → requirement groups; XP → output experience
