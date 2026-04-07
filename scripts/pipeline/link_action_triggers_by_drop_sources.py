@@ -14,6 +14,7 @@ from pathlib import Path
 import requests
 
 from ragger.db import create_tables, get_connection
+from ragger.enums import TriggerType
 from ragger.wiki import (
     WIKI_BATCH_SIZE,
     extract_template,
@@ -130,21 +131,28 @@ def ingest(db_path: Path, source: str | None = None) -> None:
         """).fetchall()
     print(f"Found {len(output_items)} distinct output items" + (f" (source: {source})" if source else ""))
 
-    # Build item name -> list of action IDs
-    item_actions: dict[str, list[int]] = {}
+    # Build item name -> list of (action_id, trigger_types)
+    item_actions: dict[str, list[tuple[int, int]]] = {}
     if source:
         rows = conn.execute("""
-            SELECT aoi.item_name, aoi.action_id
+            SELECT aoi.item_name, aoi.action_id, a.trigger_types
             FROM action_output_items aoi
             JOIN source_actions sa ON sa.action_id = aoi.action_id
+            JOIN actions a ON a.id = aoi.action_id
             WHERE sa.source = ?
         """, (source,)).fetchall()
     else:
         rows = conn.execute("""
-            SELECT item_name, action_id FROM action_output_items
+            SELECT aoi.item_name, aoi.action_id, a.trigger_types
+            FROM action_output_items aoi
+            JOIN actions a ON a.id = aoi.action_id
         """).fetchall()
-    for item_name, action_id in rows:
-        item_actions.setdefault(item_name, []).append(action_id)
+    for item_name, action_id, trigger_types in rows:
+        item_actions.setdefault(item_name, []).append((action_id, trigger_types))
+
+    # Masks for matching infobox type to trigger_types
+    npc_mask = TriggerType.CLICK_NPC.mask | TriggerType.USE_ITEM_ON_NPC.mask
+    object_mask = TriggerType.CLICK_OBJECT.mask | TriggerType.USE_ITEM_ON_OBJECT.mask
 
     # --- Pass 1: Expand Drop sources for every output item, collect source pages ---
     print("Pass 1: Expanding Drop sources...")
@@ -183,8 +191,8 @@ def ingest(db_path: Path, source: str | None = None) -> None:
     matched_items = 0
 
     for item_name, sources in item_sources.items():
-        action_ids = item_actions.get(item_name, [])
-        if not action_ids:
+        actions = item_actions.get(item_name, [])
+        if not actions:
             continue
 
         item_matched = False
@@ -204,15 +212,24 @@ def ingest(db_path: Path, source: str | None = None) -> None:
             else:
                 continue
 
-            for action_id in action_ids:
+            # Determine which trigger_types mask this source requires
+            if infobox_type == "npc":
+                required_mask = npc_mask
+            elif infobox_type == "object":
+                required_mask = object_mask
+            else:
+                continue
+
+            for action_id, trigger_types in actions:
+                if not (trigger_types & required_mask):
+                    continue
                 for target_id in ids:
                     conn.execute(
                         "INSERT INTO action_triggers (action_id, target_id, op) VALUES (?, ?, ?)",
                         (action_id, target_id, op),
                     )
                     trigger_count += 1
-
-            item_matched = True
+                item_matched = True
 
         if item_matched:
             matched_items += 1

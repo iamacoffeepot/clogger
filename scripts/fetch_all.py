@@ -39,6 +39,8 @@ SCRIPTS = [
     "scripts/pipeline/fetch_agility_actions.py",
     "scripts/pipeline/fetch_farming_actions.py",
     "scripts/pipeline/fetch_prayer_actions.py",
+    # Trigger linking (depends on action tables)
+    "scripts/pipeline/link_action_triggers_by_drop_sources.py",
     "scripts/pipeline/fetch_wiki_vars.py",
     # Linking passes (depend on multiple tables)
     "scripts/pipeline/link_shop_locations.py",

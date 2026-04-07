@@ -100,6 +100,36 @@ class Action:
         ).fetchall()
         return [cls._from_row(row) for row in rows]
 
+    @classmethod
+    def by_trigger(
+        cls, conn: sqlite3.Connection, trigger_type: TriggerType, target_id: int, op: str | None = None,
+    ) -> list[Action]:
+        """Find actions matching a game interaction event.
+
+        Looks up actions whose action_triggers contain the given target_id
+        (and optionally op) and whose trigger_types bitmask includes the
+        given trigger type.
+        """
+        if op is not None:
+            rows = conn.execute(
+                f"""SELECT DISTINCT a.{cls._COLS.replace(', ', ', a.')}
+                    FROM actions a
+                    JOIN action_triggers at ON at.action_id = a.id
+                    WHERE at.target_id = ? AND at.op = ? AND a.trigger_types & ? != 0
+                    ORDER BY a.id""",
+                (target_id, op, trigger_type.mask),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                f"""SELECT DISTINCT a.{cls._COLS.replace(', ', ', a.')}
+                    FROM actions a
+                    JOIN action_triggers at ON at.action_id = a.id
+                    WHERE at.target_id = ? AND a.trigger_types & ? != 0
+                    ORDER BY a.id""",
+                (target_id, trigger_type.mask),
+            ).fetchall()
+        return [cls._from_row(row) for row in rows]
+
     def has_trigger_type(self, trigger_type: TriggerType) -> bool:
         return bool(self.trigger_types & trigger_type.mask)
 
