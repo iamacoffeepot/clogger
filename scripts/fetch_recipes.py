@@ -1,4 +1,4 @@
-"""Fetch action data from the OSRS wiki and populate the action tables.
+"""Fetch recipe-based actions from the OSRS wiki and populate the action tables.
 
 Finds all pages that transclude {{Recipe}}, parses each Recipe block for
 skills, inputs, outputs, tools, ticks, and facilities. Skill levels and tools

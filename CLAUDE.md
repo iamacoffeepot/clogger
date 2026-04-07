@@ -44,7 +44,7 @@ Pipeline order (managed by `fetch_all.py`):
 15. `fetch_magic_teleports.py` — Parses all spellbook teleports (Standard, Ancient, Lunar) and item teleports (jewellery, etc.)
 16. `fetch_activities.py` — Pulls activities/minigames with type, coordinates, skills bitmask, and region from Category:Activities
 17. `fetch_npcs.py` — Pulls non-combat NPC data (name, version, location, options, region) from Category:Non-player characters
-18. `fetch_actions.py` — Pulls actions from all pages using {{Recipe}} template. Skill levels and tools become requirement groups; XP becomes output experience.
+18. `fetch_recipes.py` — Pulls actions from all pages using {{Recipe}} template. Skill levels and tools become requirement groups; XP becomes output experience.
 19. `fetch_wiki_vars.py` — Scrapes RuneScape:Varplayer/* and RuneScape:Varbit/* wiki pages for descriptions, content links, var class, and value annotations (quest stages, etc.)
 20. `link_shop_locations.py` — Links shops to locations by matching location text
 21. `link_activity_locations.py` — Links activities to locations by matching location text
