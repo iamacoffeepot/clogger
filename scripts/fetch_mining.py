@@ -32,6 +32,12 @@ from ragger.wiki import (
     throttle,
 )
 
+# Mining polls every N ticks depending on pickaxe tier (bronze=8, iron=7,
+# steel=6, black/mithril=5, adamant=4, rune=3, dragon+=~2.83, crystal=~2.75).
+# Store the worst-case (bronze) as the base; a polymorphic layer will reduce
+# this based on the equipped pickaxe at query time.
+MINING_POLL_TICKS = 8
+
 _PAREN_SUFFIX = re.compile(r"^(.+?)\s*\([^)]+\)$")
 
 
@@ -106,7 +112,7 @@ def _build_action(
     return {
         "name": name,
         "members": members,
-        "ticks": 8,  # bronze pickaxe (worst case); varies by tier
+        "ticks": MINING_POLL_TICKS,
         "notes": notes,
         "at": at,
         "level": level,
