@@ -40,6 +40,7 @@ from ragger.wiki import (
     parse_template_param,
     parse_xp,
     record_attributions_batch,
+    strip_refs,
     strip_wiki_links,
     throttle,
 )
@@ -49,15 +50,7 @@ _SOURCE = "prayer"
 # Wiki template name whose transclusions are fetched and parsed.
 _TEMPLATE = "Prayer info"
 
-_REF_TAG = re.compile(r"<ref[^>]*>.*?</ref>|<ref[^>]*/>|\{\{Refn\|[^}]*\}\}", re.DOTALL)
 _BR_TAG = re.compile(r"\s*<br\s*/?\s*>.*", re.DOTALL | re.IGNORECASE)
-
-
-def _strip_refs(val: str | None) -> str | None:
-    """Strip <ref> tags and {{Refn}} templates from a value."""
-    if not val:
-        return val
-    return _REF_TAG.sub("", val).strip()
 
 
 def _clean_prayer_name(val: str | None, page_name: str) -> str | None:
@@ -142,9 +135,9 @@ def _parse_single_version(
     if level is None:
         return []
 
-    xp_str = _strip_refs(parse_template_param(block, f"xp{suffix}"))
+    xp_str = strip_refs(parse_template_param(block, f"xp{suffix}"))
     if xp_str is None:
-        xp_str = _strip_refs(parse_template_param(block, "xp"))
+        xp_str = strip_refs(parse_template_param(block, "xp"))
     base_xp = parse_xp(xp_str)
     if base_xp <= 0:
         return []

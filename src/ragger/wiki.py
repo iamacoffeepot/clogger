@@ -182,6 +182,16 @@ def strip_markup(text: str) -> str:
     return text.strip()
 
 
+_REF_TAG = re.compile(r"<ref[^>]*>.*?</ref>|<ref[^>]*/>|\{\{Refn\|[^}]*\}\}", re.DOTALL)
+
+
+def strip_refs(val: str | None) -> str | None:
+    """Strip <ref> tags and {{Refn}} templates from a value."""
+    if not val:
+        return val
+    return _REF_TAG.sub("", val).strip()
+
+
 _FRAGMENT_SUFFIX = re.compile(r"#.*$")
 _TEMPLATE_ARTIFACT = re.compile(r"\{\{[^}]*\}\}?")
 

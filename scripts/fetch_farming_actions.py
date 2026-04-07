@@ -36,6 +36,7 @@ from ragger.wiki import (
     parse_xp,
     record_attributions_batch,
     strip_plinks,
+    strip_refs,
     strip_wiki_links,
     throttle,
 )
@@ -45,15 +46,7 @@ _SOURCE = "farming"
 # Wiki template name whose transclusions are fetched and parsed.
 _TEMPLATE = "Farming info"
 
-_REF_TAG = re.compile(r"<ref[^>]*>.*?</ref>|<ref[^>]*/>|\{\{Refn\|[^}]*\}\}", re.DOTALL)
 _YIELD_NUM = re.compile(r"(\d+)")
-
-
-def _strip_refs(val: str | None) -> str | None:
-    """Strip <ref> tags and {{Refn}} templates from a value."""
-    if not val:
-        return val
-    return _REF_TAG.sub("", val).strip()
 
 
 def _is_no(val: str | None) -> bool:
@@ -123,9 +116,9 @@ def parse_farming_actions(block: str, page_name: str) -> list[dict]:
     seedsper = parse_int(parse_template_param(block, "seedsper")) or 1
 
     # XP values (strip ref tags before parsing)
-    plantxp = parse_xp(_strip_refs(parse_template_param(block, "plantxp")))
-    checkxp_raw = _strip_refs(parse_template_param(block, "checkxp"))
-    harvestxp_raw = _strip_refs(parse_template_param(block, "harvestxp"))
+    plantxp = parse_xp(strip_refs(parse_template_param(block, "plantxp")))
+    checkxp_raw = strip_refs(parse_template_param(block, "checkxp"))
+    harvestxp_raw = strip_refs(parse_template_param(block, "harvestxp"))
 
     has_check = not _is_no(checkxp_raw)
     has_harvest = not _is_no(harvestxp_raw)
