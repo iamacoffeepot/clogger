@@ -12,19 +12,24 @@ import requests
 
 DEFAULT_THROTTLE = 1.0
 THROTTLE_DELAY = float(os.environ.get("RAGGER_THROTTLE", DEFAULT_THROTTLE))
+DEFAULT_WIKI_TTL = int(os.environ.get("RAGGER_WIKI_TTL", 86400))
 
 from ragger.enums import Region, Skill
 
 class WikiCache:
     """SQLite-backed cache for wiki page wikitext.
 
-    Stores wikitext alongside the MediaWiki revision ID. On cache hit,
-    a cheap rev-ID-only API call checks whether the cached revision is
-    still current. Only stale or missing pages are re-fetched with full
-    content.
+    Stores wikitext alongside the MediaWiki revision ID. Cache entries
+    within ``ttl`` seconds of their ``fetched_at`` timestamp are trusted
+    without a revid check. Stale entries are re-validated via a cheap
+    revid-only API call.
+
+    Run ``validate()`` (or the ``validate_wiki_cache`` script) to
+    bulk-check all cached revids and bump ``fetched_at`` on entries that
+    are still current, effectively resetting their TTL.
     """
 
-    def __init__(self, path: Path | str) -> None:
+    def __init__(self, path: Path | str, ttl: int = DEFAULT_WIKI_TTL) -> None:
         self.conn = sqlite3.connect(str(path))
         self.conn.execute("""
             CREATE TABLE IF NOT EXISTS wiki_pages (
@@ -35,27 +40,101 @@ class WikiCache:
             )
         """)
         self.conn.commit()
+        self.ttl = ttl
+
+    def validate(self) -> None:
+        """Bulk-validate all cached revids against the wiki API.
+
+        Bumps ``fetched_at`` on entries whose revid is still current and
+        deletes stale entries.
+        """
+        rows = self.conn.execute("SELECT title, revid FROM wiki_pages").fetchall()
+        if not rows:
+            return
+
+        cached_revids = {title: revid for title, revid in rows}
+        titles = list(cached_revids.keys())
+        fresh: list[str] = []
+        stale: list[str] = []
+
+        for i in range(0, len(titles), WIKI_BATCH_SIZE):
+            batch = titles[i:i + WIKI_BATCH_SIZE]
+            resp = requests.get(
+                API_URL,
+                params={
+                    "action": "query",
+                    "titles": "|".join(batch),
+                    "prop": "revisions",
+                    "rvprop": "ids",
+                    "format": "json",
+                },
+                headers=HEADERS,
+            )
+            resp.raise_for_status()
+            current: dict[str, int] = {}
+            for _, page_data in resp.json().get("query", {}).get("pages", {}).items():
+                title = page_data.get("title", "")
+                revisions = page_data.get("revisions", [])
+                if revisions:
+                    current[title] = revisions[0]["revid"]
+
+            for title in batch:
+                cur = current.get(title)
+                if cur is not None and cur == cached_revids[title]:
+                    fresh.append(title)
+                else:
+                    stale.append(title)
+
+            throttle()
+
+        if fresh:
+            placeholders = ",".join("?" * len(fresh))
+            self.conn.execute(
+                f"UPDATE wiki_pages SET fetched_at = datetime('now') WHERE title IN ({placeholders})",
+                fresh,
+            )
+        if stale:
+            placeholders = ",".join("?" * len(stale))
+            self.conn.execute(
+                f"DELETE FROM wiki_pages WHERE title IN ({placeholders})", stale,
+            )
+        self.conn.commit()
+
+        print(f"  Cache validated: {len(fresh)} fresh, {len(stale)} stale (evicted)")
 
     def close(self) -> None:
         self.conn.close()
 
-    def get(self, title: str) -> tuple[str, int] | None:
-        """Return (wikitext, revid) for a cached page, or None."""
-        row = self.conn.execute(
-            "SELECT wikitext, revid FROM wiki_pages WHERE title = ?", (title,),
-        ).fetchone()
-        return (row[0], row[1]) if row else None
+    def _is_fresh(self, fetched_at: str) -> bool:
+        """Check if a fetched_at timestamp is within the TTL."""
+        from datetime import datetime, timezone
+        fetched = datetime.fromisoformat(fetched_at).replace(tzinfo=timezone.utc)
+        now = datetime.now(timezone.utc)
+        return (now - fetched).total_seconds() < self.ttl
 
-    def get_batch(self, titles: list[str]) -> dict[str, tuple[str, int]]:
-        """Return {title: (wikitext, revid)} for all cached pages in the list."""
+    def get(self, title: str) -> tuple[str, int, bool] | None:
+        """Return (wikitext, revid, fresh) for a cached page, or None.
+
+        ``fresh`` is True if the entry is within the TTL.
+        """
+        row = self.conn.execute(
+            "SELECT wikitext, revid, fetched_at FROM wiki_pages WHERE title = ?", (title,),
+        ).fetchone()
+        if row is None:
+            return None
+        return (row[0], row[1], self._is_fresh(row[2]))
+
+    def get_batch(self, titles: list[str]) -> dict[str, tuple[str, int, bool]]:
+        """Return {title: (wikitext, revid, fresh)} for all cached pages."""
         if not titles:
             return {}
         placeholders = ",".join("?" * len(titles))
         rows = self.conn.execute(
-            f"SELECT title, wikitext, revid FROM wiki_pages WHERE title IN ({placeholders})",
+            f"SELECT title, wikitext, revid, fetched_at FROM wiki_pages WHERE title IN ({placeholders})",
             titles,
         ).fetchall()
-        return {title: (wikitext, revid) for title, wikitext, revid in rows}
+        return {title: (wikitext, revid, self._is_fresh(fetched_at))
+                for title, wikitext, revid, fetched_at in rows}
 
     def put(self, title: str, wikitext: str, revid: int) -> None:
         self.conn.execute(
@@ -227,7 +306,9 @@ def fetch_page_wikitext(page: str, cache: WikiCache | None = ...) -> str:
     if cache is not None:
         cached = cache.get(page)
         if cached is not None:
-            cached_text, cached_revid = cached
+            cached_text, cached_revid, fresh = cached
+            if fresh:
+                return cached_text
             # Check if cached revision is still current
             current_revid = _fetch_revid(page)
             if current_revid is not None and current_revid == cached_revid:
@@ -317,19 +398,37 @@ def fetch_pages_wikitext_batch(
     if cache is not None:
         cached = cache.get_batch(pages)
         if cached:
-            # Check which cached pages are still current
-            current_revids = _fetch_revids_batch(list(cached.keys()))
-            fresh = 0
-            stale = 0
-            for title, (wikitext, cached_revid) in cached.items():
-                current = current_revids.get(title)
-                if current is not None and current == cached_revid:
-                    result[title] = wikitext
-                    fresh += 1
+            # Split into fresh (within TTL) and stale (need revid check)
+            fresh_titles: dict[str, str] = {}
+            stale_cached: dict[str, tuple[str, int]] = {}
+            for title, (wikitext, revid, fresh) in cached.items():
+                if fresh:
+                    fresh_titles[title] = wikitext
                 else:
-                    stale += 1
+                    stale_cached[title] = (wikitext, revid)
+
+            result.update(fresh_titles)
+
+            # Only check revids for stale entries
+            if stale_cached:
+                current_revids = _fetch_revids_batch(list(stale_cached.keys()))
+                revalidated = 0
+                expired = 0
+                for title, (wikitext, cached_revid) in stale_cached.items():
+                    current = current_revids.get(title)
+                    if current is not None and current == cached_revid:
+                        result[title] = wikitext
+                        revalidated += 1
+                    else:
+                        expired += 1
+
             need_fetch = [p for p in pages if p not in result]
-            print(f"  Cache: {fresh} fresh, {stale} stale, {len(need_fetch) - stale} new")
+            parts = [f"{len(fresh_titles)} fresh"]
+            if stale_cached:
+                parts.append(f"{revalidated} revalidated, {expired} expired")
+            if need_fetch:
+                parts.append(f"{len(need_fetch)} new")
+            print(f"  Cache: {', '.join(parts)}")
 
     for i in range(0, len(need_fetch), WIKI_BATCH_SIZE):
         batch = need_fetch[i:i + WIKI_BATCH_SIZE]

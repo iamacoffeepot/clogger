@@ -70,6 +70,7 @@ Pipeline order (managed by `fetch_all.py`):
 ### Utility scripts
 
 - `classify_game_vars.py` — Classifies game variable names using Claude CLI. Tags vars with content categories and functional tags. Supports `--workers`, `--batch-size`, `--session-reset`, `--model`, `--reclassify` flags.
+- `validate_wiki_cache.py` — Bulk-validates wiki cache revids against current wiki state. Bumps `fetched_at` on fresh entries, evicts stale ones. Run before ingestion to avoid per-page revid checks. Supports `--cache` flag.
 
 `fetch_league_tasks.py` is in `scripts/pipeline/` but run separately via `fetch_all.py --league`.
 
@@ -139,7 +140,7 @@ All scripts that fetch wiki data **must** record attributions. Use `record_attri
 - Prefer batched API calls where possible — `fetch_contributors_batch()` handles up to 50 pages per call
 - User-Agent includes project URL per wiki API policy
 - Wikitext must be fetched one page at a time (`action=parse`), but contributor lookups support batching (`action=query`)
-- Wiki page cache: set `RAGGER_WIKI_CACHE=data/wiki-cache.db` to cache wikitext in a separate SQLite database. Validates cached pages against current revision IDs — only re-fetches stale or missing pages. `WikiCache` class can also be passed directly to fetch functions via the `cache` parameter.
+- Wiki page cache: set `RAGGER_WIKI_CACHE=data/wiki-cache.db` to cache wikitext in a separate SQLite database. Cache entries within the TTL (default 24 hours, override with `RAGGER_WIKI_TTL` in seconds) are trusted without revid checks. Stale entries are re-validated via a cheap revid-only API call. Run `scripts/validate_wiki_cache.py` to bulk-validate all cached revids and reset their TTL. `WikiCache` class can also be passed directly to fetch functions via the `cache` parameter.
 
 ## Database
 
@@ -661,7 +662,8 @@ from ragger.wiki import (
 WIKI_BATCH_SIZE = 50                                                       # max pages per MediaWiki API batch request
 
 # Cache
-WikiCache(path)                                                            # SQLite-backed wikitext cache with revid validation
+WikiCache(path, ttl=DEFAULT_WIKI_TTL)                                      # SQLite-backed wikitext cache with TTL-based freshness
+cache.validate() -> None                                                   # bulk-check revids, bump fetched_at on fresh, evict stale
 set_wiki_cache(path) -> None                                               # set default cache instance (or None to disable)
 get_wiki_cache() -> WikiCache | None                                       # get default cache instance
 default_cache: WikiCache | None                                            # module-level default (from RAGGER_WIKI_CACHE env var)
