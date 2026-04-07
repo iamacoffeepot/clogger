@@ -27,6 +27,12 @@ from ragger.wiki import (
     throttle,
 )
 
+# Fishing polls every 5 ticks (3 seconds). Each poll rolls against a
+# success formula based on fish type and fishing level. The ticks value
+# here is the poll interval, not the expected catch time — a separate
+# chance layer on top of actions will model the per-roll probability.
+FISHING_POLL_TICKS = 5
+
 _PLINK = re.compile(r"\{\{[Pp]link\|([^}|]+)(?:\|[^}]*)?\}\}")
 _PAREN_SUFFIX = re.compile(r"^(.+?)\s*\([^)]+\)$")
 
@@ -158,7 +164,7 @@ def _parse_single_version(
     action: dict = {
         "name": fish_name,
         "members": members,
-        "ticks": None,
+        "ticks": FISHING_POLL_TICKS,
         "notes": None,
         "at": at,
         "skills": [],
