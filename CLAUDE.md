@@ -46,11 +46,12 @@ Pipeline order (managed by `fetch_all.py`):
 17. `fetch_npcs.py` — Pulls non-combat NPC data (name, version, location, options, region) from Category:Non-player characters
 18. `fetch_recipes.py` — Pulls actions from all pages using {{Recipe}} template. Skill levels and tools become requirement groups; XP becomes output experience.
 19. `fetch_fishing.py` — Pulls fishing actions from {{Fishing info}} templates. Handles versioned methods (harpoon vs bare-handed), multi-skill (barbarian fishing), bait as input items, tools as requirement groups.
-20. `fetch_wiki_vars.py` — Scrapes RuneScape:Varplayer/* and RuneScape:Varbit/* wiki pages for descriptions, content links, var class, and value annotations (quest stages, etc.)
-21. `link_shop_locations.py` — Links shops to locations by matching location text
-22. `link_activity_locations.py` — Links activities to locations by matching location text
-23. `link_facilities.py` — Derives facility bitmasks on locations from nearest facility coordinates
-24. `compute_walkability.py` — Computes walkable connections via Voronoi edge flood fill and map tile collision data. Supports `--area-threshold`, `--edge-samples`, `--resolution`, `--debug` flags.
+20. `fetch_mining.py` — Pulls mining actions from {{Mining info}} templates. Handles versioned outputs (e.g. Granite 500g/2kg/5kg), deduplicates ore/rock page overlap, ticks NULL (varies by pickaxe).
+21. `fetch_wiki_vars.py` — Scrapes RuneScape:Varplayer/* and RuneScape:Varbit/* wiki pages for descriptions, content links, var class, and value annotations (quest stages, etc.)
+22. `link_shop_locations.py` — Links shops to locations by matching location text
+23. `link_activity_locations.py` — Links activities to locations by matching location text
+24. `link_facilities.py` — Derives facility bitmasks on locations from nearest facility coordinates
+25. `compute_walkability.py` — Computes walkable connections via Voronoi edge flood fill and map tile collision data. Supports `--area-threshold`, `--edge-samples`, `--resolution`, `--debug` flags.
 
 ### Utility scripts
 

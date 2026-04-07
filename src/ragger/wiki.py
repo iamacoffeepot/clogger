@@ -338,23 +338,32 @@ def parse_template_param(text: str, param: str) -> str | None:
     if not m:
         return None
     start = m.end()
-    depth = 0
+    brace_depth = 0
+    bracket_depth = 0
     i = start
     while i < len(text):
         ch = text[i]
         if ch == '{' and i + 1 < len(text) and text[i + 1] == '{':
-            depth += 1
+            brace_depth += 1
             i += 2
             continue
         if ch == '}' and i + 1 < len(text) and text[i + 1] == '}':
-            if depth == 0:
+            if brace_depth == 0:
                 break
-            depth -= 1
+            brace_depth -= 1
             i += 2
             continue
-        if ch == '|' and depth == 0:
+        if ch == '[' and i + 1 < len(text) and text[i + 1] == '[':
+            bracket_depth += 1
+            i += 2
+            continue
+        if ch == ']' and i + 1 < len(text) and text[i + 1] == ']':
+            bracket_depth = max(0, bracket_depth - 1)
+            i += 2
+            continue
+        if ch == '|' and brace_depth == 0 and bracket_depth == 0:
             break
-        if ch == '\n' and depth == 0:
+        if ch == '\n' and brace_depth == 0 and bracket_depth == 0:
             break
         i += 1
     val = text[start:i].strip()
