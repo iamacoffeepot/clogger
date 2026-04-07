@@ -228,15 +228,20 @@ def ingest(db_path: Path) -> None:
                 return item_id
         return None
 
-    # Clear existing action data for clean re-import
-    conn.execute("DELETE FROM action_requirement_groups")
-    conn.execute("DELETE FROM action_output_objects")
-    conn.execute("DELETE FROM action_output_items")
-    conn.execute("DELETE FROM action_output_experience")
-    conn.execute("DELETE FROM action_input_currencies")
-    conn.execute("DELETE FROM action_input_objects")
-    conn.execute("DELETE FROM action_input_items")
-    conn.execute("DELETE FROM actions")
+    # Clear existing recipe actions for clean re-import
+    old_ids = [r[0] for r in conn.execute(
+        "SELECT action_id FROM source_actions WHERE source = 'recipe'"
+    ).fetchall()]
+    if old_ids:
+        placeholders = ",".join("?" * len(old_ids))
+        for table in (
+            "action_requirement_groups", "action_output_objects", "action_output_items",
+            "action_output_experience", "action_input_currencies", "action_input_objects",
+            "action_input_items",
+        ):
+            conn.execute(f"DELETE FROM {table} WHERE action_id IN ({placeholders})", old_ids)
+        conn.execute("DELETE FROM source_actions WHERE source = 'recipe'")
+        conn.execute(f"DELETE FROM actions WHERE id IN ({placeholders})", old_ids)
     conn.commit()
 
     action_count = 0
@@ -259,6 +264,10 @@ def ingest(db_path: Path) -> None:
                 (action["name"], action["members"], action["ticks"], action["notes"], action["at"]),
             )
             action_id = cursor.lastrowid
+            conn.execute(
+                "INSERT INTO source_actions (source, action_id) VALUES ('recipe', ?)",
+                (action_id,),
+            )
 
             # Skill levels → requirement groups; XP → output experience
             for skill in action["skills"]:

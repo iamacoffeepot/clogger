@@ -1,0 +1,393 @@
+"""Fetch fishing actions from the OSRS wiki and populate the action tables.
+
+Parses {{Fishing info}} templates from pages that transclude them. Each
+version (e.g. harpoon vs bare-handed) becomes a separate action. Skills,
+tools, and bait map to requirement groups and input items; XP maps to
+output experience; the caught fish maps to an output item.
+
+Requires: fetch_items.py to have been run first (for item_id cross-referencing).
+"""
+
+import argparse
+import re
+from pathlib import Path
+
+from ragger.db import create_tables, get_connection
+from ragger.enums import Skill
+from ragger.wiki import (
+    add_group_requirement,
+    clean_page_reference,
+    create_requirement_group,
+    extract_all_templates,
+    fetch_pages_wikitext_batch,
+    fetch_template_users,
+    link_requirement_group,
+    record_attributions_batch,
+    strip_wiki_links,
+    throttle,
+)
+
+_PLINK = re.compile(r"\{\{[Pp]link\|([^}|]+)(?:\|[^}]*)?\}\}")
+_PAREN_SUFFIX = re.compile(r"^(.+?)\s*\([^)]+\)$")
+
+
+def parse_param(text: str, param: str) -> str | None:
+    """Brace-aware extraction of |param=value from template text.
+
+    Unlike wiki.parse_template_param, this correctly handles nested templates
+    like {{plink|Fishing bait}} inside parameter values.
+    """
+    pattern = re.compile(rf"\|\s*{re.escape(param)}\s*=\s*")
+    m = pattern.search(text)
+    if not m:
+        return None
+    start = m.end()
+    depth = 0
+    i = start
+    while i < len(text):
+        ch = text[i]
+        if ch == '{' and i + 1 < len(text) and text[i + 1] == '{':
+            depth += 1
+            i += 2
+            continue
+        if ch == '}' and i + 1 < len(text) and text[i + 1] == '}':
+            if depth == 0:
+                break
+            depth -= 1
+            i += 2
+            continue
+        if ch == '|' and depth == 0:
+            break
+        if ch == '\n' and depth == 0:
+            break
+        i += 1
+    val = text[start:i].strip()
+    return val if val else None
+
+
+def strip_plinks(text: str) -> str:
+    """Replace {{plink|Name}} or {{Plink|Name}} with just the name."""
+    return _PLINK.sub(r"\1", text)
+
+
+def clean_name(text: str, page_name: str) -> str:
+    """Strip wiki links, plinks, and clean page references."""
+    return clean_page_reference(strip_wiki_links(strip_plinks(text.strip())), page_name)
+
+
+def parse_int(val: str | None) -> int | None:
+    if not val:
+        return None
+    val = val.strip().replace(",", "")
+    try:
+        return int(val)
+    except ValueError:
+        return None
+
+
+def parse_xp(val: str | None) -> float:
+    if not val:
+        return 0.0
+    val = val.strip().replace(",", "")
+    if val == "-1":
+        return 0.0
+    try:
+        return float(val)
+    except ValueError:
+        return 0.0
+
+
+def parse_members(val: str | None) -> int:
+    if not val:
+        return 1
+    return 0 if val.strip().lower() == "no" else 1
+
+
+def detect_versions(block: str) -> list[str]:
+    """Detect version names from version1, version2, ... params."""
+    versions = []
+    i = 1
+    while True:
+        v = parse_param(block, f"version{i}")
+        if not v:
+            break
+        versions.append(v.strip())
+        i += 1
+    return versions
+
+
+def parse_fishing_actions(block: str, page_name: str) -> list[dict]:
+    """Parse a {{Fishing info}} block into one or more action dicts.
+
+    Versioned templates (e.g. shark: harpoon vs bare-handed) produce
+    one action per version. Unversioned produce a single action.
+    """
+    name_raw = parse_param(block, "name")
+    if not name_raw:
+        return []
+    fish_name = clean_name(name_raw, page_name)
+    if not fish_name:
+        return []
+
+    members = parse_members(parse_param(block, "members"))
+    spot = parse_param(block, "spot")
+    at = clean_name(spot, page_name) if spot else None
+
+    versions = detect_versions(block)
+
+    if not versions:
+        # Single version — parameters have no numeric suffix
+        action = _parse_single_version(block, page_name, fish_name, members, at, suffix="")
+        return [action] if action else []
+
+    # Multiple versions — parameters get numeric suffix per version
+    actions = []
+    for vi, version_name in enumerate(versions, 1):
+        suffix = str(vi)
+        action = _parse_single_version(block, page_name, fish_name, members, at, suffix=suffix)
+        if action:
+            action["notes"] = version_name
+            actions.append(action)
+    return actions
+
+
+def _parse_single_version(
+    block: str, page_name: str, fish_name: str, members: int, at: str | None, suffix: str,
+) -> dict | None:
+    """Parse one version of a Fishing info block."""
+    action: dict = {
+        "name": fish_name,
+        "members": members,
+        "ticks": None,
+        "notes": None,
+        "at": at,
+        "skills": [],
+        "input_items": [],
+        "tools": [],
+    }
+
+    # Parse skills (skill1, skill2, ...) with optional per-version suffix
+    # Unversioned: skill1lvl, skill1exp
+    # Versioned: skill1lvl2 (fishing level for version 2), skill2lvl2 (secondary skill for version 2)
+    i = 1
+    while True:
+        # Skill name: skill2name, skill3name (skill1 is always Fishing)
+        if i == 1:
+            skill = Skill.FISHING
+        else:
+            # Check versioned skill name first (e.g. skill2name2), then unversioned (skill2name)
+            skill_name = parse_param(block, f"skill{i}name{suffix}")
+            if not skill_name:
+                skill_name = parse_param(block, f"skill{i}name")
+            if not skill_name:
+                break
+            try:
+                skill = Skill.from_label(skill_name.strip())
+            except KeyError:
+                i += 1
+                continue
+
+        # Level: versioned first (skill1lvl2), then unversioned (skill1lvl)
+        level_str = parse_param(block, f"skill{i}lvl{suffix}")
+        if level_str is None:
+            level_str = parse_param(block, f"skill{i}lvl")
+        level = parse_int(level_str)
+        if level is None and i == 1:
+            # Fishing level from shorthand "level" param
+            level = parse_int(parse_param(block, "level"))
+        if level is None:
+            i += 1
+            continue
+
+        # XP: versioned first (skill1exp2), then unversioned (skill1exp)
+        xp_str = parse_param(block, f"skill{i}exp{suffix}")
+        if xp_str is None:
+            xp_str = parse_param(block, f"skill{i}exp")
+        # Shorthand "xp" param for fishing XP
+        if xp_str is None and i == 1:
+            xp_str = parse_param(block, "xp")
+        xp = parse_xp(xp_str)
+
+        action["skills"].append({
+            "skill": skill.value,
+            "level": level,
+            "xp": xp,
+        })
+        i += 1
+
+    if not action["skills"]:
+        return None
+
+    # Tool: versioned (tool2), then unversioned (tool)
+    tool_str = parse_param(block, f"tool{suffix}")
+    if tool_str is None:
+        tool_str = parse_param(block, "tool")
+    if tool_str and tool_str.strip().lower() not in ("no", "none", "n/a"):
+        tool_name = clean_name(tool_str, page_name)
+        if tool_name:
+            action["tools"].append(tool_name)
+
+    # Bait: versioned (bait2), then unversioned (bait) — becomes input item
+    bait_str = parse_param(block, f"bait{suffix}")
+    if bait_str is None:
+        bait_str = parse_param(block, "bait")
+    if bait_str and bait_str.strip().lower() not in ("no", "none", "n/a"):
+        # Bait can be comma/or-separated list: "Fishing bait, Fish offcuts, Feather, Roe, or Caviar"
+        # These are OR options — any one works. Store as separate input items (they'll be in same group).
+        for part in re.split(r",\s*(?:or\s+)?|\s+or\s+", bait_str):
+            bait_name = clean_name(part, page_name)
+            if bait_name:
+                action["input_items"].append(bait_name)
+
+    return action
+
+
+def ingest(db_path: Path) -> None:
+    create_tables(db_path)
+    conn = get_connection(db_path)
+
+    # Find all pages that transclude Template:Fishing info
+    print("Finding pages with {{Fishing info}}...")
+    pages = fetch_template_users("Fishing info")
+    print(f"Found {len(pages)} pages")
+
+    # Build item name -> id lookup
+    item_rows = conn.execute("SELECT id, name FROM items").fetchall()
+    item_lookup: dict[str, int] = {name: id for id, name in item_rows}
+
+    def resolve_item(name: str) -> int | None:
+        item_id = item_lookup.get(name)
+        if item_id is not None:
+            return item_id
+        m = _PAREN_SUFFIX.match(name)
+        if m:
+            return item_lookup.get(m.group(1).strip())
+        return None
+
+    # Clear existing fishing actions for clean re-import
+    old_ids = [r[0] for r in conn.execute(
+        "SELECT action_id FROM source_actions WHERE source = 'fishing'"
+    ).fetchall()]
+    if old_ids:
+        placeholders = ",".join("?" * len(old_ids))
+        for table in (
+            "action_requirement_groups", "action_output_objects", "action_output_items",
+            "action_output_experience", "action_input_currencies", "action_input_objects",
+            "action_input_items",
+        ):
+            conn.execute(f"DELETE FROM {table} WHERE action_id IN ({placeholders})", old_ids)
+        conn.execute("DELETE FROM source_actions WHERE source = 'fishing'")
+        conn.execute(f"DELETE FROM actions WHERE id IN ({placeholders})", old_ids)
+    conn.commit()
+
+    action_count = 0
+
+    # Fetch wikitext in batches of 50
+    all_wikitext: dict[str, str] = {}
+    for i in range(0, len(pages), 50):
+        batch = pages[i:i + 50]
+        print(f"  Fetching pages {i + 1}-{i + len(batch)} of {len(pages)}...")
+        all_wikitext.update(fetch_pages_wikitext_batch(batch))
+
+    print(f"Fetched {len(all_wikitext)} pages, parsing...")
+
+    for page_name, wikitext in all_wikitext.items():
+        blocks = extract_all_templates(wikitext, "Fishing info")
+        for block in blocks:
+            actions = parse_fishing_actions(block, page_name)
+
+            for action in actions:
+                cursor = conn.execute(
+                    "INSERT INTO actions (name, members, ticks, notes, at) VALUES (?, ?, ?, ?, ?)",
+                    (action["name"], action["members"], action["ticks"], action["notes"], action["at"]),
+                )
+                action_id = cursor.lastrowid
+                conn.execute(
+                    "INSERT INTO source_actions (source, action_id) VALUES ('fishing', ?)",
+                    (action_id,),
+                )
+
+                # Skills → requirement groups; XP → output experience
+                for skill in action["skills"]:
+                    group_id = create_requirement_group(conn)
+                    add_group_requirement(conn, group_id, "group_skill_requirements", {
+                        "skill": skill["skill"],
+                        "level": skill["level"],
+                        "boostable": 0,
+                    })
+                    link_requirement_group(
+                        conn, "action_requirement_groups", "action_id", action_id, group_id,
+                    )
+                    if skill["xp"] > 0:
+                        conn.execute(
+                            "INSERT OR IGNORE INTO action_output_experience (action_id, skill, xp) VALUES (?, ?, ?)",
+                            (action_id, skill["skill"], skill["xp"]),
+                        )
+
+                # Output item — the caught fish
+                fish_item_id = resolve_item(action["name"])
+                if fish_item_id is not None:
+                    conn.execute(
+                        "INSERT INTO action_output_items (action_id, item_id, item_name, quantity) VALUES (?, ?, ?, 1)",
+                        (action_id, fish_item_id, action["name"]),
+                    )
+                else:
+                    conn.execute(
+                        "INSERT INTO action_output_objects (action_id, object_name) VALUES (?, ?)",
+                        (action_id, action["name"]),
+                    )
+
+                # Tool → requirement group
+                for tool_name in action["tools"]:
+                    tool_item_id = resolve_item(tool_name)
+                    if tool_item_id is not None:
+                        group_id = create_requirement_group(conn)
+                        add_group_requirement(conn, group_id, "group_item_requirements", {
+                            "item_id": tool_item_id,
+                            "quantity": 1,
+                        })
+                        link_requirement_group(
+                            conn, "action_requirement_groups", "action_id", action_id, group_id,
+                        )
+
+                # Bait → input items (OR'd in one group if multiple options)
+                if action["input_items"]:
+                    group_id = create_requirement_group(conn)
+                    for bait_name in action["input_items"]:
+                        bait_item_id = resolve_item(bait_name)
+                        if bait_item_id is not None:
+                            conn.execute(
+                                "INSERT INTO action_input_items (action_id, item_id, item_name, quantity) VALUES (?, ?, ?, 1)",
+                                (action_id, bait_item_id, bait_name),
+                            )
+                            add_group_requirement(conn, group_id, "group_item_requirements", {
+                                "item_id": bait_item_id,
+                                "quantity": 1,
+                            })
+                    link_requirement_group(
+                        conn, "action_requirement_groups", "action_id", action_id, group_id,
+                    )
+
+                action_count += 1
+
+    conn.commit()
+    print(f"Inserted {action_count} fishing actions")
+
+    # Record attributions
+    table_names = ["actions", "action_output_experience", "action_input_items",
+                    "action_output_items", "action_output_objects"]
+    record_attributions_batch(conn, table_names, list(all_wikitext.keys()))
+    conn.commit()
+    conn.close()
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Fetch fishing actions from the OSRS wiki")
+    parser.add_argument(
+        "--db",
+        type=Path,
+        default=Path("data/ragger.db"),
+        help="Path to the SQLite database",
+    )
+    args = parser.parse_args()
+    ingest(args.db)

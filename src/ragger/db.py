@@ -503,6 +503,14 @@ SCHEMAS: list[str] = [
         FOREIGN KEY (group_id) REFERENCES requirement_groups(id)
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS source_actions (
+        source TEXT NOT NULL,
+        action_id INTEGER NOT NULL,
+        PRIMARY KEY (source, action_id),
+        FOREIGN KEY (action_id) REFERENCES actions(id)
+    )
+    """,
 ]
 
 

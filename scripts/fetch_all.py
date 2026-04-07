@@ -30,6 +30,7 @@ SCRIPTS = [
     "scripts/fetch_activities.py",
     "scripts/fetch_npcs.py",
     "scripts/fetch_recipes.py",
+    "scripts/fetch_fishing.py",
     "scripts/fetch_wiki_vars.py",
     # Linking passes (depend on multiple tables)
     "scripts/link_shop_locations.py",
