@@ -146,7 +146,6 @@ def parse_farming_actions(block: str, page_name: str) -> list[dict]:
             "members": members,
             "ticks": None,
             "notes": " — ".join(notes_parts),
-            "at": patch_type,
             "level": level,
             "xp": plantxp,
             "seed_name": seed_name,
@@ -162,7 +161,6 @@ def parse_farming_actions(block: str, page_name: str) -> list[dict]:
             "members": members,
             "ticks": None,
             "notes": "Check health",
-            "at": patch_type,
             "level": level,
             "xp": checkxp,
             "seed_name": None,
@@ -178,7 +176,6 @@ def parse_farming_actions(block: str, page_name: str) -> list[dict]:
             "members": members,
             "ticks": None,
             "notes": "Harvest",
-            "at": patch_type,
             "level": level,
             "xp": harvestxp,
             "seed_name": None,
@@ -241,8 +238,8 @@ def ingest(db_path: Path) -> None:
 
     for action in deduped_actions:
         cursor = conn.execute(
-            "INSERT INTO actions (name, members, ticks, notes, at) VALUES (?, ?, ?, ?, ?)",
-            (action["name"], action["members"], action["ticks"], action["notes"], action["at"]),
+            "INSERT INTO actions (name, members, ticks, notes) VALUES (?, ?, ?, ?)",
+            (action["name"], action["members"], action["ticks"], action["notes"]),
         )
         action_id = cursor.lastrowid
         conn.execute(

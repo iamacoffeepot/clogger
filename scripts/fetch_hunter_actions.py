@@ -94,7 +94,6 @@ def _parse_single_version(
         "members": members,
         "ticks": None,
         "notes": None,
-        "at": None,
         "skills": [],
         "tools": [],
         "input_items": [],
@@ -237,8 +236,8 @@ def ingest(db_path: Path) -> None:
 
     for action in deduped_actions:
         cursor = conn.execute(
-            "INSERT INTO actions (name, members, ticks, notes, at) VALUES (?, ?, ?, ?, ?)",
-            (action["name"], action["members"], action["ticks"], action["notes"], action["at"]),
+            "INSERT INTO actions (name, members, ticks, notes) VALUES (?, ?, ?, ?)",
+            (action["name"], action["members"], action["ticks"], action["notes"]),
         )
         action_id = cursor.lastrowid
         conn.execute(

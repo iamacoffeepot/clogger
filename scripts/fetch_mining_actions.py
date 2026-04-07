@@ -99,7 +99,7 @@ def _build_action(
         "members": members,
         "ticks": MINING_POLL_TICKS,
         "notes": notes,
-        "at": at,
+        "source_object": at,
         "level": level,
         "xp": xp,
         "tool": tool_name,
@@ -146,14 +146,14 @@ def ingest(db_path: Path) -> None:
         for block in blocks:
             all_actions.extend(parse_mining_actions(block, page_name))
 
-    # Dedup: group by (at, level), prefer name != at (ore page)
+    # Dedup: group by (source_object, level), prefer name != source_object (ore page)
     seen: dict[tuple, dict] = {}
     for action in all_actions:
-        key = (action["at"], action["level"], action.get("notes"))
+        key = (action["source_object"], action["level"], action.get("notes"))
         existing = seen.get(key)
         if existing is None:
             seen[key] = action
-        elif action["name"] != action["at"] and existing["name"] == existing["at"]:
+        elif action["name"] != action["source_object"] and existing["name"] == existing["source_object"]:
             # Prefer ore page over rock page
             seen[key] = action
 
@@ -162,8 +162,8 @@ def ingest(db_path: Path) -> None:
 
     for action in deduped_actions:
                 cursor = conn.execute(
-                    "INSERT INTO actions (name, members, ticks, notes, at) VALUES (?, ?, ?, ?, ?)",
-                    (action["name"], action["members"], action["ticks"], action["notes"], action["at"]),
+                    "INSERT INTO actions (name, members, ticks, notes) VALUES (?, ?, ?, ?)",
+                    (action["name"], action["members"], action["ticks"], action["notes"]),
                 )
                 action_id = cursor.lastrowid
                 conn.execute(

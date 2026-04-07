@@ -54,7 +54,6 @@ def parse_action(block: str, page_name: str) -> dict | None:
         "members": parse_members(parse_template_param(block, "members")),
         "ticks": parse_ticks(parse_template_param(block, "ticks")),
         "notes": parse_template_param(block, "notes"),
-        "at": parse_template_param(block, "facilities"),
         "skills": [],
         "input_items": [],
         "input_currencies": [],
@@ -209,8 +208,8 @@ def ingest(db_path: Path) -> None:
 
         for action in actions:
             cursor = conn.execute(
-                "INSERT INTO actions (name, members, ticks, notes, at) VALUES (?, ?, ?, ?, ?)",
-                (action["name"], action["members"], action["ticks"], action["notes"], action["at"]),
+                "INSERT INTO actions (name, members, ticks, notes) VALUES (?, ?, ?, ?)",
+                (action["name"], action["members"], action["ticks"], action["notes"]),
             )
             action_id = cursor.lastrowid
             conn.execute(

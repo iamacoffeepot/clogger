@@ -30,7 +30,6 @@ from ragger.wiki import (
     parse_template_param,
     parse_xp,
     record_attributions_batch,
-    strip_wiki_links,
     throttle,
 )
 
@@ -42,16 +41,6 @@ _TEMPLATE = "Firemaking info"
 # Standard firemaking burns one log every 4 game ticks (2.4 seconds).
 FIREMAKING_TICKS = 4
 
-
-def _parse_facility(facility: str | None) -> str | None:
-    """Extract facility name, or None if N/A."""
-    if not facility or facility.strip().upper() == "N/A":
-        return None
-    cleaned = strip_wiki_links(facility).strip()
-    # Take first option if "X or Y"
-    if " or " in cleaned:
-        cleaned = cleaned.split(" or ")[0].strip()
-    return cleaned if cleaned else None
 
 
 def _parse_logs(block: str, page_name: str, members: int, versions: list[str]) -> list[dict]:
@@ -66,14 +55,12 @@ def _parse_logs(block: str, page_name: str, members: int, versions: list[str]) -
         xp = parse_xp(parse_template_param(block, "skill1exp") or parse_template_param(block, "xp"))
         tool_str = parse_template_param(block, "tool")
         tool = clean_name(tool_str, page_name) if tool_str and tool_str.strip().upper() != "N/A" else None
-        at = _parse_facility(parse_template_param(block, "facility"))
         return [{
             "name": page_name,
             "page": page_name,
             "members": members,
             "ticks": FIREMAKING_TICKS,
             "notes": None,
-            "at": at,
             "level": level,
             "xp": xp,
             "tool": tool,
@@ -93,8 +80,6 @@ def _parse_logs(block: str, page_name: str, members: int, versions: list[str]) -
         tool_str = parse_template_param(block, f"tool{vi}")
         tool = clean_name(tool_str, page_name) if tool_str and tool_str.strip().upper() != "N/A" else None
 
-        at = _parse_facility(parse_template_param(block, f"facility{vi}"))
-
         # First version (Tinderbox) uses bare page name; others get a suffix
         action_name = page_name if vi == 1 else f"{page_name} ({version_name})"
 
@@ -104,7 +89,6 @@ def _parse_logs(block: str, page_name: str, members: int, versions: list[str]) -
             "members": members,
             "ticks": FIREMAKING_TICKS,
             "notes": version_name if vi > 1 else None,
-            "at": at,
             "level": level,
             "xp": xp,
             "tool": tool,
@@ -146,7 +130,6 @@ def _parse_pyre(block: str, page_name: str, members: int, versions: list[str]) -
             "members": members,
             "ticks": None,
             "notes": None,
-            "at": "Funeral pyre",
             "level": level,
             "xp": xp,
             "tool": None,
@@ -168,7 +151,6 @@ def _parse_pyre(block: str, page_name: str, members: int, versions: list[str]) -
             "members": members,
             "ticks": None,
             "notes": version_name,
-            "at": "Funeral pyre",
             "level": level,
             "xp": xp,
             "tool": None,
@@ -248,8 +230,8 @@ def ingest(db_path: Path) -> None:
 
     for action in deduped_actions:
         cursor = conn.execute(
-            "INSERT INTO actions (name, members, ticks, notes, at) VALUES (?, ?, ?, ?, ?)",
-            (action["name"], action["members"], action["ticks"], action["notes"], action["at"]),
+            "INSERT INTO actions (name, members, ticks, notes) VALUES (?, ?, ?, ?)",
+            (action["name"], action["members"], action["ticks"], action["notes"]),
         )
         action_id = cursor.lastrowid
         conn.execute(

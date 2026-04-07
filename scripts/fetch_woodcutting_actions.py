@@ -76,7 +76,7 @@ def parse_woodcutting_actions(block: str, page_name: str) -> list[dict]:
         "members": members,
         "ticks": WOODCUTTING_POLL_TICKS,
         "notes": None,
-        "at": at,
+        "source_object": at,
         "level": level,
         "xp": xp,
         "tool": tool_name,
@@ -122,14 +122,14 @@ def ingest(db_path: Path) -> None:
         for block in blocks:
             all_actions.extend(parse_woodcutting_actions(block, page_name))
 
-    # Dedup: group by (at, level), prefer name != at (log page)
+    # Dedup: group by (source_object, level), prefer name != source_object (log page)
     seen: dict[tuple, dict] = {}
     for action in all_actions:
-        key = (action["at"], action["level"])
+        key = (action["source_object"], action["level"])
         existing = seen.get(key)
         if existing is None:
             seen[key] = action
-        elif action["name"] != action["at"] and existing["name"] == existing["at"]:
+        elif action["name"] != action["source_object"] and existing["name"] == existing["source_object"]:
             seen[key] = action
 
     deduped_actions = list(seen.values())
@@ -137,8 +137,8 @@ def ingest(db_path: Path) -> None:
 
     for action in deduped_actions:
         cursor = conn.execute(
-            "INSERT INTO actions (name, members, ticks, notes, at) VALUES (?, ?, ?, ?, ?)",
-            (action["name"], action["members"], action["ticks"], action["notes"], action["at"]),
+            "INSERT INTO actions (name, members, ticks, notes) VALUES (?, ?, ?, ?)",
+            (action["name"], action["members"], action["ticks"], action["notes"]),
         )
         action_id = cursor.lastrowid
         conn.execute(

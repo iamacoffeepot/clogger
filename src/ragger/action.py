@@ -60,10 +60,9 @@ class Action:
     members: bool
     ticks: int | None
     notes: str | None
-    at: str | None
     trigger_types: int
 
-    _COLS = "id, name, members, ticks, notes, at, trigger_types"
+    _COLS = "id, name, members, ticks, notes, trigger_types"
 
     # --- Core queries ---
 
@@ -80,15 +79,6 @@ class Action:
         rows = conn.execute(
             f"SELECT {cls._COLS} FROM actions WHERE name = ? ORDER BY id",
             (name,),
-        ).fetchall()
-        return [cls._from_row(row) for row in rows]
-
-    @classmethod
-    def at_object(cls, conn: sqlite3.Connection, at: str) -> list[Action]:
-        """Find actions performed at a given world object."""
-        rows = conn.execute(
-            f"SELECT {cls._COLS} FROM actions WHERE at = ? ORDER BY id",
-            (at,),
         ).fetchall()
         return [cls._from_row(row) for row in rows]
 
@@ -351,6 +341,5 @@ class Action:
             members=bool(row[2]),
             ticks=row[3],
             notes=row[4],
-            at=row[5],
-            trigger_types=row[6],
+            trigger_types=row[5],
         )

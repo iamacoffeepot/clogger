@@ -59,21 +59,19 @@ def parse_fishing_actions(block: str, page_name: str) -> list[dict]:
         return []
 
     members = parse_members(parse_template_param(block, "members"))
-    spot = parse_template_param(block, "spot")
-    at = clean_name(spot, page_name) if spot else None
 
     versions = detect_versions(block)
 
     if not versions:
         # Single version — parameters have no numeric suffix
-        action = _parse_single_version(block, page_name, fish_name, members, at, suffix="")
+        action = _parse_single_version(block, page_name, fish_name, members, suffix="")
         return [action] if action else []
 
     # Multiple versions — parameters get numeric suffix per version
     actions = []
     for vi, version_name in enumerate(versions, 1):
         suffix = str(vi)
-        action = _parse_single_version(block, page_name, fish_name, members, at, suffix=suffix)
+        action = _parse_single_version(block, page_name, fish_name, members, suffix=suffix)
         if action:
             action["notes"] = version_name
             actions.append(action)
@@ -81,7 +79,7 @@ def parse_fishing_actions(block: str, page_name: str) -> list[dict]:
 
 
 def _parse_single_version(
-    block: str, page_name: str, fish_name: str, members: int, at: str | None, suffix: str,
+    block: str, page_name: str, fish_name: str, members: int, suffix: str,
 ) -> dict | None:
     """Parse one version of a Fishing info block."""
     action: dict = {
@@ -89,7 +87,6 @@ def _parse_single_version(
         "members": members,
         "ticks": FISHING_POLL_TICKS,
         "notes": None,
-        "at": at,
         "skills": [],
         "input_items": [],
         "tools": [],
@@ -207,8 +204,8 @@ def ingest(db_path: Path) -> None:
 
             for action in actions:
                 cursor = conn.execute(
-                    "INSERT INTO actions (name, members, ticks, notes, at) VALUES (?, ?, ?, ?, ?)",
-                    (action["name"], action["members"], action["ticks"], action["notes"], action["at"]),
+                    "INSERT INTO actions (name, members, ticks, notes) VALUES (?, ?, ?, ?)",
+                    (action["name"], action["members"], action["ticks"], action["notes"]),
                 )
                 action_id = cursor.lastrowid
                 conn.execute(

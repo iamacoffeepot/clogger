@@ -503,7 +503,6 @@ action.name -> str                                     # what the action creates
 action.members -> bool
 action.ticks -> int | None                             # game ticks per action (NULL for gathering)
 action.notes -> str | None                             # quest/other requirements
-action.at -> str | None                                # world object (Furnace, Anvil, etc.) or NULL
 action.trigger_types -> int                            # TriggerType bitmask (oploc, opnpc, opheld, etc.)
 action.has_trigger_type(trigger_type) -> bool
 action.trigger_type_list() -> list[TriggerType]

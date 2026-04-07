@@ -41,7 +41,6 @@ from ragger.wiki import (
     parse_xp,
     record_attributions_batch,
     strip_refs,
-    strip_wiki_links,
     throttle,
 )
 
@@ -71,16 +70,17 @@ def _is_no(val: str | None) -> bool:
 
 # XP multipliers for bone offering methods
 _BONE_METHODS = [
-    # (suffix, at, multiplier, flag_to_check)
-    ("Bury", None, 1.0, "burying"),
-    ("Altar", "Gilded altar", 3.5, "altar"),
-    ("Ectofuntus", "Ectofuntus", 4.0, "ectofuntus"),
-    ("Sinister Offering", None, 3.0, "sinister"),
+    # (suffix, multiplier, flag_to_check)
+    ("Bury", 1.0, "burying"),
+    ("Altar", 3.5, "altar"),
+    ("Ectofuntus", 4.0, "ectofuntus"),
+    ("Sinister Offering", 3.0, "sinister"),
 ]
 
 _ASH_METHODS = [
-    ("Scatter", None, 1.0, None),
-    ("Demonic Offering", None, 3.0, None),
+    # (suffix, multiplier, flag_to_check)
+    ("Scatter", 1.0, None),
+    ("Demonic Offering", 3.0, None),
 ]
 
 
@@ -147,15 +147,10 @@ def _parse_single_version(
         type_raw = parse_template_param(block, "type")
     prayer_type = type_raw.strip().lower() if type_raw else "other"
 
-    facility_raw = parse_template_param(block, f"facility{suffix}")
-    if facility_raw is None:
-        facility_raw = parse_template_param(block, "facility")
-    facility = strip_wiki_links(facility_raw).strip() if facility_raw else None
-
     actions = []
 
     if prayer_type == "bone":
-        for method_name, at, multiplier, flag in _BONE_METHODS:
+        for method_name, multiplier, flag in _BONE_METHODS:
             if flag and _is_no(parse_template_param(block, flag)):
                 continue
             xp = round(base_xp * multiplier, 1)
@@ -166,13 +161,12 @@ def _parse_single_version(
                 "members": members,
                 "ticks": None,
                 "notes": f"bone — {method_name}",
-                "at": at,
                 "level": level,
                 "xp": xp,
             })
 
     elif prayer_type == "ashes":
-        for method_name, at, multiplier, _flag in _ASH_METHODS:
+        for method_name, multiplier, _flag in _ASH_METHODS:
             xp = round(base_xp * multiplier, 1)
             actions.append({
                 "name": f"{target_name} ({method_name})",
@@ -181,7 +175,6 @@ def _parse_single_version(
                 "members": members,
                 "ticks": None,
                 "notes": f"ashes — {method_name}",
-                "at": at,
                 "level": level,
                 "xp": xp,
             })
@@ -194,7 +187,6 @@ def _parse_single_version(
             "members": members,
             "ticks": None,
             "notes": "bonemeal",
-            "at": facility or "Ectofuntus",
             "level": level,
             "xp": base_xp,
         })
@@ -207,7 +199,6 @@ def _parse_single_version(
             "members": members,
             "ticks": None,
             "notes": "reanimated",
-            "at": facility or "Dark Altar",
             "level": level,
             "xp": base_xp,
         })
@@ -220,7 +211,6 @@ def _parse_single_version(
             "members": members,
             "ticks": None,
             "notes": "spectral — Ectoplasmator",
-            "at": None,
             "level": level,
             "xp": base_xp,
         })
@@ -233,7 +223,6 @@ def _parse_single_version(
             "members": members,
             "ticks": None,
             "notes": "fossil",
-            "at": facility or "Strange Machine",
             "level": level,
             "xp": base_xp,
         })
@@ -246,7 +235,6 @@ def _parse_single_version(
             "members": members,
             "ticks": None,
             "notes": prayer_type,
-            "at": facility,
             "level": level,
             "xp": base_xp,
         })
@@ -304,8 +292,8 @@ def ingest(db_path: Path) -> None:
 
     for action in deduped_actions:
         cursor = conn.execute(
-            "INSERT INTO actions (name, members, ticks, notes, at) VALUES (?, ?, ?, ?, ?)",
-            (action["name"], action["members"], action["ticks"], action["notes"], action["at"]),
+            "INSERT INTO actions (name, members, ticks, notes) VALUES (?, ?, ?, ?)",
+            (action["name"], action["members"], action["ticks"], action["notes"]),
         )
         action_id = cursor.lastrowid
         conn.execute(
