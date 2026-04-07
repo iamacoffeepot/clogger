@@ -1,0 +1,21 @@
+## Enums (`src/ragger/enums.py`)
+
+- `Skill(int, Enum)` — 23 OSRS skills, int-based with `label`, `mask` properties
+- `Region(int, Enum)` — 12 regions (including GENERAL), int-based with `label`, `mask`, `from_label` properties
+- `TaskDifficulty(int, Enum)` — Easy/Medium/Hard/Elite/Master with `label`, `points` properties
+- `DiaryLocation(str, Enum)` — 12 diary regions with `xp_reward(tier)`, `min_level(tier)` methods
+- `DiaryTier(str, Enum)` — Easy/Medium/Hard/Elite
+- `EquipmentSlot(str, Enum)` — 11 equipment slots (head, weapon, body, legs, shield, cape, hands, feet, neck, ammo, ring) with `label`, `from_label` (maps wiki `2h` to `WEAPON`)
+- `CombatStyle(str, Enum)` — 28 weapon combat styles (2h Sword, Axe, Bow, Crossbow, Slash Sword, Staff, Whip, etc.) with `from_label`
+- `ShopType(str, Enum)` — 36 shop types (General, Gem, Fishing, Magic, etc.) with `from_label` fuzzy matching
+- `ActivityType(str, Enum)` — Minigame, Random event, Forestry, Raid, Activity, Boss, Distraction and Diversion, Quest, Reward with `from_label` (falls back to Activity)
+- `VariableType(str, Enum)` — varp, varbit, varc_int, varc_str with `from_label`
+- `ContentCategory(str, Enum)` — quest, skill, npc, location, item, minigame, activity with `from_label`
+- `FunctionalTag(str, Enum)` — progress, toggle, counter, ui, config, storage, timer, cosmetic with `from_label`
+- `TriggerType(int, Enum)` — CLICK_OBJECT, CLICK_NPC, CLICK_ITEM, USE_ITEM_ON_OBJECT, USE_ITEM_ON_NPC, USE_ITEM_ON_ITEM, CLICK_WIDGET with `mask`, `label` properties
+- `Facility(int, Enum)` — Bank, Furnace, Anvil, Range, Altar, Spinning wheel, Loom with `mask`, `label` properties
+- `Immunity(int, Enum)` — Poison, Venom, Cannon, Thrall, Burn with `mask`, `label` properties
+- `MapLinkType(str, Enum)` — entrance, exit, fairy_ring, charter_ship, spirit_tree, gnome_glider, canoe, teleport, minecart, ship, quetzal, walkable, npc_transport
+- `MAP_LINK_ANYWHERE` — constant `"ANYWHERE"` for teleport from_location (castable from any location)
+- `ALL_SKILLS_MASK`, `ALL_REGIONS_MASK` — bitmask constants for "all"
+- `COMBAT_SKILLS_MASK` — bitmask for Attack, Strength, Defence, Hitpoints, Ranged, Magic, Prayer
