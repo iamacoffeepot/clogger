@@ -106,7 +106,7 @@ def _build_action(
     return {
         "name": name,
         "members": members,
-        "ticks": None,  # varies by pickaxe tier
+        "ticks": 8,  # bronze pickaxe (worst case); varies by tier
         "notes": notes,
         "at": at,
         "level": level,
