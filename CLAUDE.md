@@ -569,9 +569,15 @@ from ragger.wiki import (
     record_attributions_batch,
     strip_markup,
     strip_wiki_links,
+    strip_plinks,
     extract_template,
     extract_section,
     parse_template_param,
+    parse_int,
+    parse_xp,
+    parse_ticks,
+    parse_members,
+    parse_boostable,
     parse_skill_requirements,
     link_requirement,
     throttle,
@@ -591,9 +597,15 @@ record_attributions_batch(conn, table_names, pages)                        # bat
 # Parsing
 strip_markup(text) -> str                                                  # remove wiki markup
 strip_wiki_links(text) -> str                                              # [[Link|Display]] -> Display
+strip_plinks(text) -> str                                                  # {{plink|Name}} -> Name
 extract_template(wikitext, template_name) -> str | None                    # nested brace-aware
 extract_section(wikitext, field_name) -> str                               # |field= section
-parse_template_param(text, param) -> str | None                            # single param
+parse_template_param(text, param) -> str | None                            # brace-aware param extraction
+parse_int(val) -> int | None                                               # "1,234" / "+15" / "5%" -> int
+parse_xp(val) -> float                                                     # XP string -> float, 0.0 default
+parse_ticks(val) -> int | None                                             # tick count, None for N/A/varies
+parse_members(val) -> int                                                  # "Yes"/"No" -> 1/0, default 1
+parse_boostable(val) -> int | None                                         # "Yes"/"No" -> 1/0
 parse_skill_requirements(text) -> list[tuple[int, int]]                    # {{SCP|Skill|Level}}
 
 # DB helpers
