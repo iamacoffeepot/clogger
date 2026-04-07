@@ -37,7 +37,7 @@ from ragger.wiki import (
 )
 
 # Key used in source_actions to identify rows belonging to this script.
-_SOURCE = "agility"
+_SOURCE = "wiki-agility"
 # Wiki template name whose transclusions are fetched and parsed.
 _TEMPLATE = "Agility info"
 

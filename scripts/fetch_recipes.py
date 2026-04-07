@@ -35,7 +35,7 @@ from ragger.wiki import (
 )
 
 # Key used in source_actions to identify rows belonging to this script.
-_SOURCE = "recipe"
+_SOURCE = "wiki-recipe"
 # Wiki template name whose transclusions are fetched and parsed.
 _TEMPLATE = "Recipe"
 

@@ -42,7 +42,7 @@ from ragger.wiki import (
 )
 
 # Key used in source_actions to identify rows belonging to this script.
-_SOURCE = "farming"
+_SOURCE = "wiki-farming"
 # Wiki template name whose transclusions are fetched and parsed.
 _TEMPLATE = "Farming info"
 
