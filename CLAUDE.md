@@ -189,10 +189,22 @@ equipment.slot -> EquipmentSlot | None
 equipment.two_handed -> bool                           # True for 2h weapons
 equipment.combat_style -> CombatStyle | None
 equipment.item_id -> int | None                        # FK to items table
-# Attack bonuses: attack_stab, attack_slash, attack_crush, attack_magic, attack_ranged
-# Defence bonuses: defence_stab, defence_slash, defence_crush, defence_magic, defence_ranged
-# Other bonuses: melee_strength, ranged_strength, magic_damage, prayer
-# Weapon-only: speed, attack_range, combat_style
+equipment.attack_stab -> int | None
+equipment.attack_slash -> int | None
+equipment.attack_crush -> int | None
+equipment.attack_magic -> int | None
+equipment.attack_ranged -> int | None
+equipment.defence_stab -> int | None
+equipment.defence_slash -> int | None
+equipment.defence_crush -> int | None
+equipment.defence_magic -> int | None
+equipment.defence_ranged -> int | None
+equipment.melee_strength -> int | None
+equipment.ranged_strength -> int | None
+equipment.magic_damage -> int | None
+equipment.prayer -> int | None
+equipment.speed -> int | None                          # weapon-only
+equipment.attack_range -> int | None                   # weapon-only
 ```
 
 ### RequirementGroup (`src/ragger/requirements.py`)
@@ -525,8 +537,35 @@ monster.immunities -> int                              # bitmask
 monster.slayer_category -> str | None
 monster.elemental_weakness_type -> str | None
 monster.elemental_weakness_percent -> int | None
-# Full stat block: attack/strength/defence/magic/ranged levels and bonuses
-# Full defensive bonuses: stab/slash/crush/magic/light/standard/heavy ranged
+monster.attack_level -> int | None
+monster.strength_level -> int | None
+monster.defence_level -> int | None
+monster.magic_level -> int | None
+monster.ranged_level -> int | None
+monster.attack_bonus -> int | None
+monster.strength_bonus -> int | None
+monster.magic_attack -> int | None
+monster.magic_strength -> int | None
+monster.ranged_attack -> int | None
+monster.ranged_strength -> int | None
+monster.defensive_stab -> int | None
+monster.defensive_slash -> int | None
+monster.defensive_crush -> int | None
+monster.defensive_magic -> int | None
+monster.defensive_light_ranged -> int | None
+monster.defensive_standard_ranged -> int | None
+monster.defensive_heavy_ranged -> int | None
+monster.attack_speed -> int | None
+monster.max_hit -> str | None
+monster.attack_style -> str | None
+monster.aggressive -> bool | None
+monster.size -> int | None
+monster.respawn -> int | None
+monster.slayer_xp -> float | None
+monster.slayer_assigned_by -> str | None
+monster.attributes -> str | None
+monster.examine -> str | None
+monster.members -> bool | None
 ```
 
 ### GameVariable (`src/ragger/game_variable.py`)
