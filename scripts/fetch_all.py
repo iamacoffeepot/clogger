@@ -12,39 +12,39 @@ from pathlib import Path
 
 SCRIPTS = [
     # Core data (order matters)
-    "scripts/fetch_items.py",
-    "scripts/fetch_equipment.py",
-    "scripts/fetch_quests.py",
-    "scripts/fetch_quest_regions.py",
-    "scripts/fetch_diary_tasks.py",
-    "scripts/fetch_diary_items.py",
-    "scripts/fetch_shops.py",
-    "scripts/fetch_locations.py",
-    "scripts/fetch_facilities.py",
-    "scripts/fetch_monsters.py",
-    "scripts/fetch_dungeon_entrances.py",
-    "scripts/fetch_fairy_rings.py",
-    "scripts/fetch_quetzal.py",
-    "scripts/fetch_charter_ships.py",
-    "scripts/fetch_magic_teleports.py",
-    "scripts/fetch_activities.py",
-    "scripts/fetch_npcs.py",
-    "scripts/fetch_recipes.py",
-    "scripts/fetch_fishing_actions.py",
-    "scripts/fetch_mining_actions.py",
-    "scripts/fetch_woodcutting_actions.py",
-    "scripts/fetch_firemaking_actions.py",
-    "scripts/fetch_hunter_actions.py",
-    "scripts/fetch_thieving_actions.py",
-    "scripts/fetch_agility_actions.py",
-    "scripts/fetch_farming_actions.py",
-    "scripts/fetch_prayer_actions.py",
-    "scripts/fetch_wiki_vars.py",
+    "scripts/pipeline/fetch_items.py",
+    "scripts/pipeline/fetch_equipment.py",
+    "scripts/pipeline/fetch_quests.py",
+    "scripts/pipeline/fetch_quest_regions.py",
+    "scripts/pipeline/fetch_diary_tasks.py",
+    "scripts/pipeline/fetch_diary_items.py",
+    "scripts/pipeline/fetch_shops.py",
+    "scripts/pipeline/fetch_locations.py",
+    "scripts/pipeline/fetch_facilities.py",
+    "scripts/pipeline/fetch_monsters.py",
+    "scripts/pipeline/fetch_dungeon_entrances.py",
+    "scripts/pipeline/fetch_fairy_rings.py",
+    "scripts/pipeline/fetch_quetzal.py",
+    "scripts/pipeline/fetch_charter_ships.py",
+    "scripts/pipeline/fetch_magic_teleports.py",
+    "scripts/pipeline/fetch_activities.py",
+    "scripts/pipeline/fetch_npcs.py",
+    "scripts/pipeline/fetch_recipes.py",
+    "scripts/pipeline/fetch_fishing_actions.py",
+    "scripts/pipeline/fetch_mining_actions.py",
+    "scripts/pipeline/fetch_woodcutting_actions.py",
+    "scripts/pipeline/fetch_firemaking_actions.py",
+    "scripts/pipeline/fetch_hunter_actions.py",
+    "scripts/pipeline/fetch_thieving_actions.py",
+    "scripts/pipeline/fetch_agility_actions.py",
+    "scripts/pipeline/fetch_farming_actions.py",
+    "scripts/pipeline/fetch_prayer_actions.py",
+    "scripts/pipeline/fetch_wiki_vars.py",
     # Linking passes (depend on multiple tables)
-    "scripts/link_shop_locations.py",
-    "scripts/link_activity_locations.py",
-    "scripts/link_facilities.py",
-    "scripts/compute_walkability.py",
+    "scripts/pipeline/link_shop_locations.py",
+    "scripts/pipeline/link_activity_locations.py",
+    "scripts/pipeline/link_facilities.py",
+    "scripts/pipeline/compute_walkability.py",
 ]
 
 
@@ -57,9 +57,9 @@ def run(db_path: Path, league_page: str | None = None) -> None:
         )
 
     if league_page:
-        print(f"\n=== scripts/fetch_league_tasks.py ===")
+        print(f"\n=== scripts/pipeline/fetch_league_tasks.py ===")
         subprocess.run(
-            [sys.executable, "scripts/fetch_league_tasks.py", "--db", str(db_path), "--page", league_page],
+            [sys.executable, "scripts/pipeline/fetch_league_tasks.py", "--db", str(db_path), "--page", league_page],
             check=True,
         )
 

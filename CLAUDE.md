@@ -5,7 +5,9 @@ OSRS knowledge base powered by retrieval-augmented generation.
 ## Project Structure
 
 - `src/ragger/` — Python package with data models and database module
-- `scripts/` — Data ingestion scripts that pull from the OSRS wiki API
+- `scripts/` — Top-level orchestration (fetch_all.py, release.py, classify_game_vars.py)
+- `scripts/pipeline/` — Data pipeline scripts (wiki fetch, linking, compute)
+- `scripts/import/` — One-time local data imports (map squares, game vars)
 - `plugin/` — RuneLite plugin with AI chat panel and Wasm scripting engine
 - `tools/cache-dump/` — Java tool for extracting map data from the OSRS game cache
 - `data/` — SQLite database and cache dump output (gitignored)
@@ -23,7 +25,7 @@ Runs all ingestion scripts in the correct order. Items must be populated first s
 uv run python scripts/fetch_all.py [--db data/ragger.db] [--league Raging_Echoes_League/Tasks]
 ```
 
-### Individual scripts
+### Pipeline scripts (`scripts/pipeline/`)
 
 Pipeline order (managed by `fetch_all.py`):
 
@@ -60,12 +62,16 @@ Pipeline order (managed by `fetch_all.py`):
 31. `link_facilities.py` — Derives facility bitmasks on locations from nearest facility coordinates
 32. `compute_walkability.py` — Computes walkable connections via Voronoi edge flood fill and map tile collision data. Supports `--area-threshold`, `--edge-samples`, `--resolution`, `--debug` flags.
 
-### Utility scripts
+### Import scripts (`scripts/import/`)
 
 - `import_map_squares.py` — Imports map square images from `data/map-squares.zip` into the `map_squares` table. One-time setup.
 - `import_game_vars.py` — Imports game var JSON from `data/game-vars/` (produced by `dumpGameVariables`) into the `game_vars` table. Re-run after updating RuneLite.
+
+### Utility scripts
+
 - `classify_game_vars.py` — Classifies game variable names using Claude CLI. Tags vars with content categories and functional tags. Supports `--workers`, `--batch-size`, `--session-reset`, `--model`, `--reclassify` flags.
-- `fetch_league_tasks.py` — Pulls league tasks (with `--league` flag)
+
+`fetch_league_tasks.py` is in `scripts/pipeline/` but run separately via `fetch_all.py --league`.
 
 ## Cache Dump Tool
 

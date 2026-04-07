@@ -9,7 +9,7 @@ from ragger.wiki import link_group_requirement
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts" / "pipeline"))
 from fetch_equipment import parse_equipment_requirements
 
 
