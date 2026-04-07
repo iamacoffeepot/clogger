@@ -152,6 +152,15 @@ SCHEMAS: list[str] = [
         FOREIGN KEY (group_id) REFERENCES requirement_groups(id)
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS equipment_requirement_groups (
+        equipment_id INTEGER NOT NULL,
+        group_id INTEGER NOT NULL,
+        PRIMARY KEY (equipment_id, group_id),
+        FOREIGN KEY (equipment_id) REFERENCES equipment(id),
+        FOREIGN KEY (group_id) REFERENCES requirement_groups(id)
+    )
+    """,
     f"""
     CREATE TABLE IF NOT EXISTS experience_rewards (
         id INTEGER PRIMARY KEY AUTOINCREMENT,

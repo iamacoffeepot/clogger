@@ -1,20 +1,25 @@
 """Fetch equipment data from the OSRS wiki and populate the equipment table.
 
 Parses {{Infobox Bonuses}} for combat stats and {{Infobox Item}} for metadata.
+Extracts skill and quest requirements from article prose.
 Uses batched API calls for efficiency.
 
-Requires: fetch_items.py to have been run first (for item_id cross-referencing).
+Requires: fetch_items.py and fetch_quests.py to have been run first.
 """
 
 import argparse
+import re
 from pathlib import Path
 
 from ragger.db import create_tables, get_connection
-from ragger.enums import CombatStyle, EquipmentSlot
+from ragger.enums import CombatStyle, EquipmentSlot, Skill
 from ragger.wiki import (
+    SKILL_NAME_MAP,
+    WIKI_LINK_PATTERN,
     extract_template,
     fetch_category_members,
     fetch_pages_wikitext_batch,
+    link_group_requirement,
     parse_template_param,
     record_attributions_batch,
     strip_wiki_links,
@@ -74,6 +79,89 @@ def parse_combat_style(val: str | None) -> str | None:
         return CombatStyle.from_label(val.strip()).value
     except ValueError:
         return None
+
+
+# Matches "N [[Skill]]" — a level followed by a wiki-linked skill name
+_LEVEL_SKILL_PATTERN = re.compile(r"(\d{1,2})\s*\[\[(\w[\w ]*?)\]\]")
+# Matches "[[Skill]] level of N"
+_SKILL_LEVEL_OF_PATTERN = re.compile(r"\[\[(\w[\w ]*?)\]\]\s*level of\s*(\d{1,2})")
+# Matches quest links following "completion of" or "completed"
+_QUEST_COMPLETION_PATTERN = re.compile(
+    r"complet(?:ion of|ed?)\s+(?:the\s+)?(?:\[\[quest\]\]\s*)?\[\[([^\]|]+?)(?:\|[^\]]+)?\]\]",
+    re.IGNORECASE,
+)
+
+
+def _get_intro(wikitext: str) -> str:
+    """Extract the intro text before the first == section heading ==."""
+    match = re.search(r"^==\s*\w", wikitext, re.MULTILINE)
+    return wikitext[:match.start()] if match else wikitext
+
+
+def parse_equipment_requirements(
+    wikitext: str,
+) -> tuple[list[tuple[Skill, int]], list[str]]:
+    """Parse skill and quest requirements from equipment page prose.
+
+    Returns (skill_reqs, quest_reqs) where skill_reqs is [(Skill, level), ...]
+    and quest_reqs is [quest_name, ...].
+    """
+    intro = _get_intro(wikitext)
+
+    # --- Skill requirements ---
+    skill_reqs: list[tuple[Skill, int]] = []
+    seen_skills: set[Skill] = set()
+
+    # Pattern 1: "N [[Skill]]" — also handles "N [[Skill1]] and [[Skill2]]"
+    # where the second skill inherits the level from the first.
+    for match in _LEVEL_SKILL_PATTERN.finditer(intro):
+        level = int(match.group(1))
+        skill_name = match.group(2).strip().lower()
+        skill = SKILL_NAME_MAP.get(skill_name)
+        if skill is not None and skill not in seen_skills and 1 <= level <= 99:
+            skill_reqs.append((skill, level))
+            seen_skills.add(skill)
+
+            # Check for additional skills sharing the same level:
+            # "requires 70 [[Defence]] and [[Ranged]] to wear"
+            rest = intro[match.end():]
+            for follow in re.finditer(r"(?:,\s*|\s+and\s+)\[\[(\w[\w ]*?)\]\]", rest):
+                follow_skill = SKILL_NAME_MAP.get(follow.group(1).strip().lower())
+                if follow_skill is not None and follow_skill not in seen_skills:
+                    skill_reqs.append((follow_skill, level))
+                    seen_skills.add(follow_skill)
+                else:
+                    break  # hit a non-skill link, stop chaining
+
+    # Pattern 2: "[[Skill]] level of N"
+    for match in _SKILL_LEVEL_OF_PATTERN.finditer(intro):
+        skill_name = match.group(1).strip().lower()
+        level = int(match.group(2))
+        skill = SKILL_NAME_MAP.get(skill_name)
+        if skill is not None and skill not in seen_skills and 1 <= level <= 99:
+            skill_reqs.append((skill, level))
+            seen_skills.add(skill)
+
+    # --- Quest requirements ---
+    quest_reqs: list[str] = []
+
+    # From Infobox Item |quest= parameter (e.g. |quest = [[Roving Elves]])
+    item_block = extract_template(wikitext, "Infobox Item")
+    if item_block:
+        quest_val = parse_template_param(item_block, "quest")
+        if quest_val:
+            for link_match in WIKI_LINK_PATTERN.finditer(quest_val):
+                quest_name = link_match.group(1).strip()
+                if quest_name.lower() not in ("no", "yes", "quest"):
+                    quest_reqs.append(quest_name)
+
+    # From prose: "completion of [[Quest]]" / "completed [[Quest]]"
+    for match in _QUEST_COMPLETION_PATTERN.finditer(intro):
+        quest_name = match.group(1).strip()
+        if quest_name not in quest_reqs:
+            quest_reqs.append(quest_name)
+
+    return skill_reqs, quest_reqs
 
 
 def parse_equipment(name: str, wikitext: str) -> list[dict]:
@@ -217,6 +305,60 @@ def ingest(db_path: Path) -> None:
 
     conn.commit()
     print(f"Inserted {equipment_count} equipment entries")
+
+    # Build equipment (name, version) → id lookup
+    equip_rows = conn.execute("SELECT id, name, version FROM equipment").fetchall()
+    equip_lookup: dict[tuple[str, str | None], int] = {
+        (name, version): eid for eid, name, version in equip_rows
+    }
+
+    # Build quest name → id lookup
+    quest_ids: dict[str, int] = dict(
+        conn.execute("SELECT name, id FROM quests").fetchall()
+    )
+
+    # Link requirements
+    skill_req_count = 0
+    quest_req_count = 0
+    for page_name, wikitext in all_wikitext.items():
+        skill_reqs, quest_reqs = parse_equipment_requirements(wikitext)
+        if not skill_reqs and not quest_reqs:
+            continue
+
+        # Find all equipment entries from this page
+        items = parse_equipment(page_name, wikitext)
+        for equipment in items:
+            equip_id = equip_lookup.get((equipment["name"], equipment["version"]))
+            if equip_id is None:
+                continue
+
+            for skill, level in skill_reqs:
+                link_group_requirement(
+                    conn,
+                    "group_skill_requirements",
+                    {"skill": skill.value, "level": level},
+                    "equipment_requirement_groups",
+                    "equipment_id",
+                    equip_id,
+                )
+                skill_req_count += 1
+
+            for quest_name in quest_reqs:
+                quest_id = quest_ids.get(quest_name)
+                if quest_id is None:
+                    continue
+                link_group_requirement(
+                    conn,
+                    "group_quest_requirements",
+                    {"required_quest_id": quest_id},
+                    "equipment_requirement_groups",
+                    "equipment_id",
+                    equip_id,
+                )
+                quest_req_count += 1
+
+    conn.commit()
+    print(f"Linked {skill_req_count} skill requirements, {quest_req_count} quest requirements")
 
     # Record attributions
     record_attributions_batch(conn, "equipment", list(all_wikitext.keys()))

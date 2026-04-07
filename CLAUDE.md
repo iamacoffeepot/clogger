@@ -171,6 +171,9 @@ Equipment.by_name(conn, name, version?) -> Equipment | None
 Equipment.by_slot(conn, slot) -> list[Equipment]
 Equipment.search(conn, name) -> list[Equipment]
 Equipment.for_item(conn, item_id) -> list[Equipment]
+equipment.requirement_groups(conn) -> list[RequirementGroup]
+equipment.skill_requirements(conn) -> list[GroupSkillRequirement]
+equipment.quest_requirements(conn) -> list[GroupQuestRequirement]
 equipment.slot -> EquipmentSlot | None
 equipment.two_handed -> bool                           # True for 2h weapons
 equipment.combat_style -> CombatStyle | None

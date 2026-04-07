@@ -142,3 +142,11 @@ class RequirementGroup:
             (diary_task_id,),
         ).fetchall()
         return [RequirementGroup(r[0]) for r in rows]
+
+    @staticmethod
+    def for_equipment(conn: sqlite3.Connection, equipment_id: int) -> list[RequirementGroup]:
+        rows = conn.execute(
+            "SELECT group_id FROM equipment_requirement_groups WHERE equipment_id = ?",
+            (equipment_id,),
+        ).fetchall()
+        return [RequirementGroup(r[0]) for r in rows]

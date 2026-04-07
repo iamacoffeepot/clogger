@@ -3,7 +3,12 @@ from __future__ import annotations
 import sqlite3
 from dataclasses import dataclass
 
-from ragger.enums import CombatStyle, EquipmentSlot
+from ragger.enums import CombatStyle, EquipmentSlot, Skill
+from ragger.requirements import (
+    GroupQuestRequirement,
+    GroupSkillRequirement,
+    RequirementGroup,
+)
 
 
 @dataclass
@@ -99,6 +104,34 @@ class Equipment:
             (item_id,),
         ).fetchall()
         return [cls._from_row(row) for row in rows]
+
+    def requirement_groups(self, conn: sqlite3.Connection) -> list[RequirementGroup]:
+        return RequirementGroup.for_equipment(conn, self.id)
+
+    def skill_requirements(self, conn: sqlite3.Connection) -> list[GroupSkillRequirement]:
+        rows = conn.execute(
+            """
+            SELECT gsr.id, gsr.group_id, gsr.skill, gsr.level, gsr.boostable
+            FROM group_skill_requirements gsr
+            JOIN equipment_requirement_groups erg ON erg.group_id = gsr.group_id
+            WHERE erg.equipment_id = ?
+            ORDER BY gsr.level DESC
+            """,
+            (self.id,),
+        ).fetchall()
+        return [GroupSkillRequirement(r[0], r[1], Skill(r[2]), r[3], bool(r[4])) for r in rows]
+
+    def quest_requirements(self, conn: sqlite3.Connection) -> list[GroupQuestRequirement]:
+        rows = conn.execute(
+            """
+            SELECT gqr.id, gqr.group_id, gqr.required_quest_id, gqr.partial
+            FROM group_quest_requirements gqr
+            JOIN equipment_requirement_groups erg ON erg.group_id = gqr.group_id
+            WHERE erg.equipment_id = ?
+            """,
+            (self.id,),
+        ).fetchall()
+        return [GroupQuestRequirement(r[0], r[1], r[2], bool(r[3])) for r in rows]
 
     @classmethod
     def _from_row(cls, row: tuple) -> Equipment:
