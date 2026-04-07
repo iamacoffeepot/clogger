@@ -158,3 +158,11 @@ class RequirementGroup:
             (monster_id,),
         ).fetchall()
         return [RequirementGroup(r[0]) for r in rows]
+
+    @staticmethod
+    def for_action(conn: sqlite3.Connection, action_id: int) -> list[RequirementGroup]:
+        rows = conn.execute(
+            "SELECT group_id FROM action_requirement_groups WHERE action_id = ?",
+            (action_id,),
+        ).fetchall()
+        return [RequirementGroup(r[0]) for r in rows]

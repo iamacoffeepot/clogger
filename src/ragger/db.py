@@ -434,79 +434,73 @@ SCHEMAS: list[str] = [
     )
     """,
     """
-    CREATE TABLE IF NOT EXISTS recipes (
+    CREATE TABLE IF NOT EXISTS actions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
         members INTEGER NOT NULL DEFAULT 1,
         ticks INTEGER,
         notes TEXT,
-        facilities TEXT
+        at TEXT
     )
     """,
     f"""
-    CREATE TABLE IF NOT EXISTS recipe_skills (
-        recipe_id INTEGER NOT NULL,
+    CREATE TABLE IF NOT EXISTS action_output_experience (
+        action_id INTEGER NOT NULL,
         skill INTEGER NOT NULL CHECK(skill IN ({_skill_ids})),
-        level INTEGER NOT NULL,
-        xp REAL NOT NULL DEFAULT 0,
-        boostable INTEGER,
-        FOREIGN KEY (recipe_id) REFERENCES recipes(id),
-        PRIMARY KEY (recipe_id, skill)
+        xp REAL NOT NULL,
+        FOREIGN KEY (action_id) REFERENCES actions(id),
+        PRIMARY KEY (action_id, skill)
     )
     """,
     """
-    CREATE TABLE IF NOT EXISTS recipe_input_items (
-        recipe_id INTEGER NOT NULL,
+    CREATE TABLE IF NOT EXISTS action_input_items (
+        action_id INTEGER NOT NULL,
         item_id INTEGER,
         item_name TEXT NOT NULL,
         quantity INTEGER NOT NULL DEFAULT 1,
-        FOREIGN KEY (recipe_id) REFERENCES recipes(id),
+        FOREIGN KEY (action_id) REFERENCES actions(id),
         FOREIGN KEY (item_id) REFERENCES items(id)
     )
     """,
     """
-    CREATE TABLE IF NOT EXISTS recipe_input_objects (
-        recipe_id INTEGER NOT NULL,
+    CREATE TABLE IF NOT EXISTS action_input_objects (
+        action_id INTEGER NOT NULL,
         object_name TEXT NOT NULL,
-        FOREIGN KEY (recipe_id) REFERENCES recipes(id)
+        FOREIGN KEY (action_id) REFERENCES actions(id)
     )
     """,
     """
-    CREATE TABLE IF NOT EXISTS recipe_input_currencies (
-        recipe_id INTEGER NOT NULL,
+    CREATE TABLE IF NOT EXISTS action_input_currencies (
+        action_id INTEGER NOT NULL,
         currency TEXT NOT NULL,
         quantity INTEGER NOT NULL DEFAULT 1,
-        FOREIGN KEY (recipe_id) REFERENCES recipes(id)
+        FOREIGN KEY (action_id) REFERENCES actions(id)
     )
     """,
     """
-    CREATE TABLE IF NOT EXISTS recipe_output_items (
-        recipe_id INTEGER NOT NULL,
+    CREATE TABLE IF NOT EXISTS action_output_items (
+        action_id INTEGER NOT NULL,
         item_id INTEGER,
         item_name TEXT NOT NULL,
         quantity INTEGER NOT NULL DEFAULT 1,
-        FOREIGN KEY (recipe_id) REFERENCES recipes(id),
+        FOREIGN KEY (action_id) REFERENCES actions(id),
         FOREIGN KEY (item_id) REFERENCES items(id)
     )
     """,
     """
-    CREATE TABLE IF NOT EXISTS recipe_output_objects (
-        recipe_id INTEGER NOT NULL,
+    CREATE TABLE IF NOT EXISTS action_output_objects (
+        action_id INTEGER NOT NULL,
         object_name TEXT NOT NULL,
-        FOREIGN KEY (recipe_id) REFERENCES recipes(id)
+        FOREIGN KEY (action_id) REFERENCES actions(id)
     )
     """,
     """
-    CREATE TABLE IF NOT EXISTS recipe_tools (
-        recipe_id INTEGER NOT NULL,
-        -- Tools are grouped by tool_group. All groups are AND'd together;
-        -- items within the same group are OR'd (alternatives).
-        -- E.g. group 0: Knife AND group 1: (Air tiara OR Air talisman)
-        tool_group INTEGER NOT NULL DEFAULT 0,
-        item_id INTEGER,
-        item_name TEXT NOT NULL,
-        FOREIGN KEY (recipe_id) REFERENCES recipes(id),
-        FOREIGN KEY (item_id) REFERENCES items(id)
+    CREATE TABLE IF NOT EXISTS action_requirement_groups (
+        action_id INTEGER NOT NULL,
+        group_id INTEGER NOT NULL,
+        PRIMARY KEY (action_id, group_id),
+        FOREIGN KEY (action_id) REFERENCES actions(id),
+        FOREIGN KEY (group_id) REFERENCES requirement_groups(id)
     )
     """,
 ]

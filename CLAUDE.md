@@ -44,7 +44,7 @@ Pipeline order (managed by `fetch_all.py`):
 15. `fetch_magic_teleports.py` — Parses all spellbook teleports (Standard, Ancient, Lunar) and item teleports (jewellery, etc.)
 16. `fetch_activities.py` — Pulls activities/minigames with type, coordinates, skills bitmask, and region from Category:Activities
 17. `fetch_npcs.py` — Pulls non-combat NPC data (name, version, location, options, region) from Category:Non-player characters
-18. `fetch_recipes.py` — Pulls item recipes from all pages using {{Recipe}} template (skills, inputs, outputs, tools, ticks, facilities)
+18. `fetch_actions.py` — Pulls actions from all pages using {{Recipe}} template. Skill levels and tools become requirement groups; XP becomes output experience.
 19. `fetch_wiki_vars.py` — Scrapes RuneScape:Varplayer/* and RuneScape:Varbit/* wiki pages for descriptions, content links, var class, and value annotations (quest stages, etc.)
 20. `link_shop_locations.py` — Links shops to locations by matching location text
 21. `link_activity_locations.py` — Links activities to locations by matching location text
@@ -204,6 +204,7 @@ group.equipment_requirements(conn) -> list[GroupEquipmentRequirement]
 RequirementGroup.for_quest(conn, quest_id) -> list[RequirementGroup]
 RequirementGroup.for_equipment(conn, equipment_id) -> list[RequirementGroup]
 RequirementGroup.for_monster(conn, monster_id) -> list[RequirementGroup]
+RequirementGroup.for_action(conn, action_id) -> list[RequirementGroup]
 RequirementGroup.for_diary_task(conn, diary_task_id) -> list[RequirementGroup]
 RequirementGroup.for_league_task(conn, league_task_id) -> list[RequirementGroup]
 ```
@@ -431,34 +432,47 @@ activity.region -> Region | None
 activity.game_vars(conn) -> list[GameVariable]          # associated game variables
 ```
 
-### Recipe (`src/ragger/recipe.py`)
+### Action (`src/ragger/action.py`)
 
 ```python
-from ragger.recipe import Recipe, RecipeSkill, RecipeInputItem, RecipeInputObject, RecipeInputCurrency, RecipeOutputItem, RecipeOutputObject, RecipeTool
+from ragger.action import Action, ActionOutputExperience, ActionInputItem, ActionInputObject, ActionInputCurrency, ActionOutputItem, ActionOutputObject
 
-Recipe.all(conn) -> list[Recipe]
-Recipe.by_name(conn, name) -> list[Recipe]             # multiple methods for same output
-Recipe.by_skill(conn, skill) -> list[Recipe]           # recipes using a specific skill
-Recipe.for_item(conn, item_name) -> list[Recipe]       # recipes that produce an item
-Recipe.using(conn, item_name) -> list[Recipe]          # recipes that consume an item as input
-Recipe.at_facility(conn, facility) -> list[Recipe]     # recipes requiring a facility
-Recipe.search(conn, name) -> list[Recipe]              # partial name match
-recipe.skills(conn) -> list[RecipeSkill]               # skill requirements and XP
-recipe.input_items(conn) -> list[RecipeInputItem]      # consumed items
-recipe.input_objects(conn) -> list[RecipeInputObject]  # consumed objects (construction upgrades, etc.)
-recipe.input_currencies(conn) -> list[RecipeInputCurrency]  # consumed currencies
-recipe.output_items(conn) -> list[RecipeOutputItem]    # produced items
-recipe.output_objects(conn) -> list[RecipeOutputObject] # produced objects (construction, etc.)
-recipe.tools(conn) -> list[RecipeTool]                 # non-consumed tools
-recipe.name -> str                                     # what the recipe creates
-recipe.members -> bool
-recipe.ticks -> int | None                             # game ticks per action
-recipe.notes -> str | None                             # quest/other requirements
-recipe.facilities -> str | None                        # required facility (Furnace, Anvil, etc.)
+# Core queries
+Action.all(conn) -> list[Action]
+Action.by_name(conn, name) -> list[Action]             # multiple methods for same output
+Action.at_object(conn, at) -> list[Action]             # performed at world object
+Action.search(conn, name) -> list[Action]              # partial name match
 
-# RecipeTool.tool_group groups alternatives: all groups are AND'd together;
-# items within the same group are OR'd.
-# E.g. group 0: Knife AND group 1: (Air tiara OR Air talisman)
+# Producing queries
+Action.producing_item(conn, item_name) -> list[Action]
+Action.producing_object(conn, object_name) -> list[Action]
+Action.producing_experience(conn, skill) -> list[Action]
+
+# Consuming queries
+Action.consuming_item(conn, item_name) -> list[Action]
+Action.consuming_object(conn, object_name) -> list[Action]
+Action.consuming_currency(conn, currency) -> list[Action]
+
+# Output methods
+action.output_experience(conn) -> list[ActionOutputExperience]
+action.output_items(conn) -> list[ActionOutputItem]
+action.output_objects(conn) -> list[ActionOutputObject]
+
+# Input methods
+action.input_items(conn) -> list[ActionInputItem]      # consumed items
+action.input_objects(conn) -> list[ActionInputObject]   # consumed objects
+action.input_currencies(conn) -> list[ActionInputCurrency]  # consumed currencies
+
+# Requirements (skill levels and tools are stored as requirement groups)
+action.requirement_groups(conn) -> list[RequirementGroup]
+action.skill_requirements(conn) -> list[GroupSkillRequirement]
+action.quest_requirements(conn) -> list[GroupQuestRequirement]
+
+action.name -> str                                     # what the action creates
+action.members -> bool
+action.ticks -> int | None                             # game ticks per action (NULL for gathering)
+action.notes -> str | None                             # quest/other requirements
+action.at -> str | None                                # world object (Furnace, Anvil, etc.) or NULL
 ```
 
 ### Npc (`src/ragger/npc.py`)
