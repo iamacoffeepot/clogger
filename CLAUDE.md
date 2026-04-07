@@ -477,6 +477,8 @@ action.requirement_groups(conn) -> list[RequirementGroup]
 action.skill_requirements(conn) -> list[GroupSkillRequirement]
 action.quest_requirements(conn) -> list[GroupQuestRequirement]
 
+Action.delete_by_source(conn, source) -> list[int]     # delete all actions for a source and dependents
+
 action.name -> str                                     # what the action creates
 action.members -> bool
 action.ticks -> int | None                             # game ticks per action (NULL for gathering)
@@ -568,6 +570,7 @@ str(tag) -> "quest:troll_stronghold"
 
 ```python
 from ragger.wiki import (
+    WIKI_BATCH_SIZE,
     fetch_category_members,
     fetch_page_wikitext,
     fetch_pages_wikitext_batch,
@@ -576,6 +579,7 @@ from ragger.wiki import (
     record_attribution,
     record_attributions_batch,
     strip_markup,
+    strip_refs,
     strip_wiki_links,
     strip_plinks,
     clean_name,
@@ -593,6 +597,9 @@ from ragger.wiki import (
     throttle,
 )
 
+# Constants
+WIKI_BATCH_SIZE = 50                                                       # max pages per MediaWiki API batch request
+
 # Fetching
 fetch_category_members(category, ...) -> list[str]                         # paginated category listing
 fetch_page_wikitext(page) -> str                                           # raw wikitext for one page
@@ -606,6 +613,7 @@ record_attributions_batch(conn, table_names, pages)                        # bat
 
 # Parsing
 strip_markup(text) -> str                                                  # remove wiki markup
+strip_refs(val) -> str | None                                              # strip <ref> tags and {{Refn}} templates
 strip_wiki_links(text) -> str                                              # [[Link|Display]] -> Display
 strip_plinks(text) -> str                                                  # {{plink|Name}} -> Name
 clean_name(text, page_name) -> str                                         # strip links + plinks + clean page ref
