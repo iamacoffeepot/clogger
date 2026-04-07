@@ -85,9 +85,13 @@ Requires JDK 21+. Run from `tools/cache-dump/`:
 
 # Dump game variable constants (varps, varbits, varcs) to JSON
 ./gradlew dumpGameVariables [--args="--output ../../data/game-vars"]
+
+# Dump NPC definitions (id, name, size, combatLevel, ops, conditionalOps) to JSON
+./gradlew dumpNpcDefinitions [--args="--output ../../data/cache-dump/npc-definitions.json"]
 ```
 
 Output: `data/cache-dump/{collision,water,map-tiles}/{plane}_{rx}_{ry}.png`
+Output: `data/cache-dump/npc-definitions.json`
 Output: `data/game-vars/{varp,varbit,varc_int}.json`
 
 ### DumpMapTiles flags
