@@ -935,3 +935,56 @@ def throttle() -> None:
     Default 1 second. Override with RAGGER_THROTTLE env var.
     """
     time.sleep(THROTTLE_DELAY)
+
+
+def parse_page_ids_and_ops(wikitext: str) -> tuple[str | None, list[int], list[str]]:
+    """Extract game IDs and menu options from a page's wikitext.
+
+    Checks for Infobox NPC, Infobox Monster, Infobox Scenery, and Infobox
+    Spell. Returns (type, ids, ops) where type is "npc", "object", or
+    "spell", or (None, [], []) if no relevant infobox.
+    """
+    # Spell pages have no game IDs or ops but we detect them for trigger typing
+    spell_block = extract_template(wikitext, "Infobox Spell")
+    if spell_block:
+        return ("spell", [], [])
+
+    for infobox_type, template_name in [
+        ("npc", "Infobox NPC"),
+        ("npc", "Infobox Monster"),
+        ("object", "Infobox Scenery"),
+    ]:
+        block = extract_template(wikitext, template_name)
+        if not block:
+            continue
+
+        ids: list[int] = []
+        plain_id = parse_template_param(block, "id")
+        if plain_id:
+            for part in plain_id.split(","):
+                val = parse_int(part.strip())
+                if val is not None:
+                    ids.append(val)
+        else:
+            i = 1
+            while True:
+                vid = parse_template_param(block, f"id{i}")
+                if vid is None:
+                    break
+                for part in vid.split(","):
+                    val = parse_int(part.strip())
+                    if val is not None:
+                        ids.append(val)
+                i += 1
+
+        ops: list[str] = []
+        options_raw = parse_template_param(block, "options")
+        if options_raw:
+            for opt in options_raw.split(","):
+                opt = opt.strip().split("/")[0].strip()
+                if opt:
+                    ops.append(opt)
+
+        return (infobox_type, ids, ops)
+
+    return (None, [], [])
