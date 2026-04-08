@@ -86,5 +86,47 @@ class Npc:
             return []
         return [o.strip() for o in self.options.split(",")]
 
+    def locations(self, conn: sqlite3.Connection) -> list[NpcLocation]:
+        return NpcLocation.by_name(conn, self.name)
+
     def game_vars(self, conn: sqlite3.Connection) -> list[GameVariable]:
         return GameVariable.by_content_tag(conn, ContentCategory.NPC, snake_case(self.name))
+
+
+@dataclass
+class NpcLocation:
+    id: int
+    game_id: int
+    name: str
+    x: int
+    y: int
+
+    @classmethod
+    def by_game_id(cls, conn: sqlite3.Connection, game_id: int) -> list[NpcLocation]:
+        rows = conn.execute(
+            "SELECT id, game_id, name, x, y FROM npc_locations WHERE game_id = ? ORDER BY x, y",
+            (game_id,),
+        ).fetchall()
+        return [cls._from_row(r) for r in rows]
+
+    @classmethod
+    def by_name(cls, conn: sqlite3.Connection, name: str) -> list[NpcLocation]:
+        rows = conn.execute(
+            "SELECT id, game_id, name, x, y FROM npc_locations WHERE name = ? ORDER BY game_id, x, y",
+            (name,),
+        ).fetchall()
+        return [cls._from_row(r) for r in rows]
+
+    @classmethod
+    def near(cls, conn: sqlite3.Connection, x: int, y: int, radius: int = 50) -> list[NpcLocation]:
+        rows = conn.execute(
+            """SELECT id, game_id, name, x, y FROM npc_locations
+               WHERE ABS(x - ?) <= ? AND ABS(y - ?) <= ?
+               ORDER BY ABS(x - ?) + ABS(y - ?)""",
+            (x, radius, y, radius, x, y),
+        ).fetchall()
+        return [cls._from_row(r) for r in rows]
+
+    @classmethod
+    def _from_row(cls, row: tuple) -> NpcLocation:
+        return cls(id=row[0], game_id=row[1], name=row[2], x=row[3], y=row[4])

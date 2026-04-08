@@ -29,6 +29,7 @@ SCRIPTS = [
     "scripts/pipeline/fetch_magic_teleports.py",
     "scripts/pipeline/fetch_activities.py",
     "scripts/pipeline/fetch_npcs.py",
+    "scripts/pipeline/fetch_npc_locations.py",
     "scripts/pipeline/fetch_actions.py",
     "scripts/pipeline/fetch_wiki_vars.py",
     # Linking passes (depend on multiple tables)

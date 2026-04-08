@@ -235,6 +235,16 @@ SCHEMAS: list[str] = [
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS npc_locations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        game_id INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        x INTEGER NOT NULL,
+        y INTEGER NOT NULL,
+        UNIQUE(game_id, x, y)
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS map_squares (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         plane INTEGER NOT NULL,

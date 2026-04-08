@@ -46,12 +46,13 @@ Pipeline order (managed by `fetch_all.py`):
 15. `fetch_magic_teleports.py` — Parses all spellbook teleports (Standard, Ancient, Lunar) and item teleports (jewellery, etc.)
 16. `fetch_activities.py` — Pulls activities/minigames with type, coordinates, skills bitmask, and region from Category:Activities
 17. `fetch_npcs.py` — Pulls non-combat NPC data (name, version, location, options, region) from Category:Non-player characters
-18. `fetch_actions.py` — Universal action ingestion from {{Skill table}} templates. One API call per skill expands the table and parses name, level, XP, materials, tools, facilities, and secondary skills. Entity/facility pages are batch-fetched for Infobox NPC/Scenery game IDs, with ops resolved from cache dump definitions. Replaces all individual fetch_*_actions.py scripts and trigger linking scripts. Supports `--skill` to run a single skill.
-19. `fetch_wiki_vars.py` — Scrapes RuneScape:Varplayer/* and RuneScape:Varbit/* wiki pages for descriptions, content links, var class, and value annotations (quest stages, etc.)
-20. `link_shop_locations.py` — Links shops to locations by matching location text
-21. `link_activity_locations.py` — Links activities to locations by matching location text
-22. `link_facilities.py` — Derives facility bitmasks on locations from nearest facility coordinates
-23. `compute_walkability.py` — Computes walkable connections via Voronoi edge flood fill and map tile collision data. Supports `--area-threshold`, `--edge-samples`, `--resolution`, `--debug` flags.
+18. `fetch_npc_locations.py` — Associates NPC game IDs with wiki-stated coordinates by parsing versioned id and map fields from Infobox NPC
+19. `fetch_actions.py` — Universal action ingestion from {{Skill table}} templates. One API call per skill expands the table and parses name, level, XP, materials, tools, facilities, and secondary skills. Entity/facility pages are batch-fetched for Infobox NPC/Scenery game IDs, with ops resolved from cache dump definitions. Replaces all individual fetch_*_actions.py scripts and trigger linking scripts. Supports `--skill` to run a single skill.
+20. `fetch_wiki_vars.py` — Scrapes RuneScape:Varplayer/* and RuneScape:Varbit/* wiki pages for descriptions, content links, var class, and value annotations (quest stages, etc.)
+21. `link_shop_locations.py` — Links shops to locations by matching location text
+22. `link_activity_locations.py` — Links activities to locations by matching location text
+23. `link_facilities.py` — Derives facility bitmasks on locations from nearest facility coordinates
+24. `compute_walkability.py` — Computes walkable connections via Voronoi edge flood fill and map tile collision data. Supports `--area-threshold`, `--edge-samples`, `--resolution`, `--debug` flags.
 
 ### Import scripts (`scripts/import/`)
 
@@ -155,7 +156,7 @@ All API methods accept a `sqlite3.Connection` so connections can be reused. Per-
 - `MAP.md` — MapLink, MapSquare, pathfinding (A* with Chebyshev)
 - `ACTIVITY.md` — Activity/minigame lookup
 - `ACTION.md` — Action with inputs, outputs, requirements, triggers
-- `NPC.md` — Non-combat NPC lookup
+- `NPC.md` — Non-combat NPC lookup, NpcLocation (game ID to coordinates)
 - `MONSTER.md` — Monster stats, locations, drops, immunities
 - `GAME_VARIABLE.md` — GameVariable with content/functional tags, values
 - `WIKI.md` — Wiki fetch, parse, cache, attribution utilities
