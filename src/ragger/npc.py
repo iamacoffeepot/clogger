@@ -3,6 +3,7 @@ from __future__ import annotations
 import sqlite3
 from dataclasses import dataclass
 
+from ragger.dialogue import DialoguePage
 from ragger.enums import ContentCategory, Region
 from ragger.game_variable import GameVariable
 from ragger.utils import snake_case
@@ -88,6 +89,17 @@ class Npc:
 
     def locations(self, conn: sqlite3.Connection) -> list[NpcLocation]:
         return NpcLocation.by_name(conn, self.name)
+
+    def dialogues(self, conn: sqlite3.Connection) -> list[DialoguePage]:
+        rows = conn.execute(
+            """SELECT dp.id, dp.title, dp.page_type
+               FROM dialogue_pages dp
+               JOIN npc_dialogues nd ON nd.page_id = dp.id
+               WHERE nd.npc_id = ?
+               ORDER BY dp.title""",
+            (self.id,),
+        ).fetchall()
+        return [DialoguePage(*r) for r in rows]
 
     def game_vars(self, conn: sqlite3.Connection) -> list[GameVariable]:
         return GameVariable.by_content_tag(conn, ContentCategory.NPC, snake_case(self.name))
