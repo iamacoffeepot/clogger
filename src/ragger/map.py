@@ -84,6 +84,7 @@ class MapSquare:
         plane: int = 0,
         type: MapSquareType = MapSquareType.COLOR,
         region_padding: int = 1,
+        pixels_per_tile: int | None = None,
     ) -> tuple:
         """Stitch map tiles for a game coordinate bounding box.
 
@@ -91,6 +92,8 @@ class MapSquare:
         in game coordinates, suitable for matplotlib imshow.
 
         region_padding adds extra regions around the bounding box (default 1).
+        pixels_per_tile overrides the output resolution. Native is 4 for color
+        tiles, 1 for collision. Pass 1 for a compact 1px-per-game-tile canvas.
         """
         import io
 
@@ -102,10 +105,13 @@ class MapSquare:
         ry_min = max(0, y_min // GAME_TILES_PER_REGION - region_padding)
         ry_max = (y_max - 1) // GAME_TILES_PER_REGION + region_padding
 
-        pixels_per = PIXELS_PER_REGION if type == MapSquareType.COLOR else GAME_TILES_PER_REGION
-        canvas_w = (rx_max - rx_min + 1) * pixels_per
-        canvas_h = (ry_max - ry_min + 1) * pixels_per
+        native_per = PIXELS_PER_REGION if type == MapSquareType.COLOR else GAME_TILES_PER_REGION
+        target_per = pixels_per_tile * GAME_TILES_PER_REGION if pixels_per_tile is not None else native_per
+        canvas_w = (rx_max - rx_min + 1) * target_per
+        canvas_h = (ry_max - ry_min + 1) * target_per
         canvas = np.zeros((canvas_h, canvas_w, 3), dtype=np.uint8)
+
+        need_resize = target_per != native_per
 
         rows = conn.execute(
             "SELECT region_x, region_y, image FROM map_squares WHERE plane = ? AND type = ? "
@@ -114,10 +120,12 @@ class MapSquare:
         ).fetchall()
         for rx, ry, img_data in rows:
             try:
-                tile = np.array(Image.open(io.BytesIO(img_data)).convert("RGB"))
-                px = (rx - rx_min) * pixels_per
-                py = (ry_max - ry) * pixels_per
-                canvas[py:py + pixels_per, px:px + pixels_per] = tile
+                tile = Image.open(io.BytesIO(img_data)).convert("RGB")
+                if need_resize:
+                    tile = tile.resize((target_per, target_per), Image.LANCZOS)
+                px = (rx - rx_min) * target_per
+                py = (ry_max - ry) * target_per
+                canvas[py:py + target_per, px:px + target_per] = np.array(tile)
             except Exception:
                 pass
 

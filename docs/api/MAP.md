@@ -29,6 +29,7 @@ MapSquare.get(conn, plane, region_x, region_y) -> MapSquare | None
 MapSquare.all(conn, plane=0) -> list[MapSquare]
 MapSquare.at_game_coord(conn, x, y, plane=0) -> MapSquare | None
 MapSquare.count(conn, plane=0) -> int
+MapSquare.stitch(conn, x_min, x_max, y_min, y_max, plane=0, type=COLOR, region_padding=1, pixels_per_tile=None) -> (ndarray, extent)
 square.game_x -> int                                   # region origin in game coords
 square.game_y -> int
 square.image -> bytes                                   # PNG image data

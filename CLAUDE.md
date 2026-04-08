@@ -172,7 +172,8 @@ All API methods accept a `sqlite3.Connection` so connections can be reused. Per-
 - `SHOP.md` — Shop with items, pricing, multipliers
 - `LOCATION.md` — Location with adjacency, facilities, distance metrics
 - `FACILITY.md` — FacilityEntry coordinates (banks, furnaces, etc.)
-- `MAP.md` — MapLink, MapSquare, pathfinding (A* with Chebyshev)
+- `MAP.md` — MapLink, MapSquare (stitch with scaling), pathfinding (A* with Chebyshev)
+- `GROUND_ITEM.md` — GroundItem spawns by name, location, proximity
 - `ACTIVITY.md` — Activity/minigame lookup
 - `ACTION.md` — Action with inputs, outputs, requirements, triggers
 - `NPC.md` — Non-combat NPC lookup, NpcLocation (game ID to coordinates)

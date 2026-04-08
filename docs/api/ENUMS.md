@@ -15,6 +15,7 @@
 - `ActionTriggerType(int, Enum)` — CLICK_OBJECT, CLICK_NPC, CLICK_ITEM, USE_ITEM_ON_OBJECT, USE_ITEM_ON_NPC, USE_ITEM_ON_ITEM, CLICK_WIDGET, WIDGET_ON_ITEM with `mask`, `label` properties
 - `Facility(int, Enum)` — Bank, Furnace, Anvil, Range, Altar, Spinning wheel, Loom with `mask`, `label` properties
 - `Immunity(int, Enum)` — Poison, Venom, Cannon, Thrall, Burn with `mask`, `label` properties
+- `MapSquareType(str, Enum)` — color, collision, water
 - `MapLinkType(str, Enum)` — entrance, exit, fairy_ring, charter_ship, spirit_tree, gnome_glider, canoe, teleport, minecart, ship, quetzal, walkable, npc_transport
 - `MAP_LINK_ANYWHERE` — constant `"ANYWHERE"` for teleport from_location (castable from any location)
 - `ALL_SKILLS_MASK`, `ALL_REGIONS_MASK` — bitmask constants for "all"
