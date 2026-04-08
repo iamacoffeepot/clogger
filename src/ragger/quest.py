@@ -4,7 +4,7 @@ import sqlite3
 from dataclasses import dataclass
 
 from ragger.dialogue import DialoguePage
-from ragger.enums import ContentCategory, Region, Skill
+from ragger.enums import ComparisonOperator, ContentCategory, Region, Skill
 from ragger.game_variable import GameVariable
 from ragger.requirements import (
     GroupQuestPointRequirement,
@@ -65,7 +65,7 @@ class Quest:
     def skill_requirements(self, conn: sqlite3.Connection) -> list[GroupSkillRequirement]:
         rows = conn.execute(
             """
-            SELECT gsr.id, gsr.group_id, gsr.skill, gsr.level, gsr.boostable
+            SELECT gsr.id, gsr.group_id, gsr.skill, gsr.level, gsr.boostable, gsr.operator
             FROM group_skill_requirements gsr
             JOIN quest_requirement_groups qrg ON qrg.group_id = gsr.group_id
             WHERE qrg.quest_id = ?
@@ -73,7 +73,7 @@ class Quest:
             """,
             (self.id,),
         ).fetchall()
-        return [GroupSkillRequirement(r[0], r[1], Skill(r[2]), r[3], bool(r[4])) for r in rows]
+        return [GroupSkillRequirement(r[0], r[1], Skill(r[2]), r[3], bool(r[4]), ComparisonOperator(r[5])) for r in rows]
 
     def quest_requirements(self, conn: sqlite3.Connection) -> list[GroupQuestRequirement]:
         rows = conn.execute(
@@ -90,14 +90,14 @@ class Quest:
     def quest_point_requirement(self, conn: sqlite3.Connection) -> GroupQuestPointRequirement | None:
         row = conn.execute(
             """
-            SELECT gqpr.id, gqpr.group_id, gqpr.points
+            SELECT gqpr.id, gqpr.group_id, gqpr.points, gqpr.operator
             FROM group_quest_point_requirements gqpr
             JOIN quest_requirement_groups qrg ON qrg.group_id = gqpr.group_id
             WHERE qrg.quest_id = ?
             """,
             (self.id,),
         ).fetchone()
-        return GroupQuestPointRequirement(row[0], row[1], row[2]) if row else None
+        return GroupQuestPointRequirement(row[0], row[1], row[2], ComparisonOperator(row[3])) if row else None
 
     def region_requirements(self, conn: sqlite3.Connection) -> list[GroupRegionRequirement]:
         rows = conn.execute(

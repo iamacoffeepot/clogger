@@ -3,7 +3,7 @@ from __future__ import annotations
 import sqlite3
 from dataclasses import dataclass
 
-from ragger.enums import CombatStyle, EquipmentSlot, Skill
+from ragger.enums import CombatStyle, ComparisonOperator, EquipmentSlot, Skill
 from ragger.requirements import (
     GroupQuestRequirement,
     GroupSkillRequirement,
@@ -111,7 +111,7 @@ class Equipment:
     def skill_requirements(self, conn: sqlite3.Connection) -> list[GroupSkillRequirement]:
         rows = conn.execute(
             """
-            SELECT gsr.id, gsr.group_id, gsr.skill, gsr.level, gsr.boostable
+            SELECT gsr.id, gsr.group_id, gsr.skill, gsr.level, gsr.boostable, gsr.operator
             FROM group_skill_requirements gsr
             JOIN equipment_requirement_groups erg ON erg.group_id = gsr.group_id
             WHERE erg.equipment_id = ?
@@ -119,7 +119,7 @@ class Equipment:
             """,
             (self.id,),
         ).fetchall()
-        return [GroupSkillRequirement(r[0], r[1], Skill(r[2]), r[3], bool(r[4])) for r in rows]
+        return [GroupSkillRequirement(r[0], r[1], Skill(r[2]), r[3], bool(r[4]), ComparisonOperator(r[5])) for r in rows]
 
     def quest_requirements(self, conn: sqlite3.Connection) -> list[GroupQuestRequirement]:
         rows = conn.execute(

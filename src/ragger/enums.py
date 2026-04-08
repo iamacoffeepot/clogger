@@ -581,6 +581,15 @@ class CombatStyle(str, Enum):
         raise ValueError(f"Unknown combat style: {label}")
 
 
+class ComparisonOperator(str, Enum):
+    GTE = ">="
+    LTE = "<="
+    GT = ">"
+    LT = "<"
+    EQ = "=="
+    NE = "!="
+
+
 class ActivityType(str, Enum):
     MINIGAME = "Minigame"
     RANDOM_EVENT = "Random event"

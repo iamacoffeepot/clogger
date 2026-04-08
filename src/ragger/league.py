@@ -6,7 +6,7 @@ from pathlib import Path
 
 import yaml
 
-from ragger.enums import DiaryLocation, DiaryTier, Region, Skill, TaskDifficulty
+from ragger.enums import ComparisonOperator, DiaryLocation, DiaryTier, Region, Skill, TaskDifficulty
 from ragger.experience import level_for_xp, xp_for_level
 from ragger.quest import Quest
 from ragger.requirements import (
@@ -108,7 +108,7 @@ class LeagueTask:
     def skill_requirements(self, conn: sqlite3.Connection) -> list[GroupSkillRequirement]:
         rows = conn.execute(
             """
-            SELECT gsr.id, gsr.group_id, gsr.skill, gsr.level, gsr.boostable
+            SELECT gsr.id, gsr.group_id, gsr.skill, gsr.level, gsr.boostable, gsr.operator
             FROM group_skill_requirements gsr
             JOIN league_task_requirement_groups ltrg ON ltrg.group_id = gsr.group_id
             WHERE ltrg.league_task_id = ?
@@ -116,7 +116,7 @@ class LeagueTask:
             """,
             (self.id,),
         ).fetchall()
-        return [GroupSkillRequirement(r[0], r[1], Skill(r[2]), r[3], bool(r[4])) for r in rows]
+        return [GroupSkillRequirement(r[0], r[1], Skill(r[2]), r[3], bool(r[4]), ComparisonOperator(r[5])) for r in rows]
 
     def quest_requirements(self, conn: sqlite3.Connection) -> list[GroupQuestRequirement]:
         rows = conn.execute(
@@ -133,14 +133,14 @@ class LeagueTask:
     def item_requirements(self, conn: sqlite3.Connection) -> list[GroupItemRequirement]:
         rows = conn.execute(
             """
-            SELECT gir.id, gir.group_id, gir.item_id, gir.quantity
+            SELECT gir.id, gir.group_id, gir.item_id, gir.quantity, gir.operator
             FROM group_item_requirements gir
             JOIN league_task_requirement_groups ltrg ON ltrg.group_id = gir.group_id
             WHERE ltrg.league_task_id = ?
             """,
             (self.id,),
         ).fetchall()
-        return [GroupItemRequirement(r[0], r[1], r[2], r[3]) for r in rows]
+        return [GroupItemRequirement(r[0], r[1], r[2], r[3], ComparisonOperator(r[4])) for r in rows]
 
     def diary_requirements(self, conn: sqlite3.Connection) -> list[GroupDiaryRequirement]:
         rows = conn.execute(

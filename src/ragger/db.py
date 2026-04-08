@@ -1,7 +1,7 @@
 import sqlite3
 from pathlib import Path
 
-from ragger.enums import ALL_SKILLS_MASK, ActivityType, DiaryLocation, DiaryTier, EquipmentSlot, Region, ShopType, Skill, TaskDifficulty
+from ragger.enums import ALL_SKILLS_MASK, ActivityType, ComparisonOperator, DiaryLocation, DiaryTier, EquipmentSlot, Region, ShopType, Skill, TaskDifficulty
 
 _skill_ids = ", ".join(str(s.value) for s in Skill)
 _region_ids = ", ".join(str(r.value) for r in Region)
@@ -10,6 +10,7 @@ _activity_type_values = ", ".join(f"'{t.value}'" for t in ActivityType)
 _diary_location_values = ", ".join(f"'{l.value}'" for l in DiaryLocation)
 _diary_tier_values = ", ".join(f"'{t.value}'" for t in DiaryTier)
 _equipment_slot_values = ", ".join(f"'{s.value}'" for s in EquipmentSlot)
+_comparison_operator_values = ", ".join(f"'{o.value}'" for o in ComparisonOperator)
 
 SCHEMAS: list[str] = [
     """
@@ -66,6 +67,7 @@ SCHEMAS: list[str] = [
         skill INTEGER NOT NULL CHECK(skill IN ({_skill_ids})),
         level INTEGER NOT NULL CHECK(level BETWEEN 1 AND 99),
         boostable INTEGER NOT NULL DEFAULT 0,
+        operator TEXT NOT NULL DEFAULT '>=' CHECK(operator IN ({_comparison_operator_values})),
         FOREIGN KEY (group_id) REFERENCES requirement_groups(id)
     )
     """,
@@ -79,20 +81,22 @@ SCHEMAS: list[str] = [
         FOREIGN KEY (required_quest_id) REFERENCES quests(id)
     )
     """,
-    """
+    f"""
     CREATE TABLE IF NOT EXISTS group_quest_point_requirements (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         group_id INTEGER NOT NULL,
         points INTEGER NOT NULL,
+        operator TEXT NOT NULL DEFAULT '>=' CHECK(operator IN ({_comparison_operator_values})),
         FOREIGN KEY (group_id) REFERENCES requirement_groups(id)
     )
     """,
-    """
+    f"""
     CREATE TABLE IF NOT EXISTS group_item_requirements (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         group_id INTEGER NOT NULL,
         item_id INTEGER NOT NULL,
         quantity INTEGER NOT NULL DEFAULT 1,
+        operator TEXT NOT NULL DEFAULT '>=' CHECK(operator IN ({_comparison_operator_values})),
         FOREIGN KEY (group_id) REFERENCES requirement_groups(id),
         FOREIGN KEY (item_id) REFERENCES items(id)
     )
@@ -121,6 +125,7 @@ SCHEMAS: list[str] = [
         item_id INTEGER NOT NULL,
         slot TEXT NOT NULL CHECK(slot IN ({_equipment_slot_values})),
         quantity INTEGER NOT NULL DEFAULT 1,
+        operator TEXT NOT NULL DEFAULT '>=' CHECK(operator IN ({_comparison_operator_values})),
         FOREIGN KEY (group_id) REFERENCES requirement_groups(id),
         FOREIGN KEY (item_id) REFERENCES items(id)
     )

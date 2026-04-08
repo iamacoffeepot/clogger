@@ -1,6 +1,6 @@
 import sqlite3
 
-from ragger.enums import DiaryLocation, DiaryTier, EquipmentSlot, Region, Skill
+from ragger.enums import ComparisonOperator, DiaryLocation, DiaryTier, EquipmentSlot, Region, Skill
 from ragger.requirements import (
     GroupDiaryRequirement,
     GroupEquipmentRequirement,
@@ -51,6 +51,7 @@ def test_single_skill_requirement(conn: sqlite3.Connection) -> None:
     assert reqs[0].skill == Skill.MINING
     assert reqs[0].level == 60
     assert reqs[0].boostable is False
+    assert reqs[0].operator == ComparisonOperator.GTE
 
 
 def test_multiple_and_groups(conn: sqlite3.Connection) -> None:
@@ -311,3 +312,53 @@ def test_equipment_requirement(conn: sqlite3.Connection) -> None:
     assert reqs[0].item_id == shield_id
     assert reqs[0].slot == EquipmentSlot.SHIELD
     assert reqs[0].quantity == 1
+    assert reqs[0].operator == ComparisonOperator.GTE
+
+
+def test_custom_comparison_operator(conn: sqlite3.Connection) -> None:
+    """Requirements can use non-default comparison operators."""
+    _seed(conn)
+    conn.execute("INSERT INTO quests (name, points) VALUES ('Op Quest', 1)")
+    quest_id = conn.execute("SELECT id FROM quests WHERE name = 'Op Quest'").fetchone()[0]
+    coins_id = conn.execute("SELECT id FROM items WHERE name = 'Coins'").fetchone()[0]
+
+    link_group_requirement(
+        conn,
+        "group_skill_requirements",
+        {"skill": Skill.ATTACK.value, "level": 50, "operator": ComparisonOperator.LTE.value},
+        "quest_requirement_groups",
+        "quest_id",
+        quest_id,
+    )
+    link_group_requirement(
+        conn,
+        "group_item_requirements",
+        {"item_id": coins_id, "quantity": 5, "operator": ComparisonOperator.EQ.value},
+        "quest_requirement_groups",
+        "quest_id",
+        quest_id,
+    )
+    link_group_requirement(
+        conn,
+        "group_quest_point_requirements",
+        {"points": 100, "operator": ComparisonOperator.NE.value},
+        "quest_requirement_groups",
+        "quest_id",
+        quest_id,
+    )
+    conn.commit()
+
+    groups = RequirementGroup.for_quest(conn, quest_id)
+    assert len(groups) == 3
+
+    skill_reqs = [r for g in groups for r in g.skill_requirements(conn)]
+    assert len(skill_reqs) == 1
+    assert skill_reqs[0].operator == ComparisonOperator.LTE
+
+    item_reqs = [r for g in groups for r in g.item_requirements(conn)]
+    assert len(item_reqs) == 1
+    assert item_reqs[0].operator == ComparisonOperator.EQ
+
+    qp_reqs = [r for g in groups for r in g.quest_point_requirements(conn)]
+    assert len(qp_reqs) == 1
+    assert qp_reqs[0].operator == ComparisonOperator.NE

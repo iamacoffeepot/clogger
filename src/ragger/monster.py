@@ -3,7 +3,7 @@ from __future__ import annotations
 import sqlite3
 from dataclasses import dataclass
 
-from ragger.enums import ContentCategory, Immunity, Region, Skill
+from ragger.enums import ComparisonOperator, ContentCategory, Immunity, Region, Skill
 from ragger.game_variable import GameVariable
 from ragger.requirements import (
     GroupQuestRequirement,
@@ -214,7 +214,7 @@ class Monster:
     def skill_requirements(self, conn: sqlite3.Connection) -> list[GroupSkillRequirement]:
         rows = conn.execute(
             """
-            SELECT gsr.id, gsr.group_id, gsr.skill, gsr.level, gsr.boostable
+            SELECT gsr.id, gsr.group_id, gsr.skill, gsr.level, gsr.boostable, gsr.operator
             FROM group_skill_requirements gsr
             JOIN monster_requirement_groups mrg ON mrg.group_id = gsr.group_id
             WHERE mrg.monster_id = ?
@@ -222,7 +222,7 @@ class Monster:
             """,
             (self.id,),
         ).fetchall()
-        return [GroupSkillRequirement(r[0], r[1], Skill(r[2]), r[3], bool(r[4])) for r in rows]
+        return [GroupSkillRequirement(r[0], r[1], Skill(r[2]), r[3], bool(r[4]), ComparisonOperator(r[5])) for r in rows]
 
     def quest_requirements(self, conn: sqlite3.Connection) -> list[GroupQuestRequirement]:
         rows = conn.execute(
