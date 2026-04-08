@@ -612,6 +612,16 @@ class ActivityType(str, Enum):
         return cls.ACTIVITY
 
 
+class DialogueNodeType(str, Enum):
+    LINE = "line"
+    OPTION = "option"
+    CONDITION = "condition"
+    ACTION = "action"
+    BOX = "box"
+    SELECT = "select"
+    QUEST_ACTION = "quest_action"
+
+
 class DialogueEdgeType(str, Enum):
     CHILD = "child"
     NEXT = "next"

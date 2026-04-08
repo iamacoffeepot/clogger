@@ -3,7 +3,7 @@ from __future__ import annotations
 import sqlite3
 from dataclasses import dataclass
 
-from ragger.enums import DialogueEdgeType
+from ragger.enums import DialogueEdgeType, DialogueNodeType
 
 
 @dataclass
@@ -112,7 +112,7 @@ class DialogueNode:
     parent_id: int | None
     sort_order: int
     depth: int
-    node_type: str
+    node_type: DialogueNodeType
     speaker: str | None
     text: str | None
     section: str | None
@@ -241,12 +241,12 @@ class DialogueNode:
         return DialoguePage(*row) if row else None
 
     _NODE_TYPE_FORMAT = {
-        "option": "[{}]",
-        "condition": "({})",
-        "action": "-> {}",
-        "select": "? {}",
-        "box": "* {}",
-        "quest_action": "~ {}",
+        DialogueNodeType.OPTION: "[{}]",
+        DialogueNodeType.CONDITION: "({})",
+        DialogueNodeType.ACTION: "-> {}",
+        DialogueNodeType.SELECT: "? {}",
+        DialogueNodeType.BOX: "* {}",
+        DialogueNodeType.QUEST_ACTION: "~ {}",
     }
 
     def render(self) -> str:
@@ -269,7 +269,7 @@ class DialogueNode:
             parent_id=row[2],
             sort_order=row[3],
             depth=row[4],
-            node_type=row[5],
+            node_type=DialogueNodeType(row[5]),
             speaker=row[6],
             text=row[7],
             section=row[8],

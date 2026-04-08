@@ -10,7 +10,7 @@ import re
 from pathlib import Path
 
 from ragger.db import create_tables, get_connection
-from ragger.enums import DialogueEdgeType
+from ragger.enums import DialogueEdgeType, DialogueNodeType
 from ragger.wiki import (
     extract_template,
     fetch_category_members,
@@ -39,14 +39,18 @@ SPEAKER_RE = re.compile(r"^'''(.+?):'''\s*(.*)")
 # {{template|...}} at the start of a line (after stripping *)
 TEMPLATE_RE = re.compile(r"^\{\{(\w+)\|?(.*)\}\}$", re.DOTALL)
 
+# Internal parser markers for quest=No / event=No (never stored in DB)
+_SKIP_QUEST = "_skip_quest"
+_SKIP_EVENT = "_skip_event"
+
 NODE_TYPE_MAP = {
-    "topt": "option",
-    "top": "option",
-    "tcond": "condition",
-    "tact": "action",
-    "tbox": "box",
-    "tselect": "select",
-    "qact": "quest_action",
+    "topt": DialogueNodeType.OPTION,
+    "top": DialogueNodeType.OPTION,
+    "tcond": DialogueNodeType.CONDITION,
+    "tact": DialogueNodeType.ACTION,
+    "tbox": DialogueNodeType.BOX,
+    "tselect": DialogueNodeType.SELECT,
+    "qact": DialogueNodeType.QUEST_ACTION,
 }
 
 
@@ -86,12 +90,12 @@ def _check_skip_override(named: dict[str, str], positional: list[str]) -> tuple[
     text = strip_wiki_links(positional[0].strip()) if positional else ""
 
     if named.get("quest", "").lower() == "no":
-        return text, "skip_quest"
+        return text, _SKIP_QUEST
     if named.get("event", "").lower() == "no":
-        return text, "skip_event"
+        return text, _SKIP_EVENT
     for key in ("cond", "tcond", "cont"):
         if key in named:
-            return strip_wiki_links(named[key]), "condition"
+            return strip_wiki_links(named[key]), DialogueNodeType.CONDITION.value
     return None
 
 
@@ -143,10 +147,10 @@ def parse_line_content(content: str) -> dict:
     if m:
         speaker = strip_wiki_links(m.group(1).strip())
         text = strip_wiki_links(m.group(2).strip())
-        return {"node_type": "line", "speaker": speaker, "text": text}
+        return {"node_type": DialogueNodeType.LINE, "speaker": speaker, "text": text}
 
     # Fallback: plain text node
-    return {"node_type": "line", "speaker": None, "text": strip_wiki_links(content)}
+    return {"node_type": DialogueNodeType.LINE, "speaker": None, "text": strip_wiki_links(content)}
 
 
 def parse_section_depth(line: str) -> tuple[int, str] | None:
@@ -227,12 +231,12 @@ def parse_dialogue_tree(wikitext: str, skip_non_quest: bool = False) -> tuple[st
         node = parse_line_content(content)
 
         # quest=No / event=No branches
-        if node["node_type"] in ("skip_quest", "skip_event"):
+        if node["node_type"] in (_SKIP_QUEST, _SKIP_EVENT):
             if skip_non_quest:
                 skip_depth = depth
                 continue
             # Normal ingestion: store as a regular option
-            node["node_type"] = "option"
+            node["node_type"] = DialogueNodeType.OPTION
 
         # Find parent: last node at depth - 1
         parent_idx = parent_at.get(depth - 1) if depth > 1 else None
@@ -285,7 +289,7 @@ def insert_dialogue(conn, page_title: str, page_type: str | None, nodes: list[di
                 parent_id,
                 node["sort_order"],
                 node["depth"],
-                node["node_type"],
+                node["node_type"].value if isinstance(node["node_type"], DialogueNodeType) else node["node_type"],
                 node["speaker"],
                 node["text"],
                 node["section"],
@@ -328,7 +332,7 @@ def insert_dialogue(conn, page_title: str, page_type: str | None, nodes: list[di
                     "(continues above)", "(continues with above dialogue.)",
                     "(same as above)", "(same as above.)"}
     for i, node in enumerate(nodes):
-        if node["node_type"] != "action":
+        if node["node_type"] != DialogueNodeType.ACTION:
             continue
         if (node["text"] or "").strip().lower() not in _ABOVE_TEXTS:
             continue
@@ -343,11 +347,11 @@ def insert_dialogue(conn, page_title: str, page_type: str | None, nodes: list[di
         prev_sibling = nodes[siblings[sib_pos - 1]] if sib_pos > 0 else None
 
         # Build candidate texts to search for, in priority order
-        search_targets: list[tuple[str, str | None]] = []  # (text, preferred_type)
+        search_targets: list[tuple[str, DialogueNodeType | None]] = []
 
         # Preceding sibling text → look for an option with that text
         if prev_sibling and prev_sibling["text"]:
-            search_targets.append((prev_sibling["text"], "option"))
+            search_targets.append((prev_sibling["text"], DialogueNodeType.OPTION))
 
         # Parent text → look for same type
         parent = nodes[parent_idx]
@@ -391,7 +395,7 @@ def insert_dialogue(conn, page_title: str, page_type: str | None, nodes: list[di
     # For condition-only groups (no option/select ancestor), link to the first
     # sibling of the outermost condition ancestor (re-evaluate from the top).
     for i, node in enumerate(nodes):
-        if node["node_type"] != "action":
+        if node["node_type"] != DialogueNodeType.ACTION:
             continue
         if (node["text"] or "").strip().lower() != "other":
             continue
@@ -401,10 +405,10 @@ def insert_dialogue(conn, page_title: str, page_type: str | None, nodes: list[di
         ancestor_idx = node["parent_idx"]
         while ancestor_idx is not None:
             ancestor = nodes[ancestor_idx]
-            if ancestor["node_type"] in ("option", "select"):
+            if ancestor["node_type"] in (DialogueNodeType.OPTION, DialogueNodeType.SELECT):
                 target_idx = ancestor_idx
                 break
-            if ancestor["node_type"] == "condition":
+            if ancestor["node_type"] == DialogueNodeType.CONDITION:
                 outermost_condition_idx = ancestor_idx
             ancestor_idx = ancestor["parent_idx"]
         # Fallback: first condition in the contiguous block containing the
@@ -416,7 +420,7 @@ def insert_dialogue(conn, page_title: str, page_type: str | None, nodes: list[di
             ancestor_pos = siblings.index(outermost_condition_idx)
             block_start = ancestor_pos
             for k in range(ancestor_pos - 1, -1, -1):
-                if nodes[siblings[k]]["node_type"] == "condition":
+                if nodes[siblings[k]]["node_type"] == DialogueNodeType.CONDITION:
                     block_start = k
                 else:
                     break

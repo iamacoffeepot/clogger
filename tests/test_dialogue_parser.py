@@ -1,6 +1,7 @@
 """Tests for dialogue tree parser."""
 
-from scripts.pipeline.fetch_dialogues import parse_dialogue_tree, parse_line_content
+from ragger.enums import DialogueNodeType
+from scripts.pipeline.fetch_dialogues import _SKIP_QUEST, parse_dialogue_tree, parse_line_content
 
 
 SAMPLE_WIKITEXT = """{{Transcript|Quest}}
@@ -53,7 +54,7 @@ def test_tree_structure():
     _, nodes = parse_dialogue_tree(SAMPLE_WIKITEXT)
     # "What's wrong?" option at depth 1
     opt = nodes[1]
-    assert opt["node_type"] == "option"
+    assert opt["node_type"] == DialogueNodeType.OPTION
     assert opt["text"] == "What's wrong?"
     assert opt["parent_idx"] is None  # depth 1, no parent
 
@@ -86,25 +87,25 @@ def test_node_types():
 
 def test_tbox_text_extraction():
     _, nodes = parse_dialogue_tree(SAMPLE_WIKITEXT)
-    boxes = [n for n in nodes if n["node_type"] == "box"]
+    boxes = [n for n in nodes if n["node_type"] == DialogueNodeType.BOX]
     assert len(boxes) == 1
     assert "hand the cook" in boxes[0]["text"]
 
 
 def test_parse_line_content_speaker():
     result = parse_line_content("'''Hans:''' Hello there!")
-    assert result["node_type"] == "line"
+    assert result["node_type"] == DialogueNodeType.LINE
     assert result["speaker"] == "Hans"
     assert result["text"] == "Hello there!"
 
 
 def test_parse_line_content_option():
     result = parse_line_content("{{topt|Tell me more.|quest=no}}")
-    assert result["node_type"] == "skip_quest"
+    assert result["node_type"] == _SKIP_QUEST
     assert result["text"] == "Tell me more."
 
 
 def test_parse_line_content_action():
     result = parse_line_content("{{tact|end}}")
-    assert result["node_type"] == "action"
+    assert result["node_type"] == DialogueNodeType.ACTION
     assert result["text"] == "end"
