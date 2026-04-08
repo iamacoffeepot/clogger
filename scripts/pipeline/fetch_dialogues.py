@@ -317,6 +317,113 @@ def insert_dialogue(conn, page_title: str, page_type: str | None, nodes: list[di
             prev_id = idx_to_id[siblings[sib_pos - 1]]
             edges.append((prev_id, node_id, DialogueEdgeType.NEXT.value))
 
+    # Resolve "-> above" back references.
+    # Strategy: find the text to match against by checking:
+    #   1. The preceding sibling (e.g. "Player: What's wrong?" before "-> above")
+    #   2. The parent node
+    #   3. Walk up ancestors
+    # Then search backwards for the first earlier node with matching text,
+    # preferring option nodes (since "above" usually means a dialogue choice).
+    _ABOVE_TEXTS = {"above", "same as above", "continues above",
+                    "(continues above)", "(continues with above dialogue.)",
+                    "(same as above)", "(same as above.)"}
+    for i, node in enumerate(nodes):
+        if node["node_type"] != "action":
+            continue
+        if (node["text"] or "").strip().lower() not in _ABOVE_TEXTS:
+            continue
+
+        parent_idx = node["parent_idx"]
+        if parent_idx is None:
+            continue
+
+        # Find preceding sibling
+        siblings = children_by_parent.get(parent_idx, [])
+        sib_pos = siblings.index(i)
+        prev_sibling = nodes[siblings[sib_pos - 1]] if sib_pos > 0 else None
+
+        # Build candidate texts to search for, in priority order
+        search_targets: list[tuple[str, str | None]] = []  # (text, preferred_type)
+
+        # Preceding sibling text → look for an option with that text
+        if prev_sibling and prev_sibling["text"]:
+            search_targets.append((prev_sibling["text"], "option"))
+
+        # Parent text → look for same type
+        parent = nodes[parent_idx]
+        if parent["text"]:
+            search_targets.append((parent["text"], parent["node_type"]))
+
+        # Ancestor walk
+        ancestor_idx = parent["parent_idx"]
+        while ancestor_idx is not None:
+            ancestor = nodes[ancestor_idx]
+            if ancestor["text"]:
+                search_targets.append((ancestor["text"], ancestor["node_type"]))
+                break
+            ancestor_idx = ancestor["parent_idx"]
+
+        # Search backwards for each target
+        resolved = False
+        for target_text, preferred_type in search_targets:
+            best = None
+            for j in range(i - 1, -1, -1):
+                candidate = nodes[j]
+                if candidate["text"] != target_text:
+                    continue
+                # Skip the node itself and its direct ancestors
+                if j == parent_idx:
+                    continue
+                if prev_sibling and j == siblings[sib_pos - 1]:
+                    continue
+                if preferred_type and candidate["node_type"] == preferred_type:
+                    best = j
+                    break
+                if best is None:
+                    best = j
+            if best is not None:
+                edges.append((idx_to_id[i], idx_to_id[best], DialogueEdgeType.CONTINUES.value))
+                resolved = True
+                break
+
+    # Resolve "-> other" references: link to the nearest ancestor option/select
+    # (the dialogue choice menu that contains the condition branches).
+    # For condition-only groups (no option/select ancestor), link to the first
+    # sibling of the outermost condition ancestor (re-evaluate from the top).
+    for i, node in enumerate(nodes):
+        if node["node_type"] != "action":
+            continue
+        if (node["text"] or "").strip().lower() != "other":
+            continue
+        # Walk up ancestors to find an option/select
+        target_idx = None
+        outermost_condition_idx = None
+        ancestor_idx = node["parent_idx"]
+        while ancestor_idx is not None:
+            ancestor = nodes[ancestor_idx]
+            if ancestor["node_type"] in ("option", "select"):
+                target_idx = ancestor_idx
+                break
+            if ancestor["node_type"] == "condition":
+                outermost_condition_idx = ancestor_idx
+            ancestor_idx = ancestor["parent_idx"]
+        # Fallback: first condition in the contiguous block containing the
+        # outermost condition ancestor. Walk backwards from the ancestor
+        # through siblings to find where the block starts.
+        if target_idx is None and outermost_condition_idx is not None:
+            parent_of_group = nodes[outermost_condition_idx]["parent_idx"]
+            siblings = children_by_parent.get(parent_of_group, [])
+            ancestor_pos = siblings.index(outermost_condition_idx)
+            block_start = ancestor_pos
+            for k in range(ancestor_pos - 1, -1, -1):
+                if nodes[siblings[k]]["node_type"] == "condition":
+                    block_start = k
+                else:
+                    break
+            target_idx = siblings[block_start]
+        if target_idx is not None:
+            edges.append((idx_to_id[i], idx_to_id[target_idx], DialogueEdgeType.CONTINUES.value))
+
     conn.executemany(
         "INSERT INTO dialogue_edges (from_node_id, to_node_id, edge_type) VALUES (?, ?, ?)",
         edges,

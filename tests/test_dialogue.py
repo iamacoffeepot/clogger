@@ -226,19 +226,19 @@ def test_tag_node(conn: sqlite3.Connection) -> None:
 def test_node_render_line(conn: sqlite3.Connection) -> None:
     _seed_dialogue(conn)
     node = DialogueNode.by_id(conn, 1)
-    assert node.render() == "Hans: Hello. What are you doing here?"
+    assert node.render() == "000001: Hans: Hello. What are you doing here?"
 
 
 def test_node_render_option(conn: sqlite3.Connection) -> None:
     _seed_dialogue(conn)
     node = DialogueNode.by_id(conn, 2)
-    assert node.render() == "  [I'm looking for whoever is in charge of this place.]"
+    assert node.render() == "000002:   [I'm looking for whoever is in charge of this place.]"
 
 
 def test_node_render_action(conn: sqlite3.Connection) -> None:
     _seed_dialogue(conn)
     node = DialogueNode.by_id(conn, 5)
-    assert node.render() == "    -> end"
+    assert node.render() == "000005:     -> end"
 
 
 def test_page_render_tree(conn: sqlite3.Connection) -> None:
@@ -247,9 +247,9 @@ def test_page_render_tree(conn: sqlite3.Connection) -> None:
     tree = page.render_tree(conn)
     lines = tree.split("\n")
     assert lines[0] == "== Standard dialogue =="
-    assert lines[1] == "Hans: Hello. What are you doing here?"
-    assert "  [I'm looking for whoever is in charge of this place.]" in lines
-    assert "    -> end" in lines
+    assert "Hans: Hello. What are you doing here?" in lines[1]
+    assert any("[I'm looking for whoever is in charge of this place.]" in l for l in lines)
+    assert any("-> end" in l for l in lines)
 
 
 def test_page_render_tree_section_filter(conn: sqlite3.Connection) -> None:

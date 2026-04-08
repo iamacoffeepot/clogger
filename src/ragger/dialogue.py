@@ -50,18 +50,30 @@ class DialoguePage:
         ).fetchall()
         return [DialogueNode._from_row(r) for r in rows]
 
-    def render_tree(self, conn: sqlite3.Connection, section: str | None = None,
-                    node_ids: bool = False) -> str:
+    def render_tree(self, conn: sqlite3.Connection, section: str | None = None) -> str:
         """Render the dialogue tree as indented text.
 
+        Each line is prefixed with a zero-padded node ID and a colon.
         If section is given, only nodes in that section are included
-        and the section header is omitted.  When *node_ids* is True each
-        line is prefixed with a zero-padded node ID and a tab.
+        and the section header is omitted.  Resolved ``continues`` edges
+        are rendered as ``-> #<target_id>``.
         """
         if section is not None:
             nodes = DialogueNode.by_section(conn, self.id, section)
         else:
             nodes = self.nodes(conn)
+
+        # Build continues edge lookup
+        continues: dict[int, int] = {}
+        rows = conn.execute(
+            """SELECT de.from_node_id, de.to_node_id
+               FROM dialogue_edges de
+               JOIN dialogue_nodes dn ON dn.id = de.from_node_id
+               WHERE dn.page_id = ? AND de.edge_type = 'continues'""",
+            (self.id,),
+        ).fetchall()
+        for from_id, to_id in rows:
+            continues[from_id] = to_id
 
         lines: list[str] = []
         current_section: str | None = None
@@ -74,7 +86,11 @@ class DialoguePage:
                         lines.append("")
                     lines.append(f"== {current_section} ==")
 
-            lines.append(node.render(node_ids=node_ids))
+            if node.id in continues:
+                indent = "  " * (node.depth - 1)
+                lines.append(f"{node.id:06d}: {indent}-> #{continues[node.id]:06d}")
+            else:
+                lines.append(node.render())
 
         return "\n".join(lines)
 
@@ -233,8 +249,8 @@ class DialogueNode:
         "quest_action": "~ {}",
     }
 
-    def render(self, node_ids: bool = False) -> str:
-        """Render this node as a single indented line."""
+    def render(self) -> str:
+        """Render this node as a single indented line with node ID prefix."""
         indent = "  " * (self.depth - 1)
         text = self.text or ""
         fmt = self._NODE_TYPE_FORMAT.get(self.node_type)
@@ -243,9 +259,7 @@ class DialogueNode:
         else:
             speaker = f"{self.speaker}: " if self.speaker else ""
             line = f"{indent}{speaker}{text}"
-        if node_ids:
-            return f"{self.id:06d}\t{line}"
-        return line
+        return f"{self.id:06d}: {line}"
 
     @classmethod
     def _from_row(cls, row: tuple) -> DialogueNode:
