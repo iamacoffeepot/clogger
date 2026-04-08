@@ -47,17 +47,19 @@ Pipeline order (managed by `fetch_all.py`):
 15. `fetch_magic_teleports.py` — Parses all spellbook teleports (Standard, Ancient, Lunar) and item teleports (jewellery, etc.)
 16. `fetch_activities.py` — Pulls activities/minigames with type, coordinates, skills bitmask, and region from Category:Activities
 17. `fetch_npcs.py` — Pulls non-combat NPC data (name, version, location, options, region) from Category:Non-player characters
-18. `fetch_npc_locations.py` — Associates NPC game IDs with wiki-stated coordinates by parsing versioned id and map fields from Infobox NPC
-19. `fetch_actions.py` — Universal action ingestion from {{Skill table}} templates. One API call per skill expands the table and parses name, level, XP, materials, tools, facilities, and secondary skills. Entity/facility pages are batch-fetched for Infobox NPC/Scenery game IDs, with ops resolved from cache dump definitions. Replaces all individual fetch_*_actions.py scripts and trigger linking scripts. Supports `--skill` to run a single skill.
-20. `fetch_wiki_vars.py` — Scrapes RuneScape:Varplayer/* and RuneScape:Varbit/* wiki pages for descriptions, content links, var class, and value annotations (quest stages, etc.)
-21. `fetch_dialogues.py` — Pulls dialogue trees from Transcript: pages (namespace 120). Parses *-indented wikitext with {{topt}}, {{tcond}}, {{tact}}, {{tbox}}, {{tselect}}, {{qact}} templates into an adjacency-list tree in dialogue_pages + dialogue_nodes.
+18. `fetch_ground_items.py` — Pulls ground item spawns by finding pages using {{ItemSpawnLine}} template. Parses item name, location, members, coordinates, and league region. One row per spawn coordinate.
+19. `fetch_npc_locations.py` — Associates NPC game IDs with wiki-stated coordinates by parsing versioned id and map fields from Infobox NPC
+20. `fetch_actions.py` — Universal action ingestion from {{Skill table}} templates. One API call per skill expands the table and parses name, level, XP, materials, tools, facilities, and secondary skills. Entity/facility pages are batch-fetched for Infobox NPC/Scenery game IDs, with ops resolved from cache dump definitions. Replaces all individual fetch_*_actions.py scripts and trigger linking scripts. Supports `--skill` to run a single skill.
+21. `fetch_wiki_vars.py` — Scrapes RuneScape:Varplayer/* and RuneScape:Varbit/* wiki pages for descriptions, content links, var class, and value annotations (quest stages, etc.)
+22. `fetch_dialogues.py` — Pulls dialogue trees from Transcript: pages (namespace 120). Parses *-indented wikitext with {{topt}}, {{tcond}}, {{tact}}, {{tbox}}, {{tselect}}, {{qact}} templates into an adjacency-list tree in dialogue_pages + dialogue_nodes.
 23. `link_shop_locations.py` — Links shops to locations by matching location text
 24. `link_activity_locations.py` — Links activities to locations by matching location text
-25. `link_facilities.py` — Derives facility bitmasks on locations from nearest facility coordinates
-26. `compute_dialogue_tags.py` — Aho-Corasick entity tagging over dialogue nodes. Matches items, NPCs, monsters, quests, locations, shops, equipment, and activities. Stores probable links in dialogue_tags.
-27. `link_npc_dialogues.py` — Links NPCs to dialogue pages by exact name match on npc-type transcripts
-28. `link_quest_dialogues.py` — Links quests to dialogue pages by exact name match on quest-type transcripts
-29. `compute_walkability.py` — Computes walkable connections via Voronoi edge flood fill and map tile collision data. Supports `--area-threshold`, `--edge-samples`, `--resolution`, `--debug` flags.
+25. `link_ground_item_locations.py` — Links ground items to items (name normalization) and nearest locations (Chebyshev distance)
+26. `link_facilities.py` — Derives facility bitmasks on locations from nearest facility coordinates
+27. `compute_dialogue_tags.py` — Aho-Corasick entity tagging over dialogue nodes. Matches items, NPCs, monsters, quests, locations, shops, equipment, and activities. Stores probable links in dialogue_tags.
+28. `link_npc_dialogues.py` — Links NPCs to dialogue pages by exact name match on npc-type transcripts
+29. `link_quest_dialogues.py` — Links quests to dialogue pages by exact name match on quest-type transcripts
+30. `compute_walkability.py` — Computes walkable connections via Voronoi edge flood fill and map tile collision data. Supports `--area-threshold`, `--edge-samples`, `--resolution`, `--debug` flags.
 
 ### Import scripts (`scripts/import/`)
 

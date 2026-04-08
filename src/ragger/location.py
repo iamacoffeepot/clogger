@@ -8,6 +8,7 @@ from enum import Enum
 
 from ragger.enums import ContentCategory, Facility, Region
 from ragger.game_variable import GameVariable
+from ragger.ground_item import GroundItem
 from ragger.utils import snake_case
 from ragger.shop import Shop
 
@@ -205,6 +206,10 @@ class Location:
     def shops(self, conn: sqlite3.Connection) -> list[Shop]:
         """Return all shops at this location."""
         return Shop.all_at(conn, self.id)
+
+    def ground_items(self, conn: sqlite3.Connection) -> list[GroundItem]:
+        """Return all ground item spawns at this location."""
+        return GroundItem.at_location(conn, self.id)
 
     @classmethod
     def for_shop(cls, conn: sqlite3.Connection, shop_id: int) -> Location | None:
