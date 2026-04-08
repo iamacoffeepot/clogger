@@ -81,3 +81,28 @@ return cls(*row) if row else None
 # RIGHT — explains a non-obvious design choice
 """Return only the top-level nodes (no parent)."""
 ```
+
+## No section headers
+
+Never use comments as section dividers. Let blank lines and logical grouping speak for themselves.
+
+```python
+# WRONG
+# --- Database queries ---
+def get_items(): ...
+def get_quests(): ...
+
+# --- Helpers ---
+def parse_name(): ...
+
+# WRONG
+##############################
+# Initialization
+##############################
+
+# RIGHT — just group with blank lines, no headers
+def get_items(): ...
+def get_quests(): ...
+
+def parse_name(): ...
+```

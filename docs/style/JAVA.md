@@ -166,6 +166,27 @@ final boolean succeeded = evalResult != null;
 respond(exchange, 200, succeeded);
 ```
 
+## No section headers
+
+Never use comments as section dividers. Let blank lines and logical grouping speak for themselves.
+
+```java
+// WRONG
+// --- Dependencies ---
+private final Client client;
+
+// WRONG
+// =====================
+// Event handlers
+// =====================
+
+// RIGHT — just group with blank lines, no headers
+private final Client client;
+private final ItemManager itemManager;
+
+private LuaActor activeActor;
+```
+
 ## Comments — only when non-obvious
 
 Don't narrate what code does. Comment only when the *why* isn't clear from the code itself.
@@ -183,7 +204,7 @@ chat.game("Hello");
 /** Max seconds to wait for a game-tick eval or script load. */
 private static final int GAME_TICK_TIMEOUT_SECONDS = 5;
 
-// RIGHT — section headers in a long static block
-// --- Dependencies ---
+// RIGHT — explains a non-obvious grouping choice
+// Dependencies injected at construction, services created lazily
 private final Client client;
 ```
