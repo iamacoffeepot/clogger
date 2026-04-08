@@ -578,6 +578,23 @@ SCHEMAS: list[str] = [
     """,
     "CREATE INDEX IF NOT EXISTS idx_dialogue_tags_node_id ON dialogue_tags(node_id)",
     "CREATE INDEX IF NOT EXISTS idx_dialogue_tags_entity ON dialogue_tags(entity_type, entity_name)",
+    f"""
+    CREATE TABLE IF NOT EXISTS ground_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        item_name TEXT NOT NULL,
+        item_id INTEGER,
+        location TEXT NOT NULL,
+        location_id INTEGER,
+        members INTEGER NOT NULL DEFAULT 1,
+        x INTEGER NOT NULL,
+        y INTEGER NOT NULL,
+        plane INTEGER NOT NULL DEFAULT 0,
+        region INTEGER CHECK(region IN ({_region_ids}) OR region IS NULL),
+        FOREIGN KEY (item_id) REFERENCES items(id),
+        FOREIGN KEY (location_id) REFERENCES locations(id),
+        UNIQUE(item_name, x, y)
+    )
+    """,
     """
     CREATE TABLE IF NOT EXISTS npc_dialogues (
         npc_id INTEGER NOT NULL,
