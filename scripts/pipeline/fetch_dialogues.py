@@ -428,6 +428,102 @@ def insert_dialogue(conn, page_title: str, page_type: str | None, nodes: list[di
         if target_idx is not None:
             edges.append((idx_to_id[i], idx_to_id[target_idx], DialogueEdgeType.CONTINUES.value))
 
+    # Resolve "-> continues" / "-> continue": break out of the current branch
+    # and continue with the next sibling after the parent node.
+    _CONTINUE_TEXTS = {"continues", "continue"}
+    for i, node in enumerate(nodes):
+        if node["node_type"] != DialogueNodeType.ACTION:
+            continue
+        if (node["text"] or "").strip().lower() not in _CONTINUE_TEXTS:
+            continue
+        # Walk up to find a parent that has a next sibling
+        ancestor_idx = node["parent_idx"]
+        while ancestor_idx is not None:
+            grandparent_idx = nodes[ancestor_idx]["parent_idx"]
+            gp_children = children_by_parent.get(grandparent_idx, [])
+            pos = gp_children.index(ancestor_idx)
+            if pos + 1 < len(gp_children):
+                target_idx = gp_children[pos + 1]
+                edges.append((idx_to_id[i], idx_to_id[target_idx], DialogueEdgeType.CONTINUES.value))
+                break
+            ancestor_idx = grandparent_idx
+
+    # Resolve "-> below": same as "-> above" but search forward instead of backward.
+    _BELOW_TEXTS = {"below", "same as below", "continues below"}
+    for i, node in enumerate(nodes):
+        if node["node_type"] != DialogueNodeType.ACTION:
+            continue
+        if (node["text"] or "").strip().lower() not in _BELOW_TEXTS:
+            continue
+        parent_idx = node["parent_idx"]
+        if parent_idx is None:
+            continue
+        siblings = children_by_parent.get(parent_idx, [])
+        sib_pos = siblings.index(i)
+        prev_sibling = nodes[siblings[sib_pos - 1]] if sib_pos > 0 else None
+
+        search_targets: list[tuple[str, DialogueNodeType | None]] = []
+        if prev_sibling and prev_sibling["text"]:
+            search_targets.append((prev_sibling["text"], DialogueNodeType.OPTION))
+        parent = nodes[parent_idx]
+        if parent["text"]:
+            search_targets.append((parent["text"], parent["node_type"]))
+
+        for target_text, preferred_type in search_targets:
+            best = None
+            for j in range(i + 1, len(nodes)):
+                candidate = nodes[j]
+                if candidate["text"] != target_text:
+                    continue
+                if j == parent_idx:
+                    continue
+                if preferred_type and candidate["node_type"] == preferred_type:
+                    best = j
+                    break
+                if best is None:
+                    best = j
+            if best is not None:
+                edges.append((idx_to_id[i], idx_to_id[best], DialogueEdgeType.CONTINUES.value))
+                break
+
+    # Resolve "-> initial": go to the first occurrence of the parent's text on the page.
+    for i, node in enumerate(nodes):
+        if node["node_type"] != DialogueNodeType.ACTION:
+            continue
+        if (node["text"] or "").strip().lower() != "initial":
+            continue
+        parent_idx = node["parent_idx"]
+        if parent_idx is None:
+            continue
+        parent = nodes[parent_idx]
+        if not parent["text"]:
+            continue
+        for j in range(len(nodes)):
+            if j == parent_idx:
+                continue
+            if nodes[j]["text"] == parent["text"] and nodes[j]["node_type"] == parent["node_type"]:
+                edges.append((idx_to_id[i], idx_to_id[j], DialogueEdgeType.CONTINUES.value))
+                break
+
+    # Resolve "-> previous": go to the nearest earlier occurrence of the parent's text.
+    for i, node in enumerate(nodes):
+        if node["node_type"] != DialogueNodeType.ACTION:
+            continue
+        if (node["text"] or "").strip().lower() not in ("previous", "previous2", "previous3"):
+            continue
+        parent_idx = node["parent_idx"]
+        if parent_idx is None:
+            continue
+        parent = nodes[parent_idx]
+        if not parent["text"]:
+            continue
+        for j in range(i - 1, -1, -1):
+            if j == parent_idx:
+                continue
+            if nodes[j]["text"] == parent["text"] and nodes[j]["node_type"] == parent["node_type"]:
+                edges.append((idx_to_id[i], idx_to_id[j], DialogueEdgeType.CONTINUES.value))
+                break
+
     conn.executemany(
         "INSERT INTO dialogue_edges (from_node_id, to_node_id, edge_type) VALUES (?, ?, ?)",
         edges,
