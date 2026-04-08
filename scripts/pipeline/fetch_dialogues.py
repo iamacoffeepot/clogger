@@ -40,6 +40,7 @@ TEMPLATE_RE = re.compile(r"^\{\{(\w+)\|?(.*)\}\}$", re.DOTALL)
 
 NODE_TYPE_MAP = {
     "topt": "option",
+    "top": "option",
     "tcond": "condition",
     "tact": "action",
     "tbox": "box",
@@ -62,23 +63,65 @@ def parse_transcript_type(wikitext: str) -> str | None:
     return None
 
 
-def extract_template_text(template_name: str, params_str: str) -> str:
-    """Extract human-readable text from a template's parameters."""
+def _split_template_params(params_str: str) -> tuple[dict[str, str], list[str]]:
+    """Split template params into named and positional."""
+    named: dict[str, str] = {}
+    positional: list[str] = []
+    for p in params_str.split("|"):
+        p = p.strip()
+        if "=" in p:
+            key, _, val = p.partition("=")
+            named[key.strip().lower()] = val.strip()
+        else:
+            positional.append(p)
+    return named, positional
+
+
+def _check_skip_override(named: dict[str, str], positional: list[str]) -> tuple[str, str] | None:
+    """Check for quest=No, event=No, or cond= overrides.
+
+    Returns (text, type_override) or None if no override applies.
+    """
+    text = strip_wiki_links(positional[0].strip()) if positional else ""
+
+    if named.get("quest", "").lower() == "no":
+        return text, "skip_quest"
+    if named.get("event", "").lower() == "no":
+        return text, "skip_event"
+    for key in ("cond", "tcond", "cont"):
+        if key in named:
+            return strip_wiki_links(named[key]), "condition"
+    return None
+
+
+def extract_template_text(template_name: str, params_str: str) -> tuple[str, str]:
+    """Extract human-readable text and node type override from a template's parameters.
+
+    Returns (text, node_type_override).  node_type_override is non-empty when
+    the template carries a named parameter that changes the semantics, e.g.
+    ``{{topt|quest=No}}`` → skip_quest.
+    """
     if not params_str:
-        return ""
+        return "", ""
+
+    # All templates can carry quest=No, event=No, or cond= overrides
+    named, positional = _split_template_params(params_str)
+    override = _check_skip_override(named, positional)
+    if override is not None:
+        return override
 
     if template_name == "tbox":
-        # tbox has pic=, pic2= named params; the text is the last positional
-        parts = params_str.split("|")
-        text_parts = [p.strip() for p in parts if "=" not in p]
-        return strip_wiki_links(text_parts[-1]) if text_parts else strip_wiki_links(params_str)
+        text_parts = [p.strip() for p in positional if p.strip()]
+        text = strip_wiki_links(text_parts[-1]) if text_parts else strip_wiki_links(params_str)
+        return text, ""
 
     if template_name == "tact":
-        return params_str.strip()
+        text = strip_wiki_links(positional[0].strip()) if positional else params_str.strip()
+        return text, ""
 
-    # topt, tcond, tselect, qact — first positional param
-    first = params_str.split("|")[0].strip()
-    return strip_wiki_links(first)
+    # topt/top, tcond, tselect, qact — first positional param
+    first = positional[0].strip() if positional else params_str.split("|")[0].strip()
+    return strip_wiki_links(first), ""
 
 
 def parse_line_content(content: str) -> dict:
@@ -90,8 +133,9 @@ def parse_line_content(content: str) -> dict:
     if m:
         tname = m.group(1).lower()
         if tname in NODE_TYPE_MAP:
-            text = extract_template_text(tname, m.group(2))
-            return {"node_type": NODE_TYPE_MAP[tname], "speaker": None, "text": text}
+            text, type_override = extract_template_text(tname, m.group(2))
+            node_type = type_override if type_override else NODE_TYPE_MAP[tname]
+            return {"node_type": node_type, "speaker": None, "text": text}
 
     # Speaker line: '''Name:''' text
     m = SPEAKER_RE.match(content)
@@ -121,11 +165,14 @@ def parse_section_depth(line: str) -> tuple[int, str] | None:
     return (level - 2, title)
 
 
-def parse_dialogue_tree(wikitext: str) -> tuple[str | None, list[dict]]:
+def parse_dialogue_tree(wikitext: str, skip_non_quest: bool = False) -> tuple[str | None, list[dict]]:
     """Parse transcript wikitext into (page_type, nodes).
 
     Each node dict has: parent_idx (index into the list or None),
     sort_order, depth, node_type, speaker, text, section.
+
+    When *skip_non_quest* is True, ``quest=No`` and ``event=No`` option
+    branches (and all their children) are pruned from the output.
     """
     page_type = parse_transcript_type(wikitext)
     nodes: list[dict] = []
@@ -134,6 +181,8 @@ def parse_dialogue_tree(wikitext: str) -> tuple[str | None, list[dict]]:
     sort_order = 0
     # Track current section heading path
     section_stack: list[str] = []
+    # When set, skip all lines deeper than this depth (pruning a subtree)
+    skip_depth: int | None = None
 
     for line in wikitext.split("\n"):
         stripped = line.strip()
@@ -149,6 +198,7 @@ def parse_dialogue_tree(wikitext: str) -> tuple[str | None, list[dict]]:
             section_stack.append(title)
             # Reset parent tracking for * lines under new section
             parent_at.clear()
+            skip_depth = None
             continue
 
         # Dialogue lines (must start with *)
@@ -163,11 +213,25 @@ def parse_dialogue_tree(wikitext: str) -> tuple[str | None, list[dict]]:
             else:
                 break
 
+        # If pruning a subtree, skip until we return to the same or shallower depth
+        if skip_depth is not None:
+            if depth > skip_depth:
+                continue
+            skip_depth = None
+
         content = stripped[depth:].strip()
         if not content:
             continue
 
         node = parse_line_content(content)
+
+        # quest=No / event=No branches
+        if node["node_type"] in ("skip_quest", "skip_event"):
+            if skip_non_quest:
+                skip_depth = depth
+                continue
+            # Normal ingestion: store as a regular option
+            node["node_type"] = "option"
 
         # Find parent: last node at depth - 1
         parent_idx = parent_at.get(depth - 1) if depth > 1 else None
