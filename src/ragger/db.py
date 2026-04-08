@@ -542,6 +542,51 @@ SCHEMAS: list[str] = [
         UNIQUE(game_id, x, y, plane, type)
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS dialogue_pages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL UNIQUE,
+        page_type TEXT
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS dialogue_nodes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        page_id INTEGER NOT NULL,
+        parent_id INTEGER,
+        sort_order INTEGER NOT NULL,
+        depth INTEGER NOT NULL,
+        node_type TEXT NOT NULL,
+        speaker TEXT,
+        text TEXT,
+        section TEXT,
+        FOREIGN KEY (page_id) REFERENCES dialogue_pages(id),
+        FOREIGN KEY (parent_id) REFERENCES dialogue_nodes(id)
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_dialogue_nodes_page_id ON dialogue_nodes(page_id)",
+    "CREATE INDEX IF NOT EXISTS idx_dialogue_nodes_parent_id ON dialogue_nodes(parent_id)",
+    """
+    CREATE TABLE IF NOT EXISTS dialogue_tags (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        node_id INTEGER NOT NULL,
+        entity_type TEXT NOT NULL,
+        entity_name TEXT NOT NULL,
+        entity_id INTEGER,
+        FOREIGN KEY (node_id) REFERENCES dialogue_nodes(id)
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_dialogue_tags_node_id ON dialogue_tags(node_id)",
+    "CREATE INDEX IF NOT EXISTS idx_dialogue_tags_entity ON dialogue_tags(entity_type, entity_name)",
+    """
+    CREATE TABLE IF NOT EXISTS npc_dialogues (
+        npc_id INTEGER NOT NULL,
+        page_id INTEGER NOT NULL,
+        PRIMARY KEY (npc_id, page_id),
+        FOREIGN KEY (npc_id) REFERENCES npcs(id),
+        FOREIGN KEY (page_id) REFERENCES dialogue_pages(id)
+    )
+    """,
 ]
 
 
