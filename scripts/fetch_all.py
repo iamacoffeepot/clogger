@@ -40,6 +40,7 @@ SCRIPTS = [
     "scripts/pipeline/link_ground_item_locations.py",
     "scripts/pipeline/link_facilities.py",
     "scripts/pipeline/compute_dialogue_tags.py",
+    "scripts/pipeline/compute_dialogue_instructions.py",
     "scripts/pipeline/link_npc_dialogues.py",
     "scripts/pipeline/link_quest_dialogues.py",
     "scripts/pipeline/compute_walkability.py",
