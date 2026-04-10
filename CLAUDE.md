@@ -179,6 +179,7 @@ All API methods accept a `sqlite3.Connection` so connections can be reused. Per-
 - `MAP.md` — MapLink, MapSquare (stitch with scaling), pathfinding (A* with Chebyshev)
 - `GROUND_ITEM.md` — GroundItem spawns by name, location, proximity
 - `ACTIVITY.md` — Activity/minigame lookup
+- `CATEGORY.md` — WikiCategory graph traversal (children, parents, ancestors, descendants)
 - `ACTION.md` — Action with inputs, outputs, requirements, triggers
 - `NPC.md` — Non-combat NPC lookup, NpcLocation (game ID to coordinates)
 - `DIALOGUE.md` — DialoguePage, DialogueNode (tree traversal, subtree CTE, continue_target_id), DialogueTag (entity tagging), Instruction (flattened per-page IR with passes pipeline), Atom (structured condition predicates via frame-based parser with AC entity normalization)
