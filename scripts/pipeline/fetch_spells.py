@@ -228,7 +228,7 @@ def ingest(db_path: Path) -> None:
             teleport_count += 1
 
     if found_pages:
-        record_attributions_batch(conn, "spells", found_pages)
+        record_attributions_batch(conn, ["combat_spells", "utility_spells", "teleport_spells"], found_pages)
 
     conn.commit()
     print(f"Inserted {combat_count} combat, {utility_count} utility, {teleport_count} teleport spells into {db_path}")
