@@ -39,11 +39,12 @@ ALL_RULES: list[FrameRule] = [
     # 2. Skill checks
     *_skills,
 
-    # 3. Item possession (has_item, has_coins, has_currency, etc.)
-    *_items,
-
-    # 4. Equipment / wearing
+    # 3. Equipment / wearing — before items so "has {equipment} equipped"
+    #    matches wearing, not has_item's trailing-junk pattern.
     *_equipment,
+
+    # 4. Item possession (has_item, has_coins, has_currency, etc.)
+    *_items,
 
     # 5. Inventory space
     *_inventory,
