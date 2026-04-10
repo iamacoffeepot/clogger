@@ -14,6 +14,7 @@ from ragger.wiki import (
     fetch_category_members,
     fetch_page_wikitext,
     parse_template_param,
+    populate_aliases_table,
     record_attributions_batch,
     resolve_region,
     strip_wiki_links,
@@ -156,6 +157,18 @@ def ingest(db_path: Path) -> None:
 
     print("Recording attributions...")
     record_attributions_batch(conn, "locations", pages)
+
+    print("Fetching location aliases from wiki redirects...")
+    location_lookup = {
+        name: id for id, name in conn.execute("SELECT id, name FROM locations").fetchall()
+    }
+    alias_count = populate_aliases_table(
+        conn,
+        pages,
+        "INSERT OR IGNORE INTO location_aliases (location_id, alias) VALUES (?, ?)",
+        page_to_key=location_lookup.get,
+    )
+    print(f"Inserted {alias_count} location aliases")
 
     conn.commit()
     print(f"Inserted {location_count} locations with {adjacency_count} adjacency edges ({skipped} pages skipped) into {db_path}")

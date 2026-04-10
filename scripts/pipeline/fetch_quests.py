@@ -18,6 +18,7 @@ from ragger.wiki import (
     link_group_requirement,
     link_requirement,
     parse_skill_requirements,
+    populate_aliases_table,
     record_attributions_batch,
     throttle,
 )
@@ -271,6 +272,16 @@ def ingest(db_path: Path) -> None:
         f"{skill_req_count} skill requirements, "
         f"{req_count} quest requirements into {db_path}"
     )
+
+    print("Fetching quest aliases from wiki redirects...")
+    alias_count = populate_aliases_table(
+        conn,
+        quest_names,
+        "INSERT OR IGNORE INTO quest_aliases (quest_id, alias) VALUES (?, ?)",
+        page_to_key=quest_ids.get,
+    )
+    print(f"Inserted {alias_count} quest aliases")
+
     conn.close()
 
 

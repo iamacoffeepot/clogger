@@ -21,6 +21,7 @@ from ragger.wiki import (
     link_group_requirement,
     parse_int,
     parse_template_param,
+    populate_aliases_table,
     record_attributions_batch,
     resolve_region,
     strip_wiki_links,
@@ -383,6 +384,14 @@ def ingest(db_path: Path) -> None:
 
     print("Recording attributions...")
     record_attributions_batch(conn, ["monsters", "monster_locations", "monster_drops"], pages)
+
+    print("Fetching monster aliases from wiki redirects...")
+    alias_count = populate_aliases_table(
+        conn,
+        pages,
+        "INSERT OR IGNORE INTO monster_aliases (monster_name, alias) VALUES (?, ?)",
+    )
+    print(f"Inserted {alias_count} monster aliases")
 
     conn.commit()
     conn.close()

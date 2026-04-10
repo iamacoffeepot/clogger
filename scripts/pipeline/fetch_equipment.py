@@ -22,6 +22,7 @@ from ragger.wiki import (
     link_group_requirement,
     parse_int,
     parse_template_param,
+    populate_aliases_table,
     record_attributions_batch,
     strip_wiki_links,
 )
@@ -353,6 +354,15 @@ def ingest(db_path: Path) -> None:
 
     # Record attributions
     record_attributions_batch(conn, "equipment", list(all_wikitext.keys()))
+
+    print("Fetching equipment aliases from wiki redirects...")
+    alias_count = populate_aliases_table(
+        conn,
+        list(all_wikitext.keys()),
+        "INSERT OR IGNORE INTO equipment_aliases (equipment_name, alias) VALUES (?, ?)",
+    )
+    print(f"Inserted {alias_count} equipment aliases")
+
     conn.commit()
     conn.close()
 

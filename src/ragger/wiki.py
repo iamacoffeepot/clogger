@@ -844,6 +844,39 @@ def link_group_requirement(
     return group_id
 
 
+def populate_aliases_table(
+    conn: sqlite3.Connection,
+    pages: list[str],
+    insert_sql: str,
+    page_to_key: "Callable[[str], int | str | None] | None" = None,
+) -> int:
+    """Batch-fetch wiki redirects for ``pages`` and insert (key, alias) rows.
+
+    Iterates ``pages`` in groups of WIKI_BATCH_SIZE, calls
+    ``fetch_redirects_batch`` for each group, then maps each page name to a
+    key via ``page_to_key`` (or uses the page name directly if not provided).
+    Skips pages whose key resolves to ``None``.
+
+    ``insert_sql`` must accept two positional parameters: the entity key and
+    the alias text. Commits after the bulk insert. Returns the number of
+    alias rows inserted.
+    """
+    rows: list[tuple[object, str]] = []
+    for i in range(0, len(pages), WIKI_BATCH_SIZE):
+        batch = pages[i:i + WIKI_BATCH_SIZE]
+        print(f"  Fetching aliases {i + 1}-{i + len(batch)}...")
+        redirects = fetch_redirects_batch(batch)
+        for page_name, aliases in redirects.items():
+            key = page_to_key(page_name) if page_to_key else page_name
+            if key is None:
+                continue
+            for alias in aliases:
+                rows.append((key, alias))
+    conn.executemany(insert_sql, rows)
+    conn.commit()
+    return len(rows)
+
+
 def fetch_redirects_batch(pages: list[str]) -> dict[str, list[str]]:
     """Fetch redirect source titles for up to WIKI_BATCH_SIZE target pages.
 

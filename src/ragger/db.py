@@ -50,6 +50,47 @@ SCHEMAS: list[str] = [
     CREATE INDEX IF NOT EXISTS idx_item_aliases_alias ON item_aliases(alias)
     """,
     """
+    CREATE TABLE IF NOT EXISTS quest_aliases (
+        quest_id INTEGER NOT NULL,
+        alias TEXT NOT NULL,
+        PRIMARY KEY (quest_id, alias),
+        FOREIGN KEY (quest_id) REFERENCES quests(id)
+    )
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_quest_aliases_alias ON quest_aliases(alias)
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS npc_aliases (
+        npc_name TEXT NOT NULL,
+        alias TEXT NOT NULL,
+        PRIMARY KEY (npc_name, alias)
+    )
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_npc_aliases_alias ON npc_aliases(alias)
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS monster_aliases (
+        monster_name TEXT NOT NULL,
+        alias TEXT NOT NULL,
+        PRIMARY KEY (monster_name, alias)
+    )
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_monster_aliases_alias ON monster_aliases(alias)
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS equipment_aliases (
+        equipment_name TEXT NOT NULL,
+        alias TEXT NOT NULL,
+        PRIMARY KEY (equipment_name, alias)
+    )
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_equipment_aliases_alias ON equipment_aliases(alias)
+    """,
+    """
     CREATE TABLE IF NOT EXISTS physical_currencies (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL UNIQUE,
@@ -422,6 +463,17 @@ SCHEMAS: list[str] = [
         FOREIGN KEY (location_id) REFERENCES locations(id),
         UNIQUE(location_id, direction)
     )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS location_aliases (
+        location_id INTEGER NOT NULL,
+        alias TEXT NOT NULL,
+        PRIMARY KEY (location_id, alias),
+        FOREIGN KEY (location_id) REFERENCES locations(id)
+    )
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_location_aliases_alias ON location_aliases(alias)
     """,
     """
     CREATE TABLE IF NOT EXISTS shop_items (

@@ -16,6 +16,7 @@ from ragger.wiki import (
     fetch_category_members,
     fetch_pages_wikitext_batch,
     parse_template_param,
+    populate_aliases_table,
     record_attributions_batch,
     resolve_region,
     strip_wiki_links,
@@ -120,7 +121,16 @@ def ingest(db_path: Path) -> None:
             print(f"  Processed {i + 50}/{len(pages)}...")
 
     print("Recording attributions...")
-    record_attributions_batch(conn, "npcs", [p for p in pages if p not in monster_names])
+    npc_pages = [p for p in pages if p not in monster_names]
+    record_attributions_batch(conn, "npcs", npc_pages)
+
+    print("Fetching NPC aliases from wiki redirects...")
+    alias_count = populate_aliases_table(
+        conn,
+        npc_pages,
+        "INSERT OR IGNORE INTO npc_aliases (npc_name, alias) VALUES (?, ?)",
+    )
+    print(f"Inserted {alias_count} NPC aliases")
 
     conn.commit()
     print(f"Inserted {npc_count} NPC entries into {db_path}")

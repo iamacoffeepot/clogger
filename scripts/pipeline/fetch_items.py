@@ -12,9 +12,9 @@ from ragger.wiki import (
     extract_template,
     fetch_category_members,
     fetch_pages_wikitext_batch,
-    fetch_redirects_batch,
     parse_int,
     parse_template_param,
+    populate_aliases_table,
     record_attributions_batch,
     strip_wiki_links,
 )
@@ -133,23 +133,13 @@ def ingest(db_path: Path) -> None:
 
     # Fetch wiki redirects as item aliases (e.g. "Amulet of ghostspeak" → "Ghostspeak amulet")
     print("Fetching item aliases from wiki redirects...")
-    alias_rows: list[tuple[int, str]] = []
-    for i in range(0, len(pages), 50):
-        batch = pages[i:i + 50]
-        print(f"  Fetching redirects {i + 1}-{i + len(batch)}...")
-        redirects = fetch_redirects_batch(batch)
-        for page_name, aliases in redirects.items():
-            item_id = item_lookup.get(page_name)
-            if item_id is None:
-                continue
-            for alias in aliases:
-                alias_rows.append((item_id, alias))
-    conn.executemany(
+    alias_count = populate_aliases_table(
+        conn,
+        pages,
         "INSERT OR IGNORE INTO item_aliases (item_id, alias) VALUES (?, ?)",
-        alias_rows,
+        page_to_key=item_lookup.get,
     )
-    conn.commit()
-    print(f"Inserted {len(alias_rows)} item aliases")
+    print(f"Inserted {alias_count} item aliases")
 
     # Record attributions
     record_attributions_batch(conn, "items", list(all_wikitext.keys()))
