@@ -103,7 +103,7 @@ class Monster:
         }
 
     @classmethod
-    @mcp_tool(name="MonsterAll", description="List all monsters, optionally filtered by region")
+    @mcp_tool(name="MonsterAll", description="List all monsters, optionally filtered by region. Returns combat_level, hitpoints, attack_speed, slayer info, and examine text. Large result set — prefer MonsterSearch or MonsterByName.")
     def all(
         cls,
         conn: sqlite3.Connection,
@@ -123,7 +123,7 @@ class Monster:
         return [cls._from_row(row) for row in rows]
 
     @classmethod
-    @mcp_tool(name="MonsterByName", description="Find a monster by exact name and optional version")
+    @mcp_tool(name="MonsterByName", description="Find a monster by exact name (e.g. 'Goblin', 'King Black Dragon'). Returns combat stats, hitpoints, attack style, slayer XP/category, and examine text. Version disambiguates multi-form monsters. Without version, returns lowest combat level variant.")
     def by_name(cls, conn: sqlite3.Connection, name: str, version: str | None = None) -> Monster | None:
         if version is not None:
             row = conn.execute(
@@ -138,7 +138,7 @@ class Monster:
         return cls._from_row(row) if row else None
 
     @classmethod
-    @mcp_tool(name="MonsterBySlayerCategory", description="Find monsters by slayer assignment category")
+    @mcp_tool(name="MonsterBySlayerCategory", description="Find monsters by slayer assignment category (e.g. 'Aberrant spectres', 'Black dragons', 'Gargoyles'). Returns all monsters assignable under that category.")
     def by_slayer_category(cls, conn: sqlite3.Connection, category: str) -> list[Monster]:
         rows = conn.execute(
             f"SELECT {cls._COLS} FROM monsters WHERE slayer_category = ? ORDER BY name, version",
@@ -147,7 +147,7 @@ class Monster:
         return [cls._from_row(row) for row in rows]
 
     @classmethod
-    @mcp_tool(name="MonsterSearch", description="Search monsters by partial name match")
+    @mcp_tool(name="MonsterSearch", description="Search monsters by partial name match (LIKE %%name%%). Use when the exact name is unknown.")
     def search(cls, conn: sqlite3.Connection, name: str) -> list[Monster]:
         """Search monsters by partial name match."""
         rows = conn.execute(

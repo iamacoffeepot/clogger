@@ -67,7 +67,7 @@ class Location:
         return [f for f in Facility if self.facilities & f.mask]
 
     @classmethod
-    @mcp_tool(name="LocationAll", description="List all locations, optionally filtered by region")
+    @mcp_tool(name="LocationAll", description="List all locations, optionally filtered by region. Returns name, region, type, members, coordinates, and facilities list (BANK, FURNACE, ANVIL, etc.). Large result set — prefer LocationSearch or LocationByName.")
     def all(
         cls,
         conn: sqlite3.Connection,
@@ -85,7 +85,7 @@ class Location:
         return [cls._from_row(row) for row in rows]
 
     @classmethod
-    @mcp_tool(name="LocationWithFacilities", description="Find locations that have specific facilities")
+    @mcp_tool(name="LocationWithFacilities", description="Find locations with all specified facilities. Pass a list of facility types: BANK, FURNACE, ANVIL, ALTAR, SPINNING_WHEEL, LOOM, POTTERY_WHEEL, RANGE, WATER_SOURCE, TANNING. Optionally filter by region.")
     def with_facilities(
         cls,
         conn: sqlite3.Connection,
@@ -106,7 +106,7 @@ class Location:
         return [cls._from_row(row) for row in rows]
 
     @classmethod
-    @mcp_tool(name="LocationNearest", description="Find the nearest location to given coordinates")
+    @mcp_tool(name="LocationNearest", description="Find the nearest named location to world coordinates. Useful for identifying where the player is. Metric: CHEBYSHEV (default), MANHATTAN, or EUCLIDEAN.")
     def nearest(
         cls,
         conn: sqlite3.Connection,
@@ -130,7 +130,7 @@ class Location:
         return best
 
     @classmethod
-    @mcp_tool(name="LocationByName", description="Find a location by exact name")
+    @mcp_tool(name="LocationByName", description="Find a location by exact name (e.g. 'Lumbridge', 'Varrock', 'Grand Exchange'). Returns coordinates, region, facilities, and type.")
     def by_name(cls, conn: sqlite3.Connection, name: str) -> Location | None:
         row = conn.execute(
             "SELECT id, name, region, type, members, x, y, facilities FROM locations WHERE name = ?",
@@ -139,7 +139,7 @@ class Location:
         return cls._from_row(row) if row else None
 
     @classmethod
-    @mcp_tool(name="LocationSearch", description="Search locations by partial name match")
+    @mcp_tool(name="LocationSearch", description="Search locations by partial name match (LIKE %%name%%). Use when the exact location name is unknown.")
     def search(cls, conn: sqlite3.Connection, name: str) -> list[Location]:
         rows = conn.execute(
             "SELECT id, name, region, type, members, x, y, facilities FROM locations WHERE name LIKE ? ORDER BY name",

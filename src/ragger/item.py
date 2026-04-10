@@ -18,13 +18,13 @@ class Item:
     _COLS = "id, name, members, tradeable, weight, examine"
 
     @classmethod
-    @mcp_tool(name="ItemAll", description="List all items in the database")
+    @mcp_tool(name="ItemAll", description="List all items. Returns id, name, members, tradeable, weight, examine. Use ItemSearch for partial matches.")
     def all(cls, conn: sqlite3.Connection) -> list[Item]:
         rows = conn.execute(f"SELECT {cls._COLS} FROM items ORDER BY name").fetchall()
         return [cls._from_row(row) for row in rows]
 
     @classmethod
-    @mcp_tool(name="ItemByName", description="Find an item by exact name")
+    @mcp_tool(name="ItemByName", description="Find an item by exact name (case-sensitive). Returns id, name, members, tradeable, weight, examine. Use EquipmentForItem with the id for combat stats, or ShopSelling with the name to find shops.")
     def by_name(cls, conn: sqlite3.Connection, name: str) -> Item | None:
         row = conn.execute(
             f"SELECT {cls._COLS} FROM items WHERE name = ?", (name,)
@@ -32,7 +32,7 @@ class Item:
         return cls._from_row(row) if row else None
 
     @classmethod
-    @mcp_tool(name="ItemByGameId", description="Find an item by its OSRS game ID")
+    @mcp_tool(name="ItemByGameId", description="Find an item by its OSRS game ID (the numeric ID from the game cache). Returns the same fields as ItemByName.")
     def by_game_id(cls, conn: sqlite3.Connection, game_id: int) -> Item | None:
         row = conn.execute(
             f"""SELECT {cls._COLS} FROM items i
@@ -43,7 +43,7 @@ class Item:
         return cls._from_row(row) if row else None
 
     @classmethod
-    @mcp_tool(name="ItemSearch", description="Search items by partial name match")
+    @mcp_tool(name="ItemSearch", description="Search items by partial name match (LIKE %%name%%). Use when the exact name is unknown. Returns a list of matching items.")
     def search(cls, conn: sqlite3.Connection, name: str) -> list[Item]:
         rows = conn.execute(
             f"SELECT {cls._COLS} FROM items WHERE name LIKE ? ORDER BY name",

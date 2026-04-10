@@ -24,7 +24,7 @@ class WikiCategory:
         }
 
     @classmethod
-    @mcp_tool(name="WikiCategoryByName", description="Find a wiki category by exact name")
+    @mcp_tool(name="WikiCategoryByName", description="Find a wiki category by exact name (e.g. 'Slayer monsters', 'Free-to-play items'). Returns page_count and subcat_count.")
     def by_name(cls, conn: sqlite3.Connection, name: str) -> WikiCategory | None:
         row = conn.execute(
             f"SELECT {cls._COLS} FROM wiki_categories WHERE name = ?", (name,)
@@ -32,7 +32,7 @@ class WikiCategory:
         return cls._from_row(row) if row else None
 
     @classmethod
-    @mcp_tool(name="WikiCategorySearch", description="Search wiki categories by partial name match")
+    @mcp_tool(name="WikiCategorySearch", description="Search wiki categories by partial name match (LIKE %%name%%). Use to discover how content is organized.")
     def search(cls, conn: sqlite3.Connection, name: str) -> list[WikiCategory]:
         rows = conn.execute(
             f"SELECT {cls._COLS} FROM wiki_categories WHERE name LIKE ? ORDER BY name",
@@ -103,7 +103,7 @@ class WikiCategory:
         return [self._from_row(r) for r in rows]
 
     @classmethod
-    @mcp_tool(name="WikiCategoryForPage", description="Find all categories a wiki page belongs to")
+    @mcp_tool(name="WikiCategoryForPage", description="Find all wiki categories a page belongs to by page title (e.g. 'Abyssal whip', 'Dragon Slayer I'). Use to understand what type of content something is.")
     def for_page(cls, conn: sqlite3.Connection, page_title: str) -> list[WikiCategory]:
         """All categories a wiki page belongs to."""
         rows = conn.execute(

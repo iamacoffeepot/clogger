@@ -29,7 +29,7 @@ class Npc:
         }
 
     @classmethod
-    @mcp_tool(name="NpcAll", description="List all NPCs, optionally filtered by region")
+    @mcp_tool(name="NpcAll", description="List all non-combat NPCs, optionally filtered by region. Returns name, version, location, coordinates, right-click options. Large result set — prefer NpcSearch or NpcByName.")
     def all(cls, conn: sqlite3.Connection, region: Region | None = None) -> list[Npc]:
         query = "SELECT id, name, version, location, x, y, options, region FROM npcs"
         params: list = []
@@ -40,7 +40,7 @@ class Npc:
         return [cls._from_row(r) for r in conn.execute(query, params).fetchall()]
 
     @classmethod
-    @mcp_tool(name="NpcByName", description="Find an NPC by exact name and optional version")
+    @mcp_tool(name="NpcByName", description="Find a non-combat NPC by exact name. Returns location, coordinates, and right-click options (Talk-to, Trade, Travel, etc.). For combat NPCs use MonsterByName instead.")
     def by_name(cls, conn: sqlite3.Connection, name: str, version: str | None = None) -> Npc | None:
         if version is not None:
             row = conn.execute(
@@ -63,7 +63,7 @@ class Npc:
         return [cls._from_row(r) for r in rows]
 
     @classmethod
-    @mcp_tool(name="NpcSearch", description="Search NPCs by partial name match")
+    @mcp_tool(name="NpcSearch", description="Search non-combat NPCs by partial name match (LIKE %%name%%). Use when the exact name is unknown.")
     def search(cls, conn: sqlite3.Connection, name: str) -> list[Npc]:
         rows = conn.execute(
             "SELECT id, name, version, location, x, y, options, region FROM npcs WHERE name LIKE ? ORDER BY name, version",
@@ -72,7 +72,7 @@ class Npc:
         return [cls._from_row(r) for r in rows]
 
     @classmethod
-    @mcp_tool(name="NpcWithOption", description="Find NPCs with a specific right-click option")
+    @mcp_tool(name="NpcWithOption", description="Find NPCs with a specific right-click option (e.g. 'Trade', 'Travel', 'Teleport', 'Bank'). Optionally filter by region.")
     def with_option(cls, conn: sqlite3.Connection, option: str, region: Region | None = None) -> list[Npc]:
         query = "SELECT id, name, version, location, x, y, options, region FROM npcs WHERE options LIKE ?"
         params: list = [f"%{option}%"]
@@ -143,7 +143,7 @@ class NpcLocation:
         return {"id": self.id, "game_id": self.game_id, "name": self.name, "x": self.x, "y": self.y}
 
     @classmethod
-    @mcp_tool(name="NpcLocationByGameId", description="Find NPC locations by game ID")
+    @mcp_tool(name="NpcLocationByGameId", description="Find NPC spawn coordinates by game ID (from the game cache). Returns game_id, name, x, y for each spawn point.")
     def by_game_id(cls, conn: sqlite3.Connection, game_id: int) -> list[NpcLocation]:
         rows = conn.execute(
             "SELECT id, game_id, name, x, y FROM npc_locations WHERE game_id = ? ORDER BY x, y",
@@ -160,7 +160,7 @@ class NpcLocation:
         return [cls._from_row(r) for r in rows]
 
     @classmethod
-    @mcp_tool(name="NpcLocationNear", description="Find NPC locations near given coordinates")
+    @mcp_tool(name="NpcLocationNear", description="Find NPC spawn points near world coordinates. Default radius 50 tiles. Sorted by distance.")
     def near(cls, conn: sqlite3.Connection, x: int, y: int, radius: int = 50) -> list[NpcLocation]:
         rows = conn.execute(
             """SELECT id, game_id, name, x, y FROM npc_locations

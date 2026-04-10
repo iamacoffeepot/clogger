@@ -97,7 +97,7 @@ class Action:
         }
 
     @classmethod
-    @mcp_tool(name="ActionAll", description="List all actions")
+    @mcp_tool(name="ActionAll", description="List all skilling actions. Returns name, members, ticks, notes. Very large — prefer ActionSearch, ActionProducingItem, or ActionConsumingItem.")
     def all(cls, conn: sqlite3.Connection) -> list[Action]:
         rows = conn.execute(
             f"SELECT {cls._COLS} FROM actions ORDER BY id",
@@ -105,7 +105,7 @@ class Action:
         return [cls._from_row(row) for row in rows]
 
     @classmethod
-    @mcp_tool(name="ActionByName", description="Find an action by exact name")
+    @mcp_tool(name="ActionByName", description="Find a skilling action by exact name (e.g. 'Bronze bar', 'Oak plank'). Returns ticks, members, notes. Actions have input items/objects, output items/XP, skill requirements, and triggers.")
     def by_name(cls, conn: sqlite3.Connection, name: str) -> Action | None:
         row = conn.execute(
             f"SELECT {cls._COLS} FROM actions WHERE name = ? ORDER BY id LIMIT 1",
@@ -114,7 +114,7 @@ class Action:
         return cls._from_row(row) if row else None
 
     @classmethod
-    @mcp_tool(name="ActionAllByName", description="Find all action variants with a given name")
+    @mcp_tool(name="ActionAllByName", description="Find all action variants with a given name. Some items have multiple creation methods (e.g. different furnaces or tools).")
     def all_by_name(cls, conn: sqlite3.Connection, name: str) -> list[Action]:
         """Find all actions with an exact name (may have multiple methods for same output)."""
         rows = conn.execute(
@@ -124,7 +124,7 @@ class Action:
         return [cls._from_row(row) for row in rows]
 
     @classmethod
-    @mcp_tool(name="ActionSearch", description="Search actions by partial name match")
+    @mcp_tool(name="ActionSearch", description="Search skilling actions by partial name match (LIKE %%name%%). Use to find how to make or obtain something.")
     def search(cls, conn: sqlite3.Connection, name: str) -> list[Action]:
         """Find actions whose name matches a partial string."""
         rows = conn.execute(
@@ -178,7 +178,7 @@ class Action:
     # --- Producing queries ---
 
     @classmethod
-    @mcp_tool(name="ActionProducingItem", description="Find actions that produce a given item")
+    @mcp_tool(name="ActionProducingItem", description="Find actions that produce a given item by exact item name. Use to answer 'how do I make X?' Returns the actions with their skill requirements and input materials.")
     def producing_item(cls, conn: sqlite3.Connection, item_name: str) -> list[Action]:
         """Find actions that produce a given item."""
         rows = conn.execute(
@@ -205,7 +205,7 @@ class Action:
         return [cls._from_row(row) for row in rows]
 
     @classmethod
-    @mcp_tool(name="ActionProducingExperience", description="Find actions that grant experience in a given skill")
+    @mcp_tool(name="ActionProducingExperience", description="Find actions that grant XP in a given skill. Use to answer 'how do I train X?' Skill values: ATTACK, STRENGTH, MINING, SMITHING, etc.")
     def producing_experience(cls, conn: sqlite3.Connection, skill: Skill) -> list[Action]:
         """Find actions that grant experience in a given skill."""
         rows = conn.execute(
@@ -221,7 +221,7 @@ class Action:
     # --- Consuming queries ---
 
     @classmethod
-    @mcp_tool(name="ActionConsumingItem", description="Find actions that consume a given item")
+    @mcp_tool(name="ActionConsumingItem", description="Find actions that consume a given item as input by exact item name. Use to answer 'what can I do with X?'")
     def consuming_item(cls, conn: sqlite3.Connection, item_name: str) -> list[Action]:
         """Find actions that consume a given item as input."""
         rows = conn.execute(

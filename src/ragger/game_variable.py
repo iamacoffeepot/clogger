@@ -101,7 +101,7 @@ class GameVariable:
         }
 
     @classmethod
-    @mcp_tool(name="GameVariableAll", description="List all game variables, optionally filtered by type")
+    @mcp_tool(name="GameVariableAll", description="List game variables (varps, varbits, varcs), optionally filtered by type (VARP, VARBIT, VARC_INT). Returns name, var_id, description, content/functional tags. Very large — prefer GameVariableSearch.")
     def all(cls, conn: sqlite3.Connection, var_type: VariableType | None = None) -> list[GameVariable]:
         if var_type:
             rows = conn.execute(
@@ -115,7 +115,7 @@ class GameVariable:
         return [cls._from_row(row) for row in rows]
 
     @classmethod
-    @mcp_tool(name="GameVariableByName", description="Find a game variable by exact name")
+    @mcp_tool(name="GameVariableByName", description="Find a game variable by exact name (e.g. 'QUEST_DRAGON_SLAYER_I'). Returns var_id, var_type, description, content tags (quest, skill, npc links), and functional tags (progress, toggle, counter).")
     def by_name(cls, conn: sqlite3.Connection, name: str) -> GameVariable | None:
         row = conn.execute(
             f"SELECT {cls._COLS} FROM game_vars WHERE name = ? LIMIT 1",
@@ -132,7 +132,7 @@ class GameVariable:
         return [cls._from_row(row) for row in rows]
 
     @classmethod
-    @mcp_tool(name="GameVariableSearch", description="Search game variables by partial name match")
+    @mcp_tool(name="GameVariableSearch", description="Search game variables by partial name match (LIKE %%name%%). Use to find varps/varbits related to quests, skills, or game mechanics.")
     def search(cls, conn: sqlite3.Connection, name: str) -> list[GameVariable]:
         rows = conn.execute(
             f"SELECT {cls._COLS} FROM game_vars WHERE name LIKE ? ORDER BY var_type, var_id",

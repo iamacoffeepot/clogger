@@ -74,7 +74,7 @@ class Shop:
         }
 
     @classmethod
-    @mcp_tool(name="ShopAll", description="List all shops, optionally filtered by region and type")
+    @mcp_tool(name="ShopAll", description="List all shops, optionally filtered by region and shop_type (GENERAL, ARCHERY, SWORD, MAGIC, etc.). Returns name, location, owner, sell/buy multipliers.")
     def all(
         cls,
         conn: sqlite3.Connection,
@@ -99,7 +99,7 @@ class Shop:
         return [cls._from_row(row) for row in rows]
 
     @classmethod
-    @mcp_tool(name="ShopByName", description="Find a shop by exact name")
+    @mcp_tool(name="ShopByName", description="Find a shop by exact name. Returns location, owner, members, sell/buy multipliers, and location_id for chaining with LocationByName.")
     def by_name(cls, conn: sqlite3.Connection, name: str) -> Shop | None:
         row = conn.execute(
             f"SELECT {cls._COLS} FROM shops WHERE name = ?",
@@ -108,7 +108,7 @@ class Shop:
         return cls._from_row(row) if row else None
 
     @classmethod
-    @mcp_tool(name="ShopSearch", description="Search shops by partial name match")
+    @mcp_tool(name="ShopSearch", description="Search shops by partial name match (LIKE %%name%%). Use when the exact shop name is unknown.")
     def search(cls, conn: sqlite3.Connection, name: str) -> list[Shop]:
         rows = conn.execute(
             f"SELECT {cls._COLS} FROM shops WHERE name LIKE ? ORDER BY name",
@@ -119,7 +119,7 @@ class Shop:
     _S_COLS = "s.id, s.name, s.location, s.location_id, s.owner, s.members, s.region, s.shop_type, s.sell_multiplier, s.buy_multiplier, s.delta"
 
     @classmethod
-    @mcp_tool(name="ShopSelling", description="Find shops that sell a given item")
+    @mcp_tool(name="ShopSelling", description="Find all shops that stock a given item by exact item name. Optionally filter by region. Use to answer 'where can I buy X?'")
     def selling(cls, conn: sqlite3.Connection, item_name: str, region: Region | None = None) -> list[Shop]:
         """Find all shops that sell a given item."""
         query = f"""
@@ -139,7 +139,7 @@ class Shop:
         return [cls._from_row(row) for row in rows]
 
     @classmethod
-    @mcp_tool(name="ShopAllAt", description="Find all shops at a given location")
+    @mcp_tool(name="ShopAllAt", description="Find all shops at a location by location_id (from LocationByName). Use to see what shops are available in a town.")
     def all_at(cls, conn: sqlite3.Connection, location_id: int) -> list[Shop]:
         """Find all shops at a given location."""
         rows = conn.execute(

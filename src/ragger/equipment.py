@@ -74,7 +74,7 @@ class Equipment:
         }
 
     @classmethod
-    @mcp_tool(name="EquipmentAll", description="List all equipment, optionally filtered by slot")
+    @mcp_tool(name="EquipmentAll", description="List all equipment, optionally filtered by slot (HEAD, WEAPON, BODY, etc.). Returns attack/defence bonuses, strength, prayer, speed, combat_style. Large result set — prefer EquipmentSearch or EquipmentBySlot.")
     def all(
         cls,
         conn: sqlite3.Connection,
@@ -92,7 +92,7 @@ class Equipment:
         return [cls._from_row(row) for row in rows]
 
     @classmethod
-    @mcp_tool(name="EquipmentByName", description="Find equipment by exact name and optional version")
+    @mcp_tool(name="EquipmentByName", description="Find equipment by exact name. Returns all attack/defence bonuses, melee/ranged/magic strength, prayer bonus, speed, slot, two_handed, and combat_style. Version disambiguates variants like 'Charged' vs 'Uncharged'.")
     def by_name(
         cls,
         conn: sqlite3.Connection,
@@ -112,7 +112,7 @@ class Equipment:
         return cls._from_row(row) if row else None
 
     @classmethod
-    @mcp_tool(name="EquipmentBySlot", description="List equipment for a specific equipment slot")
+    @mcp_tool(name="EquipmentBySlot", description="List all equipment in a slot. Slot values: HEAD, CAPE, NECK, AMMO, WEAPON, BODY, SHIELD, LEGS, HANDS, FEET, RING, TWO_HANDED.")
     def by_slot(cls, conn: sqlite3.Connection, slot: EquipmentSlot) -> list[Equipment]:
         rows = conn.execute(
             f"SELECT {cls._COLS} FROM equipment WHERE slot = ? ORDER BY name, version",
@@ -121,7 +121,7 @@ class Equipment:
         return [cls._from_row(row) for row in rows]
 
     @classmethod
-    @mcp_tool(name="EquipmentSearch", description="Search equipment by partial name match")
+    @mcp_tool(name="EquipmentSearch", description="Search equipment by partial name match (LIKE %%name%%). Use when the exact name is unknown.")
     def search(cls, conn: sqlite3.Connection, name: str) -> list[Equipment]:
         rows = conn.execute(
             f"SELECT {cls._COLS} FROM equipment WHERE name LIKE ? ORDER BY name, version",
@@ -130,7 +130,7 @@ class Equipment:
         return [cls._from_row(row) for row in rows]
 
     @classmethod
-    @mcp_tool(name="EquipmentForItem", description="Find equipment entries for a given item ID")
+    @mcp_tool(name="EquipmentForItem", description="Find equipment stats for an item by its item ID (from ItemByName). An item may have multiple equipment entries for different versions.")
     def for_item(cls, conn: sqlite3.Connection, item_id: int) -> list[Equipment]:
         rows = conn.execute(
             f"SELECT {cls._COLS} FROM equipment WHERE item_id = ? ORDER BY name, version",

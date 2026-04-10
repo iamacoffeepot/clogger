@@ -25,19 +25,19 @@ class Quest:
     points: int
 
     @classmethod
-    @mcp_tool(name="QuestAll", description="List all quests")
+    @mcp_tool(name="QuestAll", description="List all quests. Returns id, name, quest points. Use QuestByName for a specific quest to access requirements and rewards.")
     def all(cls, conn: sqlite3.Connection) -> list[Quest]:
         rows = conn.execute("SELECT id, name, points FROM quests ORDER BY name").fetchall()
         return [cls(*row) for row in rows]
 
     @classmethod
-    @mcp_tool(name="QuestByName", description="Find a quest by exact name")
+    @mcp_tool(name="QuestByName", description="Find a quest by exact name (e.g. 'Dragon Slayer I', 'Recipe for Disaster'). Returns id, name, quest points. The quest object has skill/quest requirements, XP and item rewards accessible via the Python API.")
     def by_name(cls, conn: sqlite3.Connection, name: str) -> Quest | None:
         row = conn.execute("SELECT id, name, points FROM quests WHERE name = ?", (name,)).fetchone()
         return cls(*row) if row else None
 
     @classmethod
-    @mcp_tool(name="QuestSearch", description="Search quests by partial name match")
+    @mcp_tool(name="QuestSearch", description="Search quests by partial name match (LIKE %%name%%). Use when the exact quest name is unknown.")
     def search(cls, conn: sqlite3.Connection, name: str) -> list[Quest]:
         rows = conn.execute(
             "SELECT id, name, points FROM quests WHERE name LIKE ? ORDER BY name",

@@ -28,7 +28,7 @@ class FacilityEntry:
         }
 
     @classmethod
-    @mcp_tool(name="FacilityAll", description="List all facilities, optionally filtered by type and region")
+    @mcp_tool(name="FacilityAll", description="List facility coordinates (banks, furnaces, anvils, altars, spinning wheels, looms, etc.), optionally filtered by type and region. Returns exact x,y coordinates for each facility instance.")
     def all(
         cls,
         conn: sqlite3.Connection,
@@ -51,7 +51,7 @@ class FacilityEntry:
         return [cls._from_row(row) for row in rows]
 
     @classmethod
-    @mcp_tool(name="FacilityNearest", description="Find the nearest facility to given coordinates")
+    @mcp_tool(name="FacilityNearest", description="Find the nearest facility to world coordinates. Optionally filter by type (BANK, FURNACE, ANVIL, ALTAR, SPINNING_WHEEL, LOOM, POTTERY_WHEEL, RANGE, WATER_SOURCE, TANNING). Use to answer 'where is the closest bank?'")
     def nearest(
         cls,
         conn: sqlite3.Connection,
