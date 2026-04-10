@@ -5,7 +5,8 @@ from ragger.action import Action, ActionTrigger, ActionOutputExperience, ActionI
 
 # Core queries
 Action.all(conn) -> list[Action]
-Action.by_name(conn, name) -> list[Action]             # multiple methods for same output
+Action.by_name(conn, name) -> Action | None            # exact match, first result
+Action.all_by_name(conn, name) -> list[Action]         # multiple methods for same output
 Action.search(conn, name) -> list[Action]              # partial name match
 Action.by_trigger_type(conn, trigger_type) -> list[Action]  # actions with triggers of a given type
 Action.by_trigger(conn, trigger_type, target_id, op=None) -> list[Action]  # match a game interaction event

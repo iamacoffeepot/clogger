@@ -5,6 +5,7 @@ from ragger.league import LeagueTask
 
 LeagueTask.all(conn, difficulty?, region?) -> list[LeagueTask]
 LeagueTask.by_name(conn, name) -> LeagueTask | None
+LeagueTask.search(conn, name) -> list[LeagueTask]  # partial name match
 LeagueTask.by_skill(conn, skill, difficulty?, region?) -> list[LeagueTask]
 task.points -> int                                    # derived from difficulty
 task.requirement_groups(conn) -> list[RequirementGroup]

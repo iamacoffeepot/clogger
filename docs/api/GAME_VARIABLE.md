@@ -5,7 +5,8 @@ from ragger.game_variable import GameVariable, ContentTag
 from ragger.enums import ContentCategory, FunctionalTag
 
 GameVariable.all(conn, var_type?) -> list[GameVariable]       # var_type: VariableType enum
-GameVariable.by_name(conn, name) -> list[GameVariable]        # exact name match
+GameVariable.by_name(conn, name) -> GameVariable | None       # exact name match, first result
+GameVariable.all_by_name(conn, name) -> list[GameVariable]    # all vars with exact name
 GameVariable.search(conn, name) -> list[GameVariable]         # partial name match (LIKE %name%)
 GameVariable.by_var_id(conn, var_id, var_type) -> GameVariable | None
 GameVariable.by_content_tag(conn, ContentCategory.QUEST, "dragon_slayer_i") -> list[GameVariable]  # enum + name

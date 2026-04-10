@@ -9,6 +9,7 @@ from ragger.enums import Element, Spellbook
 # Combat spells (element, max_damage)
 CombatSpell.all(conn, spellbook?) -> list[CombatSpell]
 CombatSpell.by_name(conn, name) -> CombatSpell | None
+CombatSpell.search(conn, name) -> list[CombatSpell]  # partial name match
 CombatSpell.by_element(conn, element) -> list[CombatSpell]
 CombatSpell.at_level(conn, level) -> list[CombatSpell]    # all spells <= level
 spell.runes(conn) -> list[SpellRune]
@@ -18,12 +19,14 @@ spell.max_damage -> int | None
 # Utility spells
 UtilitySpell.all(conn, spellbook?) -> list[UtilitySpell]
 UtilitySpell.by_name(conn, name) -> UtilitySpell | None
+UtilitySpell.search(conn, name) -> list[UtilitySpell]  # partial name match
 UtilitySpell.at_level(conn, level) -> list[UtilitySpell]
 spell.runes(conn) -> list[SpellRune]
 
 # Teleport spells (destination, coordinates, lectern)
 TeleportSpell.all(conn, spellbook?) -> list[TeleportSpell]
 TeleportSpell.by_name(conn, name) -> TeleportSpell | None
+TeleportSpell.search(conn, name) -> list[TeleportSpell]  # partial name match
 TeleportSpell.at_level(conn, level) -> list[TeleportSpell]
 spell.runes(conn) -> list[SpellRune]
 spell.destination -> str | None

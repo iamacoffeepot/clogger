@@ -5,6 +5,7 @@ from ragger.quest import Quest
 
 Quest.all(conn) -> list[Quest]
 Quest.by_name(conn, name) -> Quest | None
+Quest.search(conn, name) -> list[Quest]           # partial name match
 quest.xp_rewards(conn) -> list[ExperienceReward]
 quest.item_rewards(conn) -> list[ItemReward]
 quest.requirement_groups(conn) -> list[RequirementGroup]

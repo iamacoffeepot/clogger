@@ -5,6 +5,7 @@ from ragger.shop import Shop, ShopItem
 
 Shop.all(conn, region?, shop_type?) -> list[Shop]
 Shop.by_name(conn, name) -> Shop | None
+Shop.search(conn, name) -> list[Shop]              # partial name match
 Shop.selling(conn, item_name, region?) -> list[Shop]
 Shop.all_at(conn, location_id) -> list[Shop]
 shop.items(conn) -> list[ShopItem]

@@ -5,6 +5,7 @@ from ragger.location import Location, DistanceMetric
 
 Location.all(conn, region?) -> list[Location]
 Location.by_name(conn, name) -> Location | None
+Location.search(conn, name) -> list[Location]      # partial name match
 Location.nearest(conn, x, y, metric?) -> Location | None
 Location.with_facilities(conn, [Facility, ...], region?) -> list[Location]
 Location.for_shop(conn, shop_id) -> Location | None
