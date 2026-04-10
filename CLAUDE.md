@@ -164,6 +164,7 @@ Language-specific style rules in `docs/style/`:
 
 - `JAVA.md` — Immutability, braces, grouping, wrapping, naming
 - `PYTHON.md` — Type hints, dataclasses, SQL formatting, comprehensions
+- `ENTITY_API.md` — Entity API conventions: query methods (`by_name`, `search`, `all`), field naming, return types, ordering
 
 ## Python API
 
