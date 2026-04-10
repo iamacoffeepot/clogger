@@ -29,6 +29,7 @@ public class LuaActor {
     private final ActorManager actorManager;
     private final Map<String, Object> args;
     private final OverlayApi overlayApi = new OverlayApi();
+    private final OverlayApi minimapOverlayApi = new OverlayApi();
 
     private Lua lua;
     private UiApi uiApi;
@@ -145,6 +146,15 @@ public class LuaActor {
 
         callHookWithArg("on_render", overlayApi);
         overlayApi.flush(graphics);
+    }
+
+    public void renderMinimap(final Graphics2D graphics) {
+        if (!running || !hasHooks) {
+            return;
+        }
+
+        callHookWithArg("on_render_minimap", minimapOverlayApi);
+        minimapOverlayApi.flush(graphics);
     }
 
     /**

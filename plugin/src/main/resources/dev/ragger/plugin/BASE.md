@@ -894,7 +894,8 @@ return {
 - `on_start` — called once when the actor is loaded
 - `on_frame` — called every client tick (~20ms, ~50 FPS) — primary logic hook
 - `on_tick` — called on game tick frames only (~600ms) — server-synced logic
-- `on_render` — called every render frame (use overlay API here)
+- `on_render(g)` — called every render frame (draws on game viewport)
+- `on_render_minimap(g)` — called every render frame on the minimap layer (use `coords:world_to_minimap()` for positions)
 - `on_mail(from, data)` — called when another actor sends mail to this actor
 - `on_stop` — called when the actor is unloaded
 

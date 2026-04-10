@@ -549,6 +549,15 @@ public class ActorManager {
     }
 
     /**
+     * Called during minimap overlay render -- dispatches to all active scripts.
+     */
+    public void renderMinimap(final Graphics2D graphics) {
+        for (final LuaActor script : scripts.values()) {
+            script.renderMinimap(graphics);
+        }
+    }
+
+    /**
      * List all active script names.
      */
     public List<String> list() {

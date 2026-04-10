@@ -6,6 +6,7 @@ import dev.ragger.plugin.ui.ConsoleOverlay;
 import dev.ragger.plugin.scripting.ActorManager;
 import dev.ragger.plugin.scripting.ActorOverlay;
 import dev.ragger.plugin.scripting.LuaEvent;
+import dev.ragger.plugin.scripting.MinimapOverlay;
 import dev.ragger.plugin.scripting.ServiceManager;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
@@ -102,6 +103,7 @@ public class RaggerPlugin extends Plugin {
     private ActorManager actorManager;
     private ServiceManager serviceManager;
     private ActorOverlay actorOverlay;
+    private MinimapOverlay minimapOverlay;
     private ConsoleOverlay consoleOverlay;
     private BridgeServer bridgeServer;
     private ClaudeClient claude;
@@ -120,7 +122,9 @@ public class RaggerPlugin extends Plugin {
         actorManager.setLimits(config.actorMaxDepth(), config.actorMaxChildren());
         serviceManager = new ServiceManager(actorManager);
         actorOverlay = new ActorOverlay(actorManager);
+        minimapOverlay = new MinimapOverlay(actorManager);
         overlayManager.add(actorOverlay);
+        overlayManager.add(minimapOverlay);
 
         bridgeServer = new BridgeServer(actorManager);
         try {
@@ -226,6 +230,7 @@ public class RaggerPlugin extends Plugin {
     protected void shutDown() {
         clientToolbar.removeNavigation(navButton);
         overlayManager.remove(actorOverlay);
+        overlayManager.remove(minimapOverlay);
         overlayManager.remove(consoleOverlay);
         keyManager.unregisterKeyListener(consoleKeyListener);
         mouseManager.unregisterMouseWheelListener(consoleMouseWheelListener);
