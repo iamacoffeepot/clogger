@@ -727,6 +727,27 @@ SCHEMAS: list[str] = [
         FOREIGN KEY (page_id) REFERENCES dialogue_pages(id)
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS wiki_categories (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        page_count INTEGER NOT NULL DEFAULT 0,
+        subcat_count INTEGER NOT NULL DEFAULT 0
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS wiki_category_parents (
+        category_id INTEGER NOT NULL,
+        parent_id INTEGER NOT NULL,
+        PRIMARY KEY (category_id, parent_id),
+        FOREIGN KEY (category_id) REFERENCES wiki_categories(id),
+        FOREIGN KEY (parent_id) REFERENCES wiki_categories(id)
+    )
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_wiki_category_parents_parent
+        ON wiki_category_parents(parent_id)
+    """,
 ]
 
 
