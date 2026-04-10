@@ -17,16 +17,22 @@ _tools: list[dict[str, Any]] = []
 def mcp_tool(*, name: str, description: str):
     """Mark a method for MCP tool registration.
 
-    Apply before @classmethod so the raw function is captured::
+    Works on classmethods and instance methods. Apply before @classmethod
+    for classmethods::
 
         @classmethod
         @mcp_tool(name="ItemByName", description="Find an item by exact name")
         def by_name(cls, conn: sqlite3.Connection, name: str) -> Item | None:
             ...
 
-    At startup the MCP server calls :func:`register_all` which inspects each
-    registered function, strips ``cls`` and ``conn``, and exposes the remaining
-    parameters as an MCP tool.
+    For instance methods, the owning class must implement ``by_id(cls, conn, id)``::
+
+        @mcp_tool(name="QuestSkillRequirements", description="Skill requirements for a quest")
+        def skill_requirements(self, conn: sqlite3.Connection) -> list[GroupSkillRequirement]:
+            ...
+
+    The registry detects ``self`` vs ``cls`` and handles lookup automatically.
+    Instance method tools get an ``id: int`` parameter injected.
     """
 
     def decorator(fn):
@@ -110,13 +116,32 @@ def register_all(mcp, db_path: str) -> None:
             hints = fn.__annotations__
 
         owner_cls = _resolve_owner(fn)
+        param_names = list(sig.parameters.keys())
+        is_instance = param_names and param_names[0] == "self"
+
+        if is_instance and owner_cls is not None and not hasattr(owner_cls, "by_id"):
+            raise TypeError(
+                f"{owner_cls.__name__} must implement by_id(cls, conn, id) "
+                f"for instance method tool {tool_name}"
+            )
 
         skip = {"cls", "self", "conn"}
-        exposed = [n for n in sig.parameters if n not in skip]
+        exposed = [n for n in param_names if n not in skip]
 
         coercions: dict[str, type[enum.Enum]] = {}
         new_params = []
         new_annotations: dict[str, Any] = {}
+
+        if is_instance:
+            new_params.append(
+                inspect.Parameter(
+                    "id",
+                    kind=inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                    annotation=int,
+                )
+            )
+            new_annotations["id"] = int
+
         for param_name in exposed:
             original = sig.parameters[param_name]
             annotation = hints.get(param_name, str)
@@ -135,25 +160,51 @@ def register_all(mcp, db_path: str) -> None:
             )
             new_annotations[param_name] = schema_type
 
-        def _make_handler(fn, owner_cls, db_path, coercions):
-            def handler(**kwargs):
-                for param_name, enum_type in coercions.items():
-                    if param_name in kwargs:
-                        kwargs[param_name] = _coerce_enum(kwargs[param_name], enum_type)
+        if is_instance:
 
-                conn = sqlite3.connect(db_path)
-                try:
-                    if owner_cls is not None:
-                        result = fn(owner_cls, conn, **kwargs)
-                    else:
-                        result = fn(conn, **kwargs)
-                    return json.dumps(_serialize(result))
-                finally:
-                    conn.close()
+            def _make_instance_handler(fn, owner_cls, db_path, coercions):
+                def handler(**kwargs):
+                    entity_id = kwargs.pop("id")
+                    for param_name, enum_type in coercions.items():
+                        if param_name in kwargs:
+                            kwargs[param_name] = _coerce_enum(kwargs[param_name], enum_type)
 
-            return handler
+                    conn = sqlite3.connect(db_path)
+                    try:
+                        instance = owner_cls.by_id(conn, entity_id)
+                        if instance is None:
+                            return json.dumps(None)
+                        result = fn(instance, conn, **kwargs)
+                        return json.dumps(_serialize(result))
+                    finally:
+                        conn.close()
 
-        handler = _make_handler(fn, owner_cls, db_path, coercions)
+                return handler
+
+            handler = _make_instance_handler(fn, owner_cls, db_path, coercions)
+
+        else:
+
+            def _make_handler(fn, owner_cls, db_path, coercions):
+                def handler(**kwargs):
+                    for param_name, enum_type in coercions.items():
+                        if param_name in kwargs:
+                            kwargs[param_name] = _coerce_enum(kwargs[param_name], enum_type)
+
+                    conn = sqlite3.connect(db_path)
+                    try:
+                        if owner_cls is not None:
+                            result = fn(owner_cls, conn, **kwargs)
+                        else:
+                            result = fn(conn, **kwargs)
+                        return json.dumps(_serialize(result))
+                    finally:
+                        conn.close()
+
+                return handler
+
+            handler = _make_handler(fn, owner_cls, db_path, coercions)
+
         handler.__name__ = tool_name
         handler.__qualname__ = tool_name
         handler.__doc__ = description

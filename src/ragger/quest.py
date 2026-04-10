@@ -25,6 +25,11 @@ class Quest:
     points: int
 
     @classmethod
+    def by_id(cls, conn: sqlite3.Connection, id: int) -> Quest | None:
+        row = conn.execute("SELECT id, name, points FROM quests WHERE id = ?", (id,)).fetchone()
+        return cls(*row) if row else None
+
+    @classmethod
     @mcp_tool(name="QuestAll", description="List all quests. Returns id, name, quest points. Use QuestByName for a specific quest to access requirements and rewards.")
     def all(cls, conn: sqlite3.Connection) -> list[Quest]:
         rows = conn.execute("SELECT id, name, points FROM quests ORDER BY name").fetchall()
@@ -52,6 +57,7 @@ class Quest:
             "points": self.points,
         }
 
+    @mcp_tool(name="QuestXpRewards", description="XP rewards for completing a quest. Returns skill names and amounts. Pass the quest id from QuestByName.")
     def xp_rewards(self, conn: sqlite3.Connection) -> list[ExperienceReward]:
         rows = conn.execute(
             """
@@ -65,6 +71,7 @@ class Quest:
         ).fetchall()
         return [ExperienceReward(*row) for row in rows]
 
+    @mcp_tool(name="QuestItemRewards", description="Item rewards for completing a quest. Returns item_id and quantity. Pass the quest id from QuestByName.")
     def item_rewards(self, conn: sqlite3.Connection) -> list[ItemReward]:
         rows = conn.execute(
             """
@@ -81,6 +88,7 @@ class Quest:
     def requirement_groups(self, conn: sqlite3.Connection) -> list[RequirementGroup]:
         return RequirementGroup.for_quest(conn, self.id)
 
+    @mcp_tool(name="QuestSkillRequirements", description="Skill level requirements for a quest. Returns skill name, level, and whether boostable. Pass the quest id from QuestByName.")
     def skill_requirements(self, conn: sqlite3.Connection) -> list[GroupSkillRequirement]:
         rows = conn.execute(
             """
@@ -94,6 +102,7 @@ class Quest:
         ).fetchall()
         return [GroupSkillRequirement(r[0], r[1], Skill(r[2]), r[3], bool(r[4]), ComparisonOperator(r[5])) for r in rows]
 
+    @mcp_tool(name="QuestQuestRequirements", description="Prerequisite quests for a quest. Returns required_quest_id (look up with QuestByName). Pass the quest id from QuestByName.")
     def quest_requirements(self, conn: sqlite3.Connection) -> list[GroupQuestRequirement]:
         rows = conn.execute(
             """
