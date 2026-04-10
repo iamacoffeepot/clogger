@@ -94,6 +94,7 @@ public class LuaActor {
 
         worldMapApi = new WorldMapApi(worldMapPointManager);
         worldMapApi.register(lua);
+        new PathfindingApi(client).register(lua);
 
         // Inject args table if provided
         if (args != null && !args.isEmpty()) {
