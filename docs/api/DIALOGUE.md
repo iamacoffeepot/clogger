@@ -120,3 +120,68 @@ targets.
 Each pass is a pure `list[Instruction] -> list[Instruction]` function.
 The `compute_dialogue_instructions.py` pipeline script persists the
 output to `dialogue_instructions`.
+
+### Condition Parser (`src/ragger/dialogue/condition_parser.py`)
+
+```python
+from ragger.dialogue.condition_normalize import (
+    build_entity_automaton, build_currency_pattern, normalize,
+)
+from ragger.dialogue.condition_parser import parse_condition
+from ragger.dialogue.condition_types import Atom
+
+auto, type_map = build_entity_automaton(conn)
+currency_pat = build_currency_pattern(conn)
+
+text = normalize(raw_condition_text, auto, type_map, currency_pat)
+atoms = parse_condition(text)                        # list[Atom]
+atoms = parse_condition(text, allow_unknown=True)    # never returns []
+```
+
+Parses normalized dialogue condition text into structured `Atom`
+predicates. Covers ~66% of the 16.6k condition instances across 56
+frame types. Unmatched conditions return `unknown(text=...)` when
+`allow_unknown=True`.
+
+An `Atom` has a `frame` name and sorted `args` tuple:
+
+```python
+Atom(frame="has_item", args=(("count", 1), ("neg", False), ("qual", "any")))
+Atom(frame="quest_state", args=(("neg", False), ("state", "completed")))
+Atom(frame="unknown", args=(("text", "if bob is the wizard"),))
+```
+
+### Normalization (`src/ragger/dialogue/condition_normalize.py`)
+
+```python
+build_entity_automaton(conn) -> (Automaton, dict)  # AC automaton + type_map
+build_currency_pattern(conn) -> Pattern | None     # currency regex
+normalize(text, auto, type_map, currency_pat?) -> str
+strip_subject(text) -> str                         # remove "if the player ..."
+strip_fillers(text) -> str                         # remove "still", "already", etc.
+split_compound(text) -> list[str]                  # split on "and"/"or"/"but"
+```
+
+Normalization order: typed entity links → wiki links → lowercase →
+contractions → second-person ("your" → "the player's") → currency
+names → Aho-Corasick entity matching → skill names → whitespace cleanup.
+
+### Frame Modules (`src/ragger/dialogue/condition_frames/`)
+
+Each `frames_*.py` exports a `RULES: list[FrameRule]` of plain data.
+`condition_frames/__init__.py` assembles them into `ALL_RULES` in
+explicit match order — specific frames first, catch-alls last.
+
+| Module | Frames |
+|--------|--------|
+| `frames_quests.py` | quest_state, quest_decision, diary_completed |
+| `frames_skills.py` | skill_ge, combat_level, monster_skill_check |
+| `frames_equipment.py` | wearing, wearing_either |
+| `frames_items.py` | has_item, has_coins, has_currency, has_all_items, showing_item, has_read, received_reward, reward_is, currency_cap |
+| `frames_inventory.py` | inventory_space |
+| `frames_farming.py` | patch_state, patch_planted, patch_grown |
+| `frames_tasks.py` | has_assignment, port_task, task_progress, has_rumour, all_completed |
+| `frames_dialogue.py` | answered, puzzle_answer, puzzle_solved, dialogue_state, has_talked_to, talking_to, npc_role, npc_thought, non_predicate, meta_predicate, time_out |
+| `frames_world.py` | location_at, proximity_check, npc_at_location, member_only, account_state, world_type, in_combat, world_state |
+| `frames_misc.py` | gender, owns, has_follower, has_chosen, needs_to_build, cast_count |
+| `frames_events.py` | event, event_past_tense, outcome, has_event_action (catch-all) |
