@@ -1,5 +1,7 @@
 """MCP server exposing Ragger tools to Claude."""
 
+from __future__ import annotations
+
 import json
 import os
 
@@ -7,11 +9,37 @@ import requests
 from mcp.server.fastmcp import FastMCP
 from pydantic import BaseModel
 
+import ragger.item  # noqa: F401
+from ragger.mcp_registry import register_all
+
 mcp = FastMCP("ragger")
+
+DB_PATH = os.environ.get("RAGGER_DB", "data/ragger.db")
+register_all(mcp, DB_PATH)
 
 BRIDGE_URL = f"http://127.0.0.1:{os.environ.get('RAGGER_BRIDGE_PORT', '7919')}"
 BRIDGE_TOKEN = os.environ.get("RAGGER_BRIDGE_TOKEN", "")
-BRIDGE_HEADERS = {"Authorization": f"Bearer {BRIDGE_TOKEN}"}
+BRIDGE_HEADERS: dict[str, str] = {"Authorization": f"Bearer {BRIDGE_TOKEN}"}
+
+
+def _bridge_post(path: str, body: dict | list) -> str:
+    try:
+        resp = requests.post(
+            f"{BRIDGE_URL}{path}", json=body, headers=BRIDGE_HEADERS, timeout=10
+        )
+        return resp.text
+    except requests.ConnectionError:
+        return json.dumps({"error": "Bridge server not running"})
+
+
+def _bridge_get(path: str, params: dict | None = None, timeout: int = 10) -> str:
+    try:
+        resp = requests.get(
+            f"{BRIDGE_URL}{path}", params=params, headers=BRIDGE_HEADERS, timeout=timeout
+        )
+        return resp.text
+    except requests.ConnectionError:
+        return json.dumps({"error": "Bridge server not running"})
 
 
 @mcp.tool(name="RaggerActorSpawn")
@@ -22,16 +50,7 @@ def ragger_actor_spawn(name: str, script: str) -> str:
         name: Short descriptive name in kebab-case (e.g. "tick-counter", "npc-highlighter")
         script: Lua source code to execute
     """
-    try:
-        resp = requests.post(
-            f"{BRIDGE_URL}/run",
-            json={"name": name, "script": script},
-            headers=BRIDGE_HEADERS,
-            timeout=10,
-        )
-        return resp.text
-    except requests.ConnectionError:
-        return json.dumps({"error": "Bridge server not running"})
+    return _bridge_post("/run", {"name": name, "script": script})
 
 
 @mcp.tool(name="RaggerEval")
@@ -44,30 +63,13 @@ def ragger_eval(script: str) -> str:
     Args:
         script: Lua expression to evaluate (e.g. "scene:npcs()", "player:hp()")
     """
-    try:
-        resp = requests.post(
-            f"{BRIDGE_URL}/eval",
-            json={"script": script},
-            headers=BRIDGE_HEADERS,
-            timeout=10,
-        )
-        return resp.text
-    except requests.ConnectionError:
-        return json.dumps({"error": "Bridge server not running"})
+    return _bridge_post("/eval", {"script": script})
 
 
 @mcp.tool(name="RaggerActorList")
 def ragger_actor_list() -> str:
     """List all currently running Lua actors by name."""
-    try:
-        resp = requests.get(
-            f"{BRIDGE_URL}/list",
-            headers=BRIDGE_HEADERS,
-            timeout=10,
-        )
-        return resp.text
-    except requests.ConnectionError:
-        return json.dumps({"error": "Bridge server not running"})
+    return _bridge_get("/list")
 
 
 @mcp.tool(name="RaggerActorSource")
@@ -77,30 +79,13 @@ def ragger_actor_source(name: str) -> str:
     Args:
         name: The actor name (e.g. "tick-counter", "npc-highlighter")
     """
-    try:
-        resp = requests.post(
-            f"{BRIDGE_URL}/source",
-            json={"name": name},
-            headers=BRIDGE_HEADERS,
-            timeout=10,
-        )
-        return resp.text
-    except requests.ConnectionError:
-        return json.dumps({"error": "Bridge server not running"})
+    return _bridge_post("/source", {"name": name})
 
 
 @mcp.tool(name="RaggerTemplateList")
 def ragger_template_list() -> str:
     """List all registered Lua actor templates by name."""
-    try:
-        resp = requests.get(
-            f"{BRIDGE_URL}/templates",
-            headers=BRIDGE_HEADERS,
-            timeout=10,
-        )
-        return resp.text
-    except requests.ConnectionError:
-        return json.dumps({"error": "Bridge server not running"})
+    return _bridge_get("/templates")
 
 
 @mcp.tool(name="RaggerTemplateSource")
@@ -110,16 +95,7 @@ def ragger_template_source(name: str) -> str:
     Args:
         name: The template name (e.g. "tile-marker", "counter-display")
     """
-    try:
-        resp = requests.post(
-            f"{BRIDGE_URL}/template-source",
-            json={"name": name},
-            headers=BRIDGE_HEADERS,
-            timeout=10,
-        )
-        return resp.text
-    except requests.ConnectionError:
-        return json.dumps({"error": "Bridge server not running"})
+    return _bridge_post("/template-source", {"name": name})
 
 
 @mcp.tool(name="RaggerMailRecvAsync")
@@ -133,21 +109,12 @@ def ragger_mail_recv_async(limit: int = 0, from_actor: str = "") -> str:
         limit: Max messages to return. 0 returns all available.
         from_actor: Regex pattern to match sender actor names (e.g. "loot-.*", "quest-guide/.*"). Empty string = any actor.
     """
-    try:
-        params = {}
-        if limit > 0:
-            params["limit"] = limit
-        if from_actor:
-            params["from"] = from_actor
-        resp = requests.get(
-            f"{BRIDGE_URL}/mail-recv",
-            params=params,
-            headers=BRIDGE_HEADERS,
-            timeout=10,
-        )
-        return resp.text
-    except requests.ConnectionError:
-        return json.dumps({"error": "Bridge server not running"})
+    params: dict[str, int | str] = {}
+    if limit > 0:
+        params["limit"] = limit
+    if from_actor:
+        params["from"] = from_actor
+    return _bridge_get("/mail-recv", params)
 
 
 @mcp.tool(name="RaggerMailRecvSync")
@@ -163,19 +130,10 @@ def ragger_mail_recv_sync(count: int = 1, from_actor: str = "", timeout: int = 3
         from_actor: Regex pattern to match sender actor names (e.g. "loot-.*", "quest-guide/.*"). Empty string = any actor.
         timeout: Max seconds to wait (1-300, default 30).
     """
-    try:
-        params = {"count": max(1, count), "timeout": min(300, max(1, timeout))}
-        if from_actor:
-            params["from"] = from_actor
-        resp = requests.get(
-            f"{BRIDGE_URL}/mail-recv-block",
-            params=params,
-            headers=BRIDGE_HEADERS,
-            timeout=timeout + 10,
-        )
-        return resp.text
-    except requests.ConnectionError:
-        return json.dumps({"error": "Bridge server not running"})
+    params: dict[str, int | str] = {"count": max(1, count), "timeout": min(300, max(1, timeout))}
+    if from_actor:
+        params["from"] = from_actor
+    return _bridge_get("/mail-recv-block", params, timeout=timeout + 10)
 
 
 class BatchMailMessage(BaseModel):
@@ -193,16 +151,7 @@ def ragger_mail_send(name: str, messages: list[dict]) -> str:
         name: Target actor name (e.g. "tile-marker", "npc-highlighter")
         messages: List of data dicts to deliver
     """
-    try:
-        resp = requests.post(
-            f"{BRIDGE_URL}/mail",
-            json=[{"target": name, "data": m} for m in messages],
-            headers=BRIDGE_HEADERS,
-            timeout=10,
-        )
-        return resp.text
-    except requests.ConnectionError:
-        return json.dumps({"error": "Bridge server not running"})
+    return _bridge_post("/mail", [{"target": name, "data": m} for m in messages])
 
 
 @mcp.tool(name="RaggerMailSendBatch")
@@ -214,16 +163,7 @@ def ragger_mail_send_batch(messages: list[BatchMailMessage]) -> str:
     Args:
         messages: List of {target: str, data: dict} messages to deliver
     """
-    try:
-        resp = requests.post(
-            f"{BRIDGE_URL}/mail",
-            json=[m.model_dump() for m in messages],
-            headers=BRIDGE_HEADERS,
-            timeout=10,
-        )
-        return resp.text
-    except requests.ConnectionError:
-        return json.dumps({"error": "Bridge server not running"})
+    return _bridge_post("/mail", [m.model_dump() for m in messages])
 
 
 if __name__ == "__main__":
