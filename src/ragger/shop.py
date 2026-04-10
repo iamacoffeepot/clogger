@@ -5,6 +5,7 @@ import sqlite3
 from dataclasses import dataclass
 
 from ragger.enums import Region, ShopType
+from ragger.mcp_registry import mcp_tool
 
 
 @dataclass
@@ -16,6 +17,17 @@ class ShopItem:
     restock: int
     sell_price: int | None
     buy_price: int | None
+
+    def asdict(self) -> dict:
+        return {
+            "id": self.id,
+            "shop_id": self.shop_id,
+            "item_name": self.item_name,
+            "stock": self.stock,
+            "restock": self.restock,
+            "sell_price": self.sell_price,
+            "buy_price": self.buy_price,
+        }
 
     def effective_sell_price(self, sell_multiplier: int, base_value: int) -> int:
         """Calculate the actual sell price using shop multiplier and item base value."""
@@ -46,7 +58,23 @@ class Shop:
 
     _COLS = "id, name, location, location_id, owner, members, region, shop_type, sell_multiplier, buy_multiplier, delta"
 
+    def asdict(self) -> dict:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "location": self.location,
+            "location_id": self.location_id,
+            "owner": self.owner,
+            "members": self.members,
+            "region": self.region.value if self.region else None,
+            "shop_type": self.shop_type.value,
+            "sell_multiplier": self.sell_multiplier,
+            "buy_multiplier": self.buy_multiplier,
+            "delta": self.delta,
+        }
+
     @classmethod
+    @mcp_tool(name="ShopAll", description="List all shops, optionally filtered by region and type")
     def all(
         cls,
         conn: sqlite3.Connection,
@@ -71,6 +99,7 @@ class Shop:
         return [cls._from_row(row) for row in rows]
 
     @classmethod
+    @mcp_tool(name="ShopByName", description="Find a shop by exact name")
     def by_name(cls, conn: sqlite3.Connection, name: str) -> Shop | None:
         row = conn.execute(
             f"SELECT {cls._COLS} FROM shops WHERE name = ?",
@@ -79,6 +108,7 @@ class Shop:
         return cls._from_row(row) if row else None
 
     @classmethod
+    @mcp_tool(name="ShopSearch", description="Search shops by partial name match")
     def search(cls, conn: sqlite3.Connection, name: str) -> list[Shop]:
         rows = conn.execute(
             f"SELECT {cls._COLS} FROM shops WHERE name LIKE ? ORDER BY name",
@@ -89,6 +119,7 @@ class Shop:
     _S_COLS = "s.id, s.name, s.location, s.location_id, s.owner, s.members, s.region, s.shop_type, s.sell_multiplier, s.buy_multiplier, s.delta"
 
     @classmethod
+    @mcp_tool(name="ShopSelling", description="Find shops that sell a given item")
     def selling(cls, conn: sqlite3.Connection, item_name: str, region: Region | None = None) -> list[Shop]:
         """Find all shops that sell a given item."""
         query = f"""
@@ -108,6 +139,7 @@ class Shop:
         return [cls._from_row(row) for row in rows]
 
     @classmethod
+    @mcp_tool(name="ShopAllAt", description="Find all shops at a given location")
     def all_at(cls, conn: sqlite3.Connection, location_id: int) -> list[Shop]:
         """Find all shops at a given location."""
         rows = conn.execute(

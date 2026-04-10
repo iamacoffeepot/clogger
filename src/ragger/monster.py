@@ -10,6 +10,7 @@ from ragger.requirements import (
     GroupSkillRequirement,
     RequirementGroup,
 )
+from ragger.mcp_registry import mcp_tool
 from ragger.utils import snake_case
 
 
@@ -22,6 +23,9 @@ class MonsterLocation:
     y: int | None
     region: Region | None
 
+    def asdict(self) -> dict:
+        return {"id": self.id, "monster_id": self.monster_id, "location": self.location, "x": self.x, "y": self.y, "region": self.region.value if self.region else None}
+
 
 @dataclass
 class MonsterDrop:
@@ -30,6 +34,9 @@ class MonsterDrop:
     item_name: str
     quantity: str | None
     rarity: str | None
+
+    def asdict(self) -> dict:
+        return {"id": self.id, "monster_id": self.monster_id, "item_name": self.item_name, "quantity": self.quantity, "rarity": self.rarity}
 
 
 @dataclass
@@ -84,7 +91,19 @@ class Monster:
         "slayer_xp, slayer_category, slayer_assigned_by, attributes, examine, members"
     )
 
+    def asdict(self) -> dict:
+        return {
+            "id": self.id, "name": self.name, "version": self.version,
+            "combat_level": self.combat_level, "hitpoints": self.hitpoints,
+            "attack_speed": self.attack_speed, "max_hit": self.max_hit,
+            "attack_style": self.attack_style, "aggressive": self.aggressive,
+            "size": self.size, "slayer_xp": self.slayer_xp,
+            "slayer_category": self.slayer_category, "examine": self.examine,
+            "members": self.members,
+        }
+
     @classmethod
+    @mcp_tool(name="MonsterAll", description="List all monsters, optionally filtered by region")
     def all(
         cls,
         conn: sqlite3.Connection,
@@ -104,6 +123,7 @@ class Monster:
         return [cls._from_row(row) for row in rows]
 
     @classmethod
+    @mcp_tool(name="MonsterByName", description="Find a monster by exact name and optional version")
     def by_name(cls, conn: sqlite3.Connection, name: str, version: str | None = None) -> Monster | None:
         if version is not None:
             row = conn.execute(
@@ -118,6 +138,7 @@ class Monster:
         return cls._from_row(row) if row else None
 
     @classmethod
+    @mcp_tool(name="MonsterBySlayerCategory", description="Find monsters by slayer assignment category")
     def by_slayer_category(cls, conn: sqlite3.Connection, category: str) -> list[Monster]:
         rows = conn.execute(
             f"SELECT {cls._COLS} FROM monsters WHERE slayer_category = ? ORDER BY name, version",
@@ -126,6 +147,7 @@ class Monster:
         return [cls._from_row(row) for row in rows]
 
     @classmethod
+    @mcp_tool(name="MonsterSearch", description="Search monsters by partial name match")
     def search(cls, conn: sqlite3.Connection, name: str) -> list[Monster]:
         """Search monsters by partial name match."""
         rows = conn.execute(

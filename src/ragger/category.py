@@ -3,6 +3,8 @@ from __future__ import annotations
 import sqlite3
 from dataclasses import dataclass
 
+from ragger.mcp_registry import mcp_tool
+
 
 @dataclass
 class WikiCategory:
@@ -13,7 +15,16 @@ class WikiCategory:
 
     _COLS = "id, name, page_count, subcat_count"
 
+    def asdict(self) -> dict:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "page_count": self.page_count,
+            "subcat_count": self.subcat_count,
+        }
+
     @classmethod
+    @mcp_tool(name="WikiCategoryByName", description="Find a wiki category by exact name")
     def by_name(cls, conn: sqlite3.Connection, name: str) -> WikiCategory | None:
         row = conn.execute(
             f"SELECT {cls._COLS} FROM wiki_categories WHERE name = ?", (name,)
@@ -21,6 +32,7 @@ class WikiCategory:
         return cls._from_row(row) if row else None
 
     @classmethod
+    @mcp_tool(name="WikiCategorySearch", description="Search wiki categories by partial name match")
     def search(cls, conn: sqlite3.Connection, name: str) -> list[WikiCategory]:
         rows = conn.execute(
             f"SELECT {cls._COLS} FROM wiki_categories WHERE name LIKE ? ORDER BY name",
@@ -91,6 +103,7 @@ class WikiCategory:
         return [self._from_row(r) for r in rows]
 
     @classmethod
+    @mcp_tool(name="WikiCategoryForPage", description="Find all categories a wiki page belongs to")
     def for_page(cls, conn: sqlite3.Connection, page_title: str) -> list[WikiCategory]:
         """All categories a wiki page belongs to."""
         rows = conn.execute(

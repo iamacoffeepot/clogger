@@ -4,6 +4,7 @@ import sqlite3
 from dataclasses import dataclass
 
 from ragger.enums import CombatStyle, ComparisonOperator, EquipmentSlot, Skill
+from ragger.mcp_registry import mcp_tool
 from ragger.requirements import (
     GroupQuestRequirement,
     GroupSkillRequirement,
@@ -45,7 +46,35 @@ class Equipment:
         "speed, attack_range, combat_style"
     )
 
+    def asdict(self) -> dict:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "version": self.version,
+            "item_id": self.item_id,
+            "slot": self.slot.value if self.slot else None,
+            "two_handed": self.two_handed,
+            "attack_stab": self.attack_stab,
+            "attack_slash": self.attack_slash,
+            "attack_crush": self.attack_crush,
+            "attack_magic": self.attack_magic,
+            "attack_ranged": self.attack_ranged,
+            "defence_stab": self.defence_stab,
+            "defence_slash": self.defence_slash,
+            "defence_crush": self.defence_crush,
+            "defence_magic": self.defence_magic,
+            "defence_ranged": self.defence_ranged,
+            "melee_strength": self.melee_strength,
+            "ranged_strength": self.ranged_strength,
+            "magic_damage": self.magic_damage,
+            "prayer": self.prayer,
+            "speed": self.speed,
+            "attack_range": self.attack_range,
+            "combat_style": self.combat_style.value if self.combat_style else None,
+        }
+
     @classmethod
+    @mcp_tool(name="EquipmentAll", description="List all equipment, optionally filtered by slot")
     def all(
         cls,
         conn: sqlite3.Connection,
@@ -63,6 +92,7 @@ class Equipment:
         return [cls._from_row(row) for row in rows]
 
     @classmethod
+    @mcp_tool(name="EquipmentByName", description="Find equipment by exact name and optional version")
     def by_name(
         cls,
         conn: sqlite3.Connection,
@@ -82,6 +112,7 @@ class Equipment:
         return cls._from_row(row) if row else None
 
     @classmethod
+    @mcp_tool(name="EquipmentBySlot", description="List equipment for a specific equipment slot")
     def by_slot(cls, conn: sqlite3.Connection, slot: EquipmentSlot) -> list[Equipment]:
         rows = conn.execute(
             f"SELECT {cls._COLS} FROM equipment WHERE slot = ? ORDER BY name, version",
@@ -90,6 +121,7 @@ class Equipment:
         return [cls._from_row(row) for row in rows]
 
     @classmethod
+    @mcp_tool(name="EquipmentSearch", description="Search equipment by partial name match")
     def search(cls, conn: sqlite3.Connection, name: str) -> list[Equipment]:
         rows = conn.execute(
             f"SELECT {cls._COLS} FROM equipment WHERE name LIKE ? ORDER BY name, version",
@@ -98,6 +130,7 @@ class Equipment:
         return [cls._from_row(row) for row in rows]
 
     @classmethod
+    @mcp_tool(name="EquipmentForItem", description="Find equipment entries for a given item ID")
     def for_item(cls, conn: sqlite3.Connection, item_id: int) -> list[Equipment]:
         rows = conn.execute(
             f"SELECT {cls._COLS} FROM equipment WHERE item_id = ? ORDER BY name, version",

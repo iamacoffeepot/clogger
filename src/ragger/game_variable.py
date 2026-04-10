@@ -5,6 +5,7 @@ import sqlite3
 from dataclasses import dataclass, field
 
 from ragger.enums import ContentCategory, FunctionalTag, VariableType
+from ragger.mcp_registry import mcp_tool
 
 
 @dataclass
@@ -13,6 +14,9 @@ class ContentTag:
 
     category: ContentCategory
     name: str
+
+    def asdict(self) -> dict:
+        return {"category": self.category.value, "name": self.name}
 
     def __str__(self) -> str:
         return f"{self.category.value}:{self.name}"
@@ -45,6 +49,9 @@ class VariableValue:
     var_id: int
     value: int
     label: str
+
+    def asdict(self) -> dict:
+        return {"var_type": self.var_type.value, "var_id": self.var_id, "value": self.value, "label": self.label}
 
 
 @dataclass
@@ -80,7 +87,21 @@ class GameVariable:
 
     _COLS = "id, name, var_id, var_type, description, content_tags, functional_tags, wiki_name, wiki_content, var_class"
 
+    def asdict(self) -> dict:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "var_id": self.var_id,
+            "var_type": self.var_type.value,
+            "description": self.description,
+            "content_tags": [t.asdict() for t in self.content_tags],
+            "functional_tags": [t.value for t in self.functional_tags],
+            "wiki_name": self.wiki_name,
+            "var_class": self.var_class,
+        }
+
     @classmethod
+    @mcp_tool(name="GameVariableAll", description="List all game variables, optionally filtered by type")
     def all(cls, conn: sqlite3.Connection, var_type: VariableType | None = None) -> list[GameVariable]:
         if var_type:
             rows = conn.execute(
@@ -94,6 +115,7 @@ class GameVariable:
         return [cls._from_row(row) for row in rows]
 
     @classmethod
+    @mcp_tool(name="GameVariableByName", description="Find a game variable by exact name")
     def by_name(cls, conn: sqlite3.Connection, name: str) -> GameVariable | None:
         row = conn.execute(
             f"SELECT {cls._COLS} FROM game_vars WHERE name = ? LIMIT 1",
@@ -110,6 +132,7 @@ class GameVariable:
         return [cls._from_row(row) for row in rows]
 
     @classmethod
+    @mcp_tool(name="GameVariableSearch", description="Search game variables by partial name match")
     def search(cls, conn: sqlite3.Connection, name: str) -> list[GameVariable]:
         rows = conn.execute(
             f"SELECT {cls._COLS} FROM game_vars WHERE name LIKE ? ORDER BY var_type, var_id",

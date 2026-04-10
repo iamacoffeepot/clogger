@@ -5,6 +5,8 @@ from __future__ import annotations
 import sqlite3
 from dataclasses import dataclass
 
+from ragger.mcp_registry import mcp_tool
+
 
 @dataclass
 class ObjectLocation:
@@ -16,7 +18,19 @@ class ObjectLocation:
     type: int
     orientation: int
 
+    def asdict(self) -> dict:
+        return {
+            "id": self.id,
+            "game_id": self.game_id,
+            "x": self.x,
+            "y": self.y,
+            "plane": self.plane,
+            "type": self.type,
+            "orientation": self.orientation,
+        }
+
     @classmethod
+    @mcp_tool(name="ObjectLocationByGameId", description="Find object spawn locations by game ID")
     def by_game_id(cls, conn: sqlite3.Connection, game_id: int) -> list[ObjectLocation]:
         rows = conn.execute(
             "SELECT id, game_id, x, y, plane, type, orientation FROM object_locations WHERE game_id = ? ORDER BY plane, x, y",
@@ -25,6 +39,7 @@ class ObjectLocation:
         return [cls._from_row(r) for r in rows]
 
     @classmethod
+    @mcp_tool(name="ObjectLocationNear", description="Find objects near given coordinates")
     def near(cls, conn: sqlite3.Connection, x: int, y: int, radius: int = 50, plane: int = 0) -> list[ObjectLocation]:
         rows = conn.execute(
             """SELECT id, game_id, x, y, plane, type, orientation FROM object_locations

@@ -10,6 +10,7 @@ from ragger.enums import ContentCategory, Facility, Region
 from ragger.game_variable import GameVariable
 from ragger.ground_item import GroundItem
 from ragger.utils import snake_case
+from ragger.mcp_registry import mcp_tool
 from ragger.shop import Shop
 
 
@@ -35,6 +36,9 @@ class Adjacency:
     direction: str
     neighbor: str
 
+    def asdict(self) -> dict:
+        return {"id": self.id, "location_id": self.location_id, "direction": self.direction, "neighbor": self.neighbor}
+
 
 @dataclass
 class Location:
@@ -47,6 +51,15 @@ class Location:
     y: int | None = None
     facilities: int = 0
 
+    def asdict(self) -> dict:
+        return {
+            "id": self.id, "name": self.name,
+            "region": self.region.value if self.region else None,
+            "type": self.type, "members": self.members,
+            "x": self.x, "y": self.y,
+            "facilities": [f.name for f in self.facility_list()],
+        }
+
     def has_facility(self, facility: Facility) -> bool:
         return bool(self.facilities & facility.mask)
 
@@ -54,6 +67,7 @@ class Location:
         return [f for f in Facility if self.facilities & f.mask]
 
     @classmethod
+    @mcp_tool(name="LocationAll", description="List all locations, optionally filtered by region")
     def all(
         cls,
         conn: sqlite3.Connection,
@@ -71,6 +85,7 @@ class Location:
         return [cls._from_row(row) for row in rows]
 
     @classmethod
+    @mcp_tool(name="LocationWithFacilities", description="Find locations that have specific facilities")
     def with_facilities(
         cls,
         conn: sqlite3.Connection,
@@ -91,6 +106,7 @@ class Location:
         return [cls._from_row(row) for row in rows]
 
     @classmethod
+    @mcp_tool(name="LocationNearest", description="Find the nearest location to given coordinates")
     def nearest(
         cls,
         conn: sqlite3.Connection,
@@ -114,6 +130,7 @@ class Location:
         return best
 
     @classmethod
+    @mcp_tool(name="LocationByName", description="Find a location by exact name")
     def by_name(cls, conn: sqlite3.Connection, name: str) -> Location | None:
         row = conn.execute(
             "SELECT id, name, region, type, members, x, y, facilities FROM locations WHERE name = ?",
@@ -122,6 +139,7 @@ class Location:
         return cls._from_row(row) if row else None
 
     @classmethod
+    @mcp_tool(name="LocationSearch", description="Search locations by partial name match")
     def search(cls, conn: sqlite3.Connection, name: str) -> list[Location]:
         rows = conn.execute(
             "SELECT id, name, region, type, members, x, y, facilities FROM locations WHERE name LIKE ? ORDER BY name",

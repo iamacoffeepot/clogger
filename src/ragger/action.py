@@ -3,7 +3,8 @@ from __future__ import annotations
 import sqlite3
 from dataclasses import dataclass
 
-from ragger.enums import ComparisonOperator, Skill, ActionTriggerType
+from ragger.enums import ActionTriggerType, ComparisonOperator, Skill
+from ragger.mcp_registry import mcp_tool
 from ragger.requirements import (
     GroupQuestRequirement,
     GroupSkillRequirement,
@@ -16,6 +17,9 @@ class ActionOutputExperience:
     skill: Skill
     xp: float
 
+    def asdict(self) -> dict:
+        return {"skill": self.skill.name, "xp": self.xp}
+
 
 @dataclass
 class ActionInputItem:
@@ -23,16 +27,25 @@ class ActionInputItem:
     item_name: str
     quantity: int
 
+    def asdict(self) -> dict:
+        return {"item_id": self.item_id, "item_name": self.item_name, "quantity": self.quantity}
+
 
 @dataclass
 class ActionInputObject:
     object_name: str
+
+    def asdict(self) -> dict:
+        return {"object_name": self.object_name}
 
 
 @dataclass
 class ActionInputCurrency:
     currency: str
     quantity: int
+
+    def asdict(self) -> dict:
+        return {"currency": self.currency, "quantity": self.quantity}
 
 
 @dataclass
@@ -41,10 +54,16 @@ class ActionOutputItem:
     item_name: str
     quantity: int
 
+    def asdict(self) -> dict:
+        return {"item_id": self.item_id, "item_name": self.item_name, "quantity": self.quantity}
+
 
 @dataclass
 class ActionOutputObject:
     object_name: str
+
+    def asdict(self) -> dict:
+        return {"object_name": self.object_name}
 
 
 @dataclass
@@ -53,6 +72,9 @@ class ActionTrigger:
     source_id: int | None
     target_id: int
     op: str
+
+    def asdict(self) -> dict:
+        return {"trigger_type": self.trigger_type.value, "source_id": self.source_id, "target_id": self.target_id, "op": self.op}
 
 
 @dataclass
@@ -65,9 +87,17 @@ class Action:
 
     _COLS = "id, name, members, ticks, notes"
 
-    # --- Core queries ---
+    def asdict(self) -> dict:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "members": self.members,
+            "ticks": self.ticks,
+            "notes": self.notes,
+        }
 
     @classmethod
+    @mcp_tool(name="ActionAll", description="List all actions")
     def all(cls, conn: sqlite3.Connection) -> list[Action]:
         rows = conn.execute(
             f"SELECT {cls._COLS} FROM actions ORDER BY id",
@@ -75,6 +105,7 @@ class Action:
         return [cls._from_row(row) for row in rows]
 
     @classmethod
+    @mcp_tool(name="ActionByName", description="Find an action by exact name")
     def by_name(cls, conn: sqlite3.Connection, name: str) -> Action | None:
         row = conn.execute(
             f"SELECT {cls._COLS} FROM actions WHERE name = ? ORDER BY id LIMIT 1",
@@ -83,6 +114,7 @@ class Action:
         return cls._from_row(row) if row else None
 
     @classmethod
+    @mcp_tool(name="ActionAllByName", description="Find all action variants with a given name")
     def all_by_name(cls, conn: sqlite3.Connection, name: str) -> list[Action]:
         """Find all actions with an exact name (may have multiple methods for same output)."""
         rows = conn.execute(
@@ -92,6 +124,7 @@ class Action:
         return [cls._from_row(row) for row in rows]
 
     @classmethod
+    @mcp_tool(name="ActionSearch", description="Search actions by partial name match")
     def search(cls, conn: sqlite3.Connection, name: str) -> list[Action]:
         """Find actions whose name matches a partial string."""
         rows = conn.execute(
@@ -145,6 +178,7 @@ class Action:
     # --- Producing queries ---
 
     @classmethod
+    @mcp_tool(name="ActionProducingItem", description="Find actions that produce a given item")
     def producing_item(cls, conn: sqlite3.Connection, item_name: str) -> list[Action]:
         """Find actions that produce a given item."""
         rows = conn.execute(
@@ -171,6 +205,7 @@ class Action:
         return [cls._from_row(row) for row in rows]
 
     @classmethod
+    @mcp_tool(name="ActionProducingExperience", description="Find actions that grant experience in a given skill")
     def producing_experience(cls, conn: sqlite3.Connection, skill: Skill) -> list[Action]:
         """Find actions that grant experience in a given skill."""
         rows = conn.execute(
@@ -186,6 +221,7 @@ class Action:
     # --- Consuming queries ---
 
     @classmethod
+    @mcp_tool(name="ActionConsumingItem", description="Find actions that consume a given item")
     def consuming_item(cls, conn: sqlite3.Connection, item_name: str) -> list[Action]:
         """Find actions that consume a given item as input."""
         rows = conn.execute(

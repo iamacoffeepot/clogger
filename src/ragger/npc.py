@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from ragger.dialogue import DialoguePage
 from ragger.enums import ContentCategory, Region
 from ragger.game_variable import GameVariable
+from ragger.mcp_registry import mcp_tool
 from ragger.utils import snake_case
 
 
@@ -20,7 +21,15 @@ class Npc:
     options: str | None
     region: Region | None
 
+    def asdict(self) -> dict:
+        return {
+            "id": self.id, "name": self.name, "version": self.version,
+            "location": self.location, "x": self.x, "y": self.y,
+            "options": self.option_list(), "region": self.region.value if self.region else None,
+        }
+
     @classmethod
+    @mcp_tool(name="NpcAll", description="List all NPCs, optionally filtered by region")
     def all(cls, conn: sqlite3.Connection, region: Region | None = None) -> list[Npc]:
         query = "SELECT id, name, version, location, x, y, options, region FROM npcs"
         params: list = []
@@ -31,6 +40,7 @@ class Npc:
         return [cls._from_row(r) for r in conn.execute(query, params).fetchall()]
 
     @classmethod
+    @mcp_tool(name="NpcByName", description="Find an NPC by exact name and optional version")
     def by_name(cls, conn: sqlite3.Connection, name: str, version: str | None = None) -> Npc | None:
         if version is not None:
             row = conn.execute(
@@ -53,6 +63,7 @@ class Npc:
         return [cls._from_row(r) for r in rows]
 
     @classmethod
+    @mcp_tool(name="NpcSearch", description="Search NPCs by partial name match")
     def search(cls, conn: sqlite3.Connection, name: str) -> list[Npc]:
         rows = conn.execute(
             "SELECT id, name, version, location, x, y, options, region FROM npcs WHERE name LIKE ? ORDER BY name, version",
@@ -61,6 +72,7 @@ class Npc:
         return [cls._from_row(r) for r in rows]
 
     @classmethod
+    @mcp_tool(name="NpcWithOption", description="Find NPCs with a specific right-click option")
     def with_option(cls, conn: sqlite3.Connection, option: str, region: Region | None = None) -> list[Npc]:
         query = "SELECT id, name, version, location, x, y, options, region FROM npcs WHERE options LIKE ?"
         params: list = [f"%{option}%"]
@@ -127,7 +139,11 @@ class NpcLocation:
     x: int
     y: int
 
+    def asdict(self) -> dict:
+        return {"id": self.id, "game_id": self.game_id, "name": self.name, "x": self.x, "y": self.y}
+
     @classmethod
+    @mcp_tool(name="NpcLocationByGameId", description="Find NPC locations by game ID")
     def by_game_id(cls, conn: sqlite3.Connection, game_id: int) -> list[NpcLocation]:
         rows = conn.execute(
             "SELECT id, game_id, name, x, y FROM npc_locations WHERE game_id = ? ORDER BY x, y",
@@ -144,6 +160,7 @@ class NpcLocation:
         return [cls._from_row(r) for r in rows]
 
     @classmethod
+    @mcp_tool(name="NpcLocationNear", description="Find NPC locations near given coordinates")
     def near(cls, conn: sqlite3.Connection, x: int, y: int, radius: int = 50) -> list[NpcLocation]:
         rows = conn.execute(
             """SELECT id, game_id, name, x, y FROM npc_locations

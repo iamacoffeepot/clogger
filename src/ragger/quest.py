@@ -14,6 +14,7 @@ from ragger.requirements import (
     RequirementGroup,
 )
 from ragger.rewards import ExperienceReward, ItemReward
+from ragger.mcp_registry import mcp_tool
 from ragger.utils import snake_case
 
 
@@ -24,22 +25,32 @@ class Quest:
     points: int
 
     @classmethod
+    @mcp_tool(name="QuestAll", description="List all quests")
     def all(cls, conn: sqlite3.Connection) -> list[Quest]:
         rows = conn.execute("SELECT id, name, points FROM quests ORDER BY name").fetchall()
         return [cls(*row) for row in rows]
 
     @classmethod
+    @mcp_tool(name="QuestByName", description="Find a quest by exact name")
     def by_name(cls, conn: sqlite3.Connection, name: str) -> Quest | None:
         row = conn.execute("SELECT id, name, points FROM quests WHERE name = ?", (name,)).fetchone()
         return cls(*row) if row else None
 
     @classmethod
+    @mcp_tool(name="QuestSearch", description="Search quests by partial name match")
     def search(cls, conn: sqlite3.Connection, name: str) -> list[Quest]:
         rows = conn.execute(
             "SELECT id, name, points FROM quests WHERE name LIKE ? ORDER BY name",
             (f"%{name}%",),
         ).fetchall()
         return [cls(*row) for row in rows]
+
+    def asdict(self) -> dict:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "points": self.points,
+        }
 
     def xp_rewards(self, conn: sqlite3.Connection) -> list[ExperienceReward]:
         rows = conn.execute(
