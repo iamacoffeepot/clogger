@@ -58,6 +58,7 @@ public class ActorManager {
         HOOK_NAMES.put(LuaEvent.Type.WIDGET_LOADED, "on_widget_loaded");
         HOOK_NAMES.put(LuaEvent.Type.WIDGET_CLOSED, "on_widget_closed");
         HOOK_NAMES.put(LuaEvent.Type.MOUSE_CLICK, "on_mouse_click");
+        HOOK_NAMES.put(LuaEvent.Type.MENU_OPENED, "on_menu_opened");
     }
 
     // --- Dependencies ---

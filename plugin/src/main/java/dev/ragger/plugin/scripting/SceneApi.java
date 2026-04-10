@@ -5,6 +5,7 @@ import net.runelite.api.DecorativeObject;
 import net.runelite.api.GameObject;
 import net.runelite.api.GroundObject;
 import net.runelite.api.ItemComposition;
+import net.runelite.api.MenuEntry;
 import net.runelite.api.NPC;
 import net.runelite.api.ObjectComposition;
 import net.runelite.api.Player;
@@ -15,6 +16,7 @@ import net.runelite.api.TileObject;
 import net.runelite.api.WallObject;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.client.game.ItemManager;
+import net.runelite.client.util.Text;
 import party.iroiro.luajava.Lua;
 
 import java.awt.Shape;
@@ -40,7 +42,7 @@ public class SceneApi {
      * Register the scene table and all its functions on the Lua state.
      */
     public void register(final Lua lua) {
-        lua.createTable(0, 6);
+        lua.createTable(0, 8);
 
         lua.push(this::npcs);
         lua.setField(-2, "npcs");
@@ -59,6 +61,12 @@ public class SceneApi {
 
         lua.push(this::object_hull);
         lua.setField(-2, "object_hull");
+
+        lua.push(this::menu_target);
+        lua.setField(-2, "menu_target");
+
+        lua.push(this::menu_entries);
+        lua.setField(-2, "menu_entries");
 
         lua.setGlobal("scene");
     }
@@ -418,6 +426,51 @@ public class SceneApi {
 
         lua.pushNil();
         return 1;
+    }
+
+    /**
+     * scene:menu_target() -> {option, target, id, type} or nil
+     * Returns the top menu entry (what left-click would do).
+     */
+    private int menu_target(final Lua lua) {
+        final MenuEntry[] entries = client.getMenuEntries();
+        if (entries == null || entries.length == 0) {
+            lua.pushNil();
+            return 1;
+        }
+
+        pushMenuEntry(lua, entries[entries.length - 1]);
+        return 1;
+    }
+
+    /**
+     * scene:menu_entries() -> array of {option, target, id, type}
+     * Returns all current menu entries, top-first.
+     */
+    private int menu_entries(final Lua lua) {
+        final MenuEntry[] entries = client.getMenuEntries();
+        if (entries == null || entries.length == 0) {
+            lua.createTable(0, 0);
+            return 1;
+        }
+
+        lua.createTable(entries.length, 0);
+        int index = 1;
+
+        for (int i = entries.length - 1; i >= 0; i--) {
+            pushMenuEntry(lua, entries[i]);
+            lua.rawSetI(-2, index++);
+        }
+
+        return 1;
+    }
+
+    private static void pushMenuEntry(final Lua lua, final MenuEntry entry) {
+        lua.createTable(0, 4);
+        pushString(lua, "option", entry.getOption());
+        pushString(lua, "target", Text.removeTags(entry.getTarget()));
+        pushInt(lua, "id", entry.getIdentifier());
+        pushString(lua, "type", entry.getType().name());
     }
 
     /**

@@ -3,6 +3,7 @@ package dev.ragger.plugin.scripting;
 import net.runelite.api.Actor;
 import net.runelite.api.GameObject;
 import net.runelite.api.Hitsplat;
+import net.runelite.api.MenuEntry;
 import net.runelite.api.NPC;
 import net.runelite.api.Player;
 import net.runelite.api.Projectile;
@@ -17,6 +18,7 @@ import net.runelite.api.events.GameObjectSpawned;
 import net.runelite.api.events.HitsplatApplied;
 import net.runelite.api.events.ItemDespawned;
 import net.runelite.api.events.ItemSpawned;
+import net.runelite.api.events.MenuOpened;
 import net.runelite.api.events.NpcDespawned;
 import net.runelite.api.events.NpcSpawned;
 import net.runelite.api.events.PlayerDespawned;
@@ -26,9 +28,12 @@ import net.runelite.api.events.StatChanged;
 import net.runelite.api.events.VarbitChanged;
 import net.runelite.api.events.WidgetClosed;
 import net.runelite.api.events.WidgetLoaded;
+import net.runelite.client.util.Text;
 
 import java.awt.event.MouseEvent;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -65,6 +70,7 @@ public class LuaEvent {
         WIDGET_LOADED,
         WIDGET_CLOSED,
         MOUSE_CLICK,
+        MENU_OPENED,
     }
 
     private final Type type;
@@ -351,5 +357,24 @@ public class LuaEvent {
         data.put("shift", event.isShiftDown());
         data.put("ctrl", event.isControlDown());
         return new LuaEvent(Type.MOUSE_CLICK, data);
+    }
+
+    public static LuaEvent fromMenuOpened(final MenuOpened event) {
+        final Map<String, Object> data = new HashMap<>();
+        final MenuEntry[] entries = event.getMenuEntries();
+        final List<Map<String, Object>> entryList = new ArrayList<>();
+
+        for (int i = entries.length - 1; i >= 0; i--) {
+            final MenuEntry e = entries[i];
+            final Map<String, Object> entry = new HashMap<>();
+            entry.put("option", e.getOption());
+            entry.put("target", Text.removeTags(e.getTarget()));
+            entry.put("id", e.getIdentifier());
+            entry.put("type", e.getType().name());
+            entryList.add(entry);
+        }
+
+        data.put("entries", entryList);
+        return new LuaEvent(Type.MENU_OPENED, data);
     }
 }

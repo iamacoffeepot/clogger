@@ -430,6 +430,24 @@ local hull = scene:object_hull(3200, 3200, "Bank booth") -- filtered by name
 if hull then g:polygon(hull, 0x00FF00) end
 ```
 
+```lua
+-- Menu target — returns the top menu entry (what left-click would do), or nil
+local target = scene:menu_target()
+if target then
+    -- target.option  (string, e.g. "Talk-to", "Attack", "Use")
+    -- target.target  (string, e.g. "Guard", "Bank booth")
+    -- target.id      (int, identifier — NPC index, object ID, etc.)
+    -- target.type    (string, MenuAction name e.g. "NPC_FIRST_OPTION")
+end
+
+-- All menu entries — top-first order
+local entries = scene:menu_entries()
+for i = 1, #entries do
+    local e = entries[i]
+    -- Same fields as menu_target: option, target, id, type
+end
+```
+
 ### API: `inventory`
 
 Read the player's inventory and equipment.
@@ -926,6 +944,7 @@ Event hooks fire after `on_tick` on game tick frames, delivering buffered game e
 
 **Input:**
 - `on_mouse_click(data)` — `{x, y, button, shift, ctrl}` — mouse click on canvas (button: 1=left, 2=middle, 3=right)
+- `on_menu_opened(data)` — `{entries}` — right-click menu opened; entries is array of `{option, target, id, type}` (top-first)
 
 If an actor does not return a table, it runs once top-to-bottom (one-shot mode). Locals defined in the actor body are captured by hook closures and persist for the actor's lifetime.
 

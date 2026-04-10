@@ -18,6 +18,7 @@ import net.runelite.api.events.ChatMessage;
 import net.runelite.api.events.GameObjectDespawned;
 import net.runelite.api.events.GameObjectSpawned;
 import net.runelite.api.events.GameStateChanged;
+import net.runelite.api.events.MenuOpened;
 import net.runelite.api.events.ClientTick;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.events.GraphicChanged;
@@ -391,6 +392,11 @@ public class RaggerPlugin extends Plugin {
     @Subscribe
     public void onWidgetClosed(final WidgetClosed event) {
         actorManager.bufferEvent(LuaEvent.fromWidgetClosed(event));
+    }
+
+    @Subscribe
+    public void onMenuOpened(final MenuOpened event) {
+        actorManager.bufferEvent(LuaEvent.fromMenuOpened(event));
     }
 
     @Subscribe
