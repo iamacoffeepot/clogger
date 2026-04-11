@@ -10,7 +10,7 @@ OSRS knowledge base powered by retrieval-augmented generation.
 - `scripts/import/` — One-time local data imports (map squares, game vars)
 - `plugin/` — RuneLite plugin with AI chat panel and Wasm scripting engine
 - `tools/cache-dump/` — Java tool for extracting map data from the OSRS game cache
-- `docs/` — API references and style guides
+- `docs/` — API references, style guides, and Lua actor API docs
 - `data/` — SQLite database and cache dump output (gitignored)
 - `tests/` — pytest tests
 
@@ -157,6 +157,10 @@ All scripts that fetch wiki data **must** record attributions. Use `record_attri
 Default path: `data/ragger.db`. All scripts accept `--db` to override.
 
 Tables are created automatically when any script runs. Only `fetch_items.py` writes to the items table — all other scripts reference it.
+
+## Lua Actor API
+
+Per-API reference docs in `docs/lua/` — one file per Lua global available to actors. Read the relevant files before writing actor code. See `BASE.md` in the plugin resources for the full API directory listing.
 
 ## Style Guides
 
