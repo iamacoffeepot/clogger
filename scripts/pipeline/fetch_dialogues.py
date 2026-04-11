@@ -202,7 +202,12 @@ def parse_line_content(content: str) -> dict:
         return {"node_type": DialogueNodeType.LINE, "speaker": speaker, "text": text, "predicate": ""}
 
     # Fallback: plain text node
-    return {"node_type": DialogueNodeType.LINE, "speaker": None, "text": normalize_dialogue_wikitext(content), "predicate": ""}
+    return {
+        "node_type": DialogueNodeType.LINE,
+        "speaker": None,
+        "text": normalize_dialogue_wikitext(content),
+        "predicate": "",
+    }
 
 
 def parse_section_depth(line: str) -> tuple[int, str] | None:

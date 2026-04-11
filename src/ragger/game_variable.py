@@ -127,7 +127,11 @@ class GameVariable:
 
     @classmethod
     def by_content_tag(
-        cls, conn: sqlite3.Connection, tag: ContentCategory | str, name: str | None = None, var_type: VariableType | None = None,
+        cls,
+        conn: sqlite3.Connection,
+        tag: ContentCategory | str,
+        name: str | None = None,
+        var_type: VariableType | None = None,
     ) -> list[GameVariable]:
         """Find vars by content tag.
 
@@ -157,7 +161,8 @@ class GameVariable:
     def values(self, conn: sqlite3.Connection) -> list[VariableValue]:
         """Return annotated values for this var (e.g. quest stage descriptions)."""
         rows = conn.execute(
-            "SELECT var_type, var_id, value, label FROM game_var_values WHERE var_type = ? AND var_id = ? ORDER BY value",
+            "SELECT var_type, var_id, value, label"
+            " FROM game_var_values WHERE var_type = ? AND var_id = ? ORDER BY value",
             (self.var_type, self.var_id),
         ).fetchall()
         return [VariableValue(VariableType(r[0]), r[1], r[2], r[3]) for r in rows]

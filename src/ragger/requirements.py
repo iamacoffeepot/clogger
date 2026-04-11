@@ -79,7 +79,10 @@ class RequirementGroup:
             "SELECT id, group_id, skill, level, boostable, operator FROM group_skill_requirements WHERE group_id = ?",
             (self.id,),
         ).fetchall()
-        return [GroupSkillRequirement(r[0], r[1], Skill(r[2]), r[3], bool(r[4]), ComparisonOperator(r[5])) for r in rows]
+        return [
+            GroupSkillRequirement(r[0], r[1], Skill(r[2]), r[3], bool(r[4]), ComparisonOperator(r[5]))
+            for r in rows
+        ]
 
     def quest_requirements(self, conn: sqlite3.Connection) -> list[GroupQuestRequirement]:
         rows = conn.execute(
@@ -118,10 +121,14 @@ class RequirementGroup:
 
     def equipment_requirements(self, conn: sqlite3.Connection) -> list[GroupEquipmentRequirement]:
         rows = conn.execute(
-            "SELECT id, group_id, item_id, slot, quantity, operator FROM group_equipment_requirements WHERE group_id = ?",
+            "SELECT id, group_id, item_id, slot, quantity, operator"
+            " FROM group_equipment_requirements WHERE group_id = ?",
             (self.id,),
         ).fetchall()
-        return [GroupEquipmentRequirement(r[0], r[1], r[2], EquipmentSlot(r[3]), r[4], ComparisonOperator(r[5])) for r in rows]
+        return [
+            GroupEquipmentRequirement(r[0], r[1], r[2], EquipmentSlot(r[3]), r[4], ComparisonOperator(r[5]))
+            for r in rows
+        ]
 
     @staticmethod
     def for_quest(conn: sqlite3.Connection, quest_id: int) -> list[RequirementGroup]:

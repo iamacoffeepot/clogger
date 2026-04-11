@@ -171,7 +171,10 @@ def ingest(db_path: Path) -> None:
     print(f"Inserted {alias_count} location aliases")
 
     conn.commit()
-    print(f"Inserted {location_count} locations with {adjacency_count} adjacency edges ({skipped} pages skipped) into {db_path}")
+    print(
+        f"Inserted {location_count} locations with {adjacency_count} adjacency edges"
+        f" ({skipped} pages skipped) into {db_path}"
+    )
     conn.close()
 
 

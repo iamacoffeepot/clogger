@@ -36,7 +36,8 @@ RULES: list[FrameRule] = [
 
     # task_progress
     rule("task_progress",
-         rf"^(?:has|have)\s+(?:not\s+)?completed\s+(?:some|zero|few|many|enough|all|\d+)\s+tasks\s+for\s+(?:the\s+)?(?P<npc>\{{npc\}}|director)(?:\s+.*)?$",
+         rf"^(?:has|have)\s+(?:not\s+)?completed\s+(?:some|zero|few|many|enough|all|\d+)\s+"
+         rf"tasks\s+for\s+(?:the\s+)?(?P<npc>\{{npc\}}|director)(?:\s+.*)?$",
          lambda m: make_atom("task_progress", neg="not " in m.string[:m.end()])),
 
     # has_rumour

@@ -274,10 +274,19 @@ class Action:
 
     def triggers(self, conn: sqlite3.Connection) -> list[ActionTrigger]:
         rows = conn.execute(
-            "SELECT trigger_type, source_id, target_id, op FROM action_triggers WHERE action_id = ? ORDER BY trigger_type, target_id, op",
+            "SELECT trigger_type, source_id, target_id, op FROM action_triggers"
+            " WHERE action_id = ? ORDER BY trigger_type, target_id, op",
             (self.id,),
         ).fetchall()
-        return [ActionTrigger(trigger_type=ActionTriggerType(row[0]), source_id=row[1], target_id=row[2], op=row[3]) for row in rows]
+        return [
+            ActionTrigger(
+                trigger_type=ActionTriggerType(row[0]),
+                source_id=row[1],
+                target_id=row[2],
+                op=row[3],
+            )
+            for row in rows
+        ]
 
     # --- Requirement methods ---
 
@@ -295,7 +304,10 @@ class Action:
             """,
             (self.id,),
         ).fetchall()
-        return [GroupSkillRequirement(r[0], r[1], Skill(r[2]), r[3], bool(r[4]), ComparisonOperator(r[5])) for r in rows]
+        return [
+            GroupSkillRequirement(r[0], r[1], Skill(r[2]), r[3], bool(r[4]), ComparisonOperator(r[5]))
+            for r in rows
+        ]
 
     def quest_requirements(self, conn: sqlite3.Connection) -> list[GroupQuestRequirement]:
         rows = conn.execute(

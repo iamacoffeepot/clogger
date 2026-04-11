@@ -24,17 +24,25 @@ RULES: list[FrameRule] = [
     rule("has_follower", rf"^{NEG}(?:have|has)\s+(?:a |the )?pet\s+following\s+them(?:\s+.*)?$",
          lambda m: make_atom("has_follower", neg=bool(m.groupdict().get("neg")))),
     # has_follower (NPC/monster specific)
-    rule("has_follower", rf"^{NEG}(?:have|has)\s+(?:a |the )?(?P<npc>\{{npc\}}|\{{monster\}})\s+(?:following|with)\s+(?:them|him|her)?\s*(?:\s+.*)?$",
+    rule("has_follower",
+         rf"^{NEG}(?:have|has)\s+(?:a |the )?(?P<npc>\{{npc\}}|\{{monster\}})\s+"
+         rf"(?:following|with)\s+(?:them|him|her)?\s*(?:\s+.*)?$",
          lambda m: make_atom("has_follower", neg=bool(m.groupdict().get("neg")))),
-    rule("has_follower", rf"^(?P<npc>\{{npc\}}|\{{monster\}})\s+is\s+(?:not\s+)?(?:with|following)\s+(?:the\s+)?player(?:\s+.*)?$",
+    rule("has_follower",
+         rf"^(?P<npc>\{{npc\}}|\{{monster\}})\s+is\s+(?:not\s+)?(?:with|following)\s+(?:the\s+)?player(?:\s+.*)?$",
          lambda m: make_atom("has_follower", neg="not " in m.string[:m.end()])),
     rule("has_follower", rf"^{NEG}(?:have|has)\s+a\s+cat\s+following\s+them$",
          lambda m: make_atom("has_follower", neg=bool(m.groupdict().get("neg")))),
-    pre_rule("has_follower", rf"^if (?P<npc>\{{npc\}}|\{{monster\}}) is (?:not\s+)?(?:with|following) (?:the\s+)?player(?:\s+.*)?$",
+    pre_rule("has_follower",
+             rf"^if (?P<npc>\{{npc\}}|\{{monster\}}) is (?:not\s+)?(?:with|following) (?:the\s+)?player(?:\s+.*)?$",
              lambda m: make_atom("has_follower", neg="not " in m.string)),
-    pre_rule("has_follower", rf"^(?:if\s+)?(?:the\s+)?(?:\{{item\}}|\{{monster\}}|\{{npc\}}|\w+)\s+is\s+(?:not\s+)?following\s+the\s+player(?:\s+.*)?$",
+    pre_rule("has_follower",
+             rf"^(?:if\s+)?(?:the\s+)?(?:\{{item\}}|\{{monster\}}|\{{npc\}}|\w+)\s+is\s+"
+             rf"(?:not\s+)?following\s+the\s+player(?:\s+.*)?$",
              lambda m: make_atom("has_follower", neg="not " in m.string)),
-    pre_rule("has_follower", rf"^(?:if\s+)?(?:the\s+)?(?:\{{item\}}|\{{monster\}}|\{{npc\}}|\w+)\s+was\s+(?:not\s+)?following\s+the\s+player(?:\s+.*)?$",
+    pre_rule("has_follower",
+             rf"^(?:if\s+)?(?:the\s+)?(?:\{{item\}}|\{{monster\}}|\{{npc\}}|\w+)\s+was\s+"
+             rf"(?:not\s+)?following\s+the\s+player(?:\s+.*)?$",
              lambda m: make_atom("has_follower", neg="not " in m.string)),
 
     # has_chosen

@@ -51,7 +51,11 @@ def ingest(db_path: Path) -> None:
     print("Fetching Quetzal Transport System data...")
     wikitext = fetch_page_wikitext_with_attribution(conn, "Quetzal Transport System", "map_links")
     stops = parse_quetzal_stops(wikitext)
-    print(f"Found {len(stops)} quetzal stops ({sum(1 for s in stops if s['built'])} built, {sum(1 for s in stops if not s['built'])} unbuilt)")
+    print(
+        f"Found {len(stops)} quetzal stops"
+        f" ({sum(1 for s in stops if s['built'])} built,"
+        f" {sum(1 for s in stops if not s['built'])} unbuilt)"
+    )
 
     link_count = 0
     for i, from_stop in enumerate(stops):

@@ -6,7 +6,8 @@ from ragger.enums import ActivityType, Region, Skill
 
 def _seed_activities(conn: sqlite3.Connection) -> None:
     conn.executemany(
-        "INSERT INTO activities (name, type, members, location, x, y, players, skills, region) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        """INSERT INTO activities (name, type, members, location, x, y, players, skills, region)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         [
             (
                 "Barbarian Assault",

@@ -23,8 +23,14 @@ def _seed_dialogue(conn: sqlite3.Connection) -> None:
         [
             (1, 1, None, 0, 1, "line", "Hans", "Hello. What are you doing here?", "Standard dialogue"),
             (2, 1, 1, 1, 2, "option", None, "I'm looking for whoever is in charge of this place.", "Standard dialogue"),
-            (3, 1, 2, 2, 3, "line", "Player", "I'm looking for whoever is in charge of this place.", "Standard dialogue"),
-            (4, 1, 2, 3, 3, "line", "Hans", "Who, the Duke? He's in his study, on the first floor.", "Standard dialogue"),
+            (
+                3, 1, 2, 2, 3, "line", "Player",
+                "I'm looking for whoever is in charge of this place.", "Standard dialogue",
+            ),
+            (
+                4, 1, 2, 3, 3, "line", "Hans",
+                "Who, the Duke? He's in his study, on the first floor.", "Standard dialogue",
+            ),
             (5, 1, 2, 4, 3, "action", None, "end", "Standard dialogue"),
             (6, 1, 1, 5, 2, "option", None, "I have come to kill everyone in this castle!", "Standard dialogue"),
             (7, 1, 6, 6, 3, "line", "Player", "I have come to kill everyone in this castle!", "Standard dialogue"),

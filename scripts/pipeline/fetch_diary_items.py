@@ -120,7 +120,9 @@ def ingest(db_path: Path) -> None:
 
     # Equipment slot lookup: item_id -> slot
     equipment_slots: dict[int, str] = {}
-    for row in conn.execute("SELECT item_id, slot FROM equipment WHERE item_id IS NOT NULL AND slot IS NOT NULL").fetchall():
+    for row in conn.execute(
+        "SELECT item_id, slot FROM equipment WHERE item_id IS NOT NULL AND slot IS NOT NULL"
+    ).fetchall():
         equipment_slots[row[0]] = row[1]
 
     # Build diary task lookup: (location, tier, description) -> (id, description)

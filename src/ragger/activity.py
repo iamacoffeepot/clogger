@@ -93,5 +93,9 @@ class Activity:
         return [s for s in Skill if self.skills & s.mask]
 
     def game_vars(self, conn: sqlite3.Connection) -> list[GameVariable]:
-        category = ContentCategory.MINIGAME if self.type in (ActivityType.MINIGAME, ActivityType.RAID) else ContentCategory.ACTIVITY
+        category = (
+            ContentCategory.MINIGAME
+            if self.type in (ActivityType.MINIGAME, ActivityType.RAID)
+            else ContentCategory.ACTIVITY
+        )
         return GameVariable.by_content_tag(conn, category, snake_case(self.name))

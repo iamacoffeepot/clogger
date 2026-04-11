@@ -43,11 +43,19 @@ RULES: list[FrameRule] = [
     rule("wearing",
          rf"^(?:is\s+)?{NEG}wearing\s+(?:an?\s+)?(?:item|something|anything|nothing)\s+"
          rf"(?:on\s+(?:their\s+)?|in\s+(?:the\s+)?){EQUIP_SLOT}(?:\s+slot)?(?:\s+.*)?$",
-         lambda m: make_atom("wearing", neg=bool(m.groupdict().get("neg")) or "nothing" in m.string, slot=m.group("slot"))),
+         lambda m: make_atom(
+             "wearing",
+             neg=bool(m.groupdict().get("neg")) or "nothing" in m.string,
+             slot=m.group("slot"),
+         )),
     rule("wearing",
          rf"^{NEG}(?:have|has)\s+(?:something|anything|nothing)\s+equipped\s+"
          rf"in\s+(?:the\s+)?{EQUIP_SLOT}(?:\s+(?:or\s+\w+\s+)?slot)?(?:\s+.*)?$",
-         lambda m: make_atom("wearing", neg=bool(m.groupdict().get("neg")) or "nothing" in m.string, slot=m.group("slot"))),
+         lambda m: make_atom(
+             "wearing",
+             neg=bool(m.groupdict().get("neg")) or "nothing" in m.string,
+             slot=m.group("slot"),
+         )),
     rule("wearing",
          rf"^{NEG}(?:have|has)\s+(?:anything|something|nothing)\s+equipped\s+"
          rf"in\s+(?:the\s+)?(?:\w+\s+or\s+)?{EQUIP_SLOT}(?:\s+slot)?(?:\s+.*)?$",
@@ -84,6 +92,14 @@ RULES: list[FrameRule] = [
     rule("wearing", rf"^(?:is\s+)?wearing\s+nothing(?:\s+.*)?$", lambda m: make_atom("wearing", neg=True)),
 
     # with/without equipped
-    pre_rule("wearing", rf"^with (?:the |a |an )?(?:full |broken )?\w+(?:\s+\w+)*\s+equipped(?:\s+.*)?$", lambda m: make_atom("wearing", neg=False)),
-    pre_rule("wearing", rf"^without (?:the |a |an )?(?:full |broken )?\w+(?:\s+\w+)*\s+equipped(?:\s+.*)?$", lambda m: make_atom("wearing", neg=True)),
+    pre_rule(
+        "wearing",
+        rf"^with (?:the |a |an )?(?:full |broken )?\w+(?:\s+\w+)*\s+equipped(?:\s+.*)?$",
+        lambda m: make_atom("wearing", neg=False),
+    ),
+    pre_rule(
+        "wearing",
+        rf"^without (?:the |a |an )?(?:full |broken )?\w+(?:\s+\w+)*\s+equipped(?:\s+.*)?$",
+        lambda m: make_atom("wearing", neg=True),
+    ),
 ]

@@ -11,8 +11,14 @@ def _seed_monsters(conn: sqlite3.Connection) -> None:
            magic_level, ranged_level, immunities, slayer_category, members)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         [
-            ("Green dragon", "Level 79", 79, 75, 4, 1, 4, 30, 68, 68, 68, 68, 1, Immunity.BURN.mask, "Green Dragons", 1),
-            ("Green dragon", "Level 88", 88, 100, 4, 1, 4, 30, 75, 75, 68, 75, 1, Immunity.BURN.mask, "Green Dragons", 1),
+            (
+                "Green dragon", "Level 79", 79, 75, 4, 1, 4, 30,
+                68, 68, 68, 68, 1, Immunity.BURN.mask, "Green Dragons", 1,
+            ),
+            (
+                "Green dragon", "Level 88", 88, 100, 4, 1, 4, 30,
+                75, 75, 68, 75, 1, Immunity.BURN.mask, "Green Dragons", 1,
+            ),
             ("Goblin", "Level 2", 2, 5, 4, 0, 1, 15, 1, 1, 1, 1, 1, 0, None, 0),
         ],
     )

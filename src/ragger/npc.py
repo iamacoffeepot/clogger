@@ -39,7 +39,8 @@ class Npc:
             ).fetchone()
         else:
             row = conn.execute(
-                "SELECT id, name, version, location, x, y, options, region FROM npcs WHERE name = ? ORDER BY version LIMIT 1",
+                "SELECT id, name, version, location, x, y, options, region"
+                " FROM npcs WHERE name = ? ORDER BY version LIMIT 1",
                 (name,),
             ).fetchone()
         return cls._from_row(row) if row else None
@@ -55,7 +56,8 @@ class Npc:
     @classmethod
     def search(cls, conn: sqlite3.Connection, name: str) -> list[Npc]:
         rows = conn.execute(
-            "SELECT id, name, version, location, x, y, options, region FROM npcs WHERE name LIKE ? ORDER BY name, version",
+            "SELECT id, name, version, location, x, y, options, region"
+            " FROM npcs WHERE name LIKE ? ORDER BY name, version",
             (f"%{name}%",),
         ).fetchall()
         return [cls._from_row(r) for r in rows]
@@ -73,7 +75,8 @@ class Npc:
     @classmethod
     def at_location(cls, conn: sqlite3.Connection, location: str) -> list[Npc]:
         rows = conn.execute(
-            "SELECT id, name, version, location, x, y, options, region FROM npcs WHERE location LIKE ? ORDER BY name, version",
+            "SELECT id, name, version, location, x, y, options, region"
+            " FROM npcs WHERE location LIKE ? ORDER BY name, version",
             (f"%{location}%",),
         ).fetchall()
         return [cls._from_row(r) for r in rows]

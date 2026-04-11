@@ -86,7 +86,10 @@ class Shop:
         ).fetchall()
         return [cls._from_row(row) for row in rows]
 
-    _S_COLS = "s.id, s.name, s.location, s.location_id, s.owner, s.members, s.region, s.shop_type, s.sell_multiplier, s.buy_multiplier, s.delta"
+    _S_COLS = (
+        "s.id, s.name, s.location, s.location_id, s.owner, s.members,"
+        " s.region, s.shop_type, s.sell_multiplier, s.buy_multiplier, s.delta"
+    )
 
     @classmethod
     def selling(cls, conn: sqlite3.Connection, item_name: str, region: Region | None = None) -> list[Shop]:

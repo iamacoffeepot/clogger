@@ -311,7 +311,9 @@ def ingest(db_path: Path, page: str = "Raging_Echoes_League/Tasks") -> None:
                 group_id = create_requirement_group(conn)
                 for r in regions:
                     add_group_requirement(conn, group_id, "group_region_requirements", {"region": r.value})
-                link_requirement_group(conn, "league_task_requirement_groups", "league_task_id", league_task_id, group_id)
+                link_requirement_group(
+                    conn, "league_task_requirement_groups", "league_task_id", league_task_id, group_id,
+                )
             else:
                 # AND: each region in its own group
                 for r in regions:

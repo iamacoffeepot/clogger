@@ -1,7 +1,20 @@
 import sqlite3
 from pathlib import Path
 
-from ragger.enums import ALL_SKILLS_MASK, ActivityType, ComparisonOperator, DiaryLocation, DiaryTier, Element, EquipmentSlot, Region, ShopType, Skill, Spellbook, TaskDifficulty
+from ragger.enums import (
+    ALL_SKILLS_MASK,
+    ActivityType,
+    ComparisonOperator,
+    DiaryLocation,
+    DiaryTier,
+    Element,
+    EquipmentSlot,
+    Region,
+    ShopType,
+    Skill,
+    Spellbook,
+    TaskDifficulty,
+)
 
 _skill_ids = ", ".join(str(s.value) for s in Skill)
 _region_ids = ", ".join(str(r.value) for r in Region)

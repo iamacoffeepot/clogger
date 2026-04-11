@@ -247,7 +247,14 @@ def test_fold_select_menu_leaves_standalone_select_alone() -> None:
 def test_fold_select_menu_preserves_existing_title() -> None:
     instrs = [
         _instr(0, InstructionOp.SELECT, text="my title"),
-        _instr(1, InstructionOp.MENU, text="already has a title", targets=[2], target_labels=["Yes"], fallthrough=False),
+        _instr(
+            1,
+            InstructionOp.MENU,
+            text="already has a title",
+            targets=[2],
+            target_labels=["Yes"],
+            fallthrough=False,
+        ),
         _instr(2, InstructionOp.SPEAK, text="yes", speaker="NPC"),
     ]
     fold_select_menu(instrs)

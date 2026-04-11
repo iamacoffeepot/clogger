@@ -101,7 +101,8 @@ def ragger_mail_recv_async(limit: int = 0, from_actor: str = "") -> str:
 
     Args:
         limit: Max messages to return. 0 returns all available.
-        from_actor: Regex pattern to match sender actor names (e.g. "loot-.*", "quest-guide/.*"). Empty string = any actor.
+        from_actor: Regex pattern to match sender actor names
+            (e.g. "loot-.*", "quest-guide/.*"). Empty string = any actor.
     """
     params: dict[str, int | str] = {}
     if limit > 0:
@@ -121,7 +122,8 @@ def ragger_mail_recv_sync(count: int = 1, from_actor: str = "", timeout: int = 3
 
     Args:
         count: Exact number of messages to wait for (minimum 1).
-        from_actor: Regex pattern to match sender actor names (e.g. "loot-.*", "quest-guide/.*"). Empty string = any actor.
+        from_actor: Regex pattern to match sender actor names
+            (e.g. "loot-.*", "quest-guide/.*"). Empty string = any actor.
         timeout: Max seconds to wait (1-300, default 30).
     """
     params: dict[str, int | str] = {"count": max(1, count), "timeout": min(300, max(1, timeout))}

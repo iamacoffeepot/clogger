@@ -2,7 +2,12 @@ import sqlite3
 
 from ragger.enums import DiaryLocation, DiaryTier, Region, Skill, TaskDifficulty
 from ragger.league import LeagueTask
-from ragger.requirements import GroupDiaryRequirement, GroupItemRequirement, GroupQuestRequirement, GroupSkillRequirement
+from ragger.requirements import (
+    GroupDiaryRequirement,
+    GroupItemRequirement,
+    GroupQuestRequirement,
+    GroupSkillRequirement,
+)
 from ragger.wiki import link_group_requirement
 
 

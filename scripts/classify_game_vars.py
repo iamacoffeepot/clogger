@@ -241,7 +241,8 @@ location (partial): {", ".join(location_names[:200])}
 item: use your OSRS knowledge
 minigame: {", ".join(minigame_names)}
 activity: {", ".join(activity_names)}
-Also: combat_achievements, collection_log, league, xp_tracker, pvp, adventure_path, fairy_rings, fossil_island, music, holiday_event, polls, deadman_mode, group_ironman, ports, clans, diary
+Also: combat_achievements, collection_log, league, xp_tracker, pvp, adventure_path,
+ fairy_rings, fossil_island, music, holiday_event, polls, deadman_mode, group_ironman, ports, clans, diary
 
 ## Functional tags
 
@@ -267,7 +268,10 @@ progress, toggle, counter, ui, config, storage, timer, cosmetic
 
 def build_user_message(var_names: list[str]) -> str:
     """Build the user message with seed examples and variables to classify."""
-    return f"Here is an example of correct classification:\n\n{SEED_EXPECTED}\n\nNow classify these:\n" + "\n".join(var_names)
+    return (
+        f"Here is an example of correct classification:\n\n{SEED_EXPECTED}\n\nNow classify these:\n"
+        + "\n".join(var_names)
+    )
 
 
 # ---------------------------------------------------------------------------

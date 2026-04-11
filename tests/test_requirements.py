@@ -200,7 +200,9 @@ def test_diary_requirement(conn: sqlite3.Connection) -> None:
 
 def test_region_requirement(conn: sqlite3.Connection) -> None:
     _seed(conn)
-    conn.execute("INSERT INTO league_tasks (name, description, difficulty, region) VALUES ('Region Task', 'desc', 1, 1)")
+    conn.execute(
+        "INSERT INTO league_tasks (name, description, difficulty, region) VALUES ('Region Task', 'desc', 1, 1)"
+    )
     task_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
 
     link_group_requirement(

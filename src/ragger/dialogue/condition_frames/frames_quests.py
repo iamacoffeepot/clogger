@@ -11,7 +11,8 @@ def _quest_state(state: str, neg: bool) -> "Atom":  # noqa: F821
 NEG = r"(?P<neg>does not |do not |is not |are not |has not |have not |did not |not )?"
 
 RULES: list[FrameRule] = [
-    rule("quest_state", rf"^(?:has|have)\s+(?:not\s+)?(?P<verb>completed|finished)\s+(?:the\s+)?(?P<quest>\{{quest\}})$",
+    rule("quest_state",
+         rf"^(?:has|have)\s+(?:not\s+)?(?P<verb>completed|finished)\s+(?:the\s+)?(?P<quest>\{{quest\}})$",
          lambda m: _quest_state("completed", "not" in m.string[:m.end("verb")])),
     rule("quest_state", rf"^(?:has|have)\s+(?:not\s+)?started\s+(?:the\s+)?(?P<quest>\{{quest\}})$",
          lambda m: _quest_state("started", "not" in m.string[:m.end()])),

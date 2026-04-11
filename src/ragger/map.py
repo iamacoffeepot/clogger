@@ -46,7 +46,8 @@ class MapSquare:
         type: MapSquareType = MapSquareType.COLOR,
     ) -> MapSquare | None:
         row = conn.execute(
-            "SELECT id, plane, region_x, region_y, type, image FROM map_squares WHERE plane = ? AND region_x = ? AND region_y = ? AND type = ?",
+            "SELECT id, plane, region_x, region_y, type, image FROM map_squares"
+            " WHERE plane = ? AND region_x = ? AND region_y = ? AND type = ?",
             (plane, region_x, region_y, type.value),
         ).fetchone()
         return cls._from_row(row) if row else None
@@ -57,7 +58,8 @@ class MapSquare:
         type: MapSquareType = MapSquareType.COLOR,
     ) -> list[MapSquare]:
         rows = conn.execute(
-            "SELECT id, plane, region_x, region_y, type, image FROM map_squares WHERE plane = ? AND type = ? ORDER BY region_x, region_y",
+            "SELECT id, plane, region_x, region_y, type, image FROM map_squares"
+            " WHERE plane = ? AND type = ? ORDER BY region_x, region_y",
             (plane, type.value),
         ).fetchall()
         return [cls._from_row(row) for row in rows]
@@ -74,7 +76,10 @@ class MapSquare:
     @classmethod
     def count(cls, conn: sqlite3.Connection, plane: int = 0, type: MapSquareType | None = None) -> int:
         if type is not None:
-            return conn.execute("SELECT COUNT(*) FROM map_squares WHERE plane = ? AND type = ?", (plane, type.value)).fetchone()[0]
+            return conn.execute(
+                "SELECT COUNT(*) FROM map_squares WHERE plane = ? AND type = ?",
+                (plane, type.value),
+            ).fetchone()[0]
         return conn.execute("SELECT COUNT(*) FROM map_squares WHERE plane = ?", (plane,)).fetchone()[0]
 
     @classmethod
@@ -162,7 +167,10 @@ class MapLink:
 
     @classmethod
     def departing(cls, conn: sqlite3.Connection, location: str, link_type: MapLinkType | None = None) -> list[MapLink]:
-        query = "SELECT id, src_location, dst_location, src_x, src_y, dst_x, dst_y, type, description FROM map_links WHERE src_location = ?"
+        query = (
+            "SELECT id, src_location, dst_location, src_x, src_y, dst_x, dst_y, type, description"
+            " FROM map_links WHERE src_location = ?"
+        )
         params: list = [location]
         if link_type is not None:
             query += " AND type = ?"
@@ -172,7 +180,10 @@ class MapLink:
 
     @classmethod
     def arriving(cls, conn: sqlite3.Connection, location: str, link_type: MapLinkType | None = None) -> list[MapLink]:
-        query = "SELECT id, src_location, dst_location, src_x, src_y, dst_x, dst_y, type, description FROM map_links WHERE dst_location = ?"
+        query = (
+            "SELECT id, src_location, dst_location, src_x, src_y, dst_x, dst_y, type, description"
+            " FROM map_links WHERE dst_location = ?"
+        )
         params: list = [location]
         if link_type is not None:
             query += " AND type = ?"
@@ -181,16 +192,21 @@ class MapLink:
         return [cls._from_row(r) for r in conn.execute(query, params).fetchall()]
 
     @classmethod
-    def between(cls, conn: sqlite3.Connection, location_a: str, location_b: str, link_type: MapLinkType | None = None) -> list[MapLink]:
+    def between(
+        cls, conn: sqlite3.Connection, location_a: str, location_b: str,
+        link_type: MapLinkType | None = None,
+    ) -> list[MapLink]:
         if link_type is not None:
-            query = """SELECT id, src_location, dst_location, src_x, src_y, dst_x, dst_y, type, description FROM map_links
+            query = """SELECT id, src_location, dst_location, src_x, src_y,
+                               dst_x, dst_y, type, description FROM map_links
                         WHERE ((src_location = ? AND dst_location = ?)
                             OR (src_location = ? AND dst_location = ?))
                           AND type = ?
                         ORDER BY type"""
             params = [location_a, location_b, location_b, location_a, link_type.value]
         else:
-            query = """SELECT id, src_location, dst_location, src_x, src_y, dst_x, dst_y, type, description FROM map_links
+            query = """SELECT id, src_location, dst_location, src_x, src_y,
+                               dst_x, dst_y, type, description FROM map_links
                         WHERE (src_location = ? AND dst_location = ?)
                            OR (src_location = ? AND dst_location = ?)
                         ORDER BY type"""
@@ -237,7 +253,9 @@ _ZERO_COST_TYPES = {
 }
 
 
-def _build_adjacency(conn: sqlite3.Connection, allowed_types: set[MapLinkType] | None = None) -> dict[str, list[MapLink]]:
+def _build_adjacency(
+    conn: sqlite3.Connection, allowed_types: set[MapLinkType] | None = None,
+) -> dict[str, list[MapLink]]:
     """Build adjacency dict from all non-ANYWHERE map links."""
     adj: dict[str, list[MapLink]] = defaultdict(list)
     rows = conn.execute(
@@ -592,7 +610,9 @@ def render_path(
         for pi, panel_coords in enumerate(panels):
             px = [c[0] for c in panel_coords]
             py = [c[1] for c in panel_coords]
-            if px and py and min(px) - padding <= x <= max(px) + padding and min(py) - padding <= y <= max(py) + padding:
+            if (px and py
+                    and min(px) - padding <= x <= max(px) + padding
+                    and min(py) - padding <= y <= max(py) + padding):
                 best_ax = panel_axes[pi]
                 break
         best_ax.plot(x, y, "o", color="white", markersize=8, markeredgecolor="black",

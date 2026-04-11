@@ -81,7 +81,10 @@ class Quest:
             """,
             (self.id,),
         ).fetchall()
-        return [GroupSkillRequirement(r[0], r[1], Skill(r[2]), r[3], bool(r[4]), ComparisonOperator(r[5])) for r in rows]
+        return [
+            GroupSkillRequirement(r[0], r[1], Skill(r[2]), r[3], bool(r[4]), ComparisonOperator(r[5]))
+            for r in rows
+        ]
 
     def quest_requirements(self, conn: sqlite3.Connection) -> list[GroupQuestRequirement]:
         rows = conn.execute(

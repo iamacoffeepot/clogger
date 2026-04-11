@@ -81,8 +81,14 @@ RULES: list[FrameRule] = [
          rf"^{NEG}{HAS_VERB}\s+both\s+(?:a |an |the )?{ITEM_NOUN}\s+and\s+(?:a |an |the )?{ITEM_NOUN_NC}(?:\s+.*)?$",
          lambda m: make_atom("has_item", count=2, qual="any", neg=bool(m.groupdict().get("neg")))),
     rule("has_item",
-         rf"^(?:the |a )?{ITEM_NOUN}\s+is\s+(?:not\s+)?in\s+(?:the\s+)?(?:player's\s+)?(?P<qual>inventory|bank)(?:\s+.*)?$",
-         lambda m: make_atom("has_item", count=1, qual=m.groupdict().get("qual") or "inventory", neg="not " in m.string)),
+         rf"^(?:the |a )?{ITEM_NOUN}\s+is\s+(?:not\s+)?in\s+(?:the\s+)?"
+         rf"(?:player's\s+)?(?P<qual>inventory|bank)(?:\s+.*)?$",
+         lambda m: make_atom(
+             "has_item",
+             count=1,
+             qual=m.groupdict().get("qual") or "inventory",
+             neg="not " in m.string,
+         )),
     rule("has_item",
          rf"^(?:is\s+)?(?P<neg>not\s+)?(?:holding|carrying)\s+(?:a |an |the )?{ITEM_NOUN}"
          rf"(?:\s+in (?:their |the )?(?P<qual>inventory|bank|possession))?"
@@ -96,12 +102,15 @@ RULES: list[FrameRule] = [
          lambda m: make_atom("has_item", count=1, qual="any", neg=bool(m.groupdict().get("neg")))),
     rule("has_item",
          rf"^(?:has|have)\s+(?:not\s+)?(?:a |an |the )"
-         rf"(?:enchanted|completed|charged|correct|repaired|fixed|restored|full|empty|broken|assembled|combined|finished)\s+"
+         rf"(?:enchanted|completed|charged|correct|repaired|fixed|restored|"
+         rf"full|empty|broken|assembled|combined|finished)\s+"
          rf"{ITEM_NOUN}(?:\s+.*)?$",
          lambda m: make_atom("has_item", count=1, qual="any", neg="not " in m.string[:20])),
     rule("has_item",
          rf"^(?:has|have)\s+(?:not\s+)?their\s+{ITEM_NOUN}\s+with\s+them(?:\s+.*)?$",
-         lambda m: make_atom("has_item", count=1, qual="any", neg="not " in m.string[:20])),
+         lambda m: make_atom(
+             "has_item", count=1, qual="any", neg="not " in m.string[:20],
+         )),
     rule("has_item",
          rf"^(?:has|have)\s+(?:not\s+)?acquired\s+(?:a |an |the )?{ITEM_NOUN}(?:\s+.*)?$",
          lambda m: make_atom("has_item", count=1, qual="any", neg="not " in m.string[:20])),
@@ -109,22 +118,44 @@ RULES: list[FrameRule] = [
          rf"^still\s+(?:has|have)\s+(?:a |an |the )?{ITEM_NOUN}(?:\s+.*)?$",
          lambda m: make_atom("has_item", count=1, qual="any", neg=False)),
     rule("has_item",
-         rf"^there is at least (?P<count>\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+{ITEM_NOUN}(?:\s+.*)?$",
-         lambda m: make_atom("has_item", count=parse_count(m.group("count")), qual="any", neg=False)),
+         rf"^there is at least "
+         rf"(?P<count>\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+{ITEM_NOUN}(?:\s+.*)?$",
+         lambda m: make_atom(
+             "has_item", count=parse_count(m.group("count")), qual="any", neg=False,
+         )),
     rule("has_item",
          rf"^there are no \w+ in the (?:bank|inventory)(?:\s+.*)?$",
          lambda m: make_atom("has_item", count=1, qual="any", neg=True)),
 
     # --- has_item pre-strip (container-qualified, prepositional) ---
     pre_rule("has_item",
-             rf"^(?:if\s+)?(?:there\s+(?:are|is)\s+){CUR_CMP}(?P<count>\d+|a|an|the|one|two|three|four|five)?\s*(?:\(or more\)\s*)?{ITEM_NOUN}\s+in\s+{CONTAINER}(?:\s+.*)?$",
-             lambda m: make_atom("has_item", count=parse_count(m.groupdict().get("count")), qual=m.groupdict().get("qual") or "inventory", neg=False)),
+             rf"^(?:if\s+)?(?:there\s+(?:are|is)\s+){CUR_CMP}"
+             rf"(?P<count>\d+|a|an|the|one|two|three|four|five)?\s*"
+             rf"(?:\(or more\)\s*)?{ITEM_NOUN}\s+in\s+{CONTAINER}(?:\s+.*)?$",
+             lambda m: make_atom(
+                 "has_item",
+                 count=parse_count(m.groupdict().get("count")),
+                 qual=m.groupdict().get("qual") or "inventory",
+                 neg=False,
+             )),
     pre_rule("has_item",
-             rf"^with\s+{CUR_CMP}(?P<count>\d+|a|an|the|one|two|three|four|five)?\s*{ITEM_NOUN}\s+in\s+{CONTAINER}(?:\s+.*)?$",
-             lambda m: make_atom("has_item", count=parse_count(m.groupdict().get("count")), qual=m.groupdict().get("qual") or "inventory", neg=False)),
+             rf"^with\s+{CUR_CMP}"
+             rf"(?P<count>\d+|a|an|the|one|two|three|four|five)?\s*{ITEM_NOUN}\s+in\s+{CONTAINER}(?:\s+.*)?$",
+             lambda m: make_atom(
+                 "has_item",
+                 count=parse_count(m.groupdict().get("count")),
+                 qual=m.groupdict().get("qual") or "inventory",
+                 neg=False,
+             )),
     pre_rule("has_item",
-             rf"^with\s+(?P<count>\d+|a|an|the|one|two|three|four|five)?\s*(?:a |an |the )?{ITEM_NOUN}(?:\s+(?:only|with them))?$",
-             lambda m: make_atom("has_item", count=parse_count(m.groupdict().get("count")), qual="any", neg=False)),
+             rf"^with\s+(?P<count>\d+|a|an|the|one|two|three|four|five)?\s*"
+             rf"(?:a |an |the )?{ITEM_NOUN}(?:\s+(?:only|with them))?$",
+             lambda m: make_atom(
+                 "has_item",
+                 count=parse_count(m.groupdict().get("count")),
+                 qual="any",
+                 neg=False,
+             )),
     pre_rule("has_item",
              rf"^without\s+(?:having\s+)?(?:a |an |the )?{ITEM_NOUN}(?:\s+.*)?$",
              lambda m: make_atom("has_item", count=1, qual="any", neg=True)),
@@ -134,11 +165,16 @@ RULES: list[FrameRule] = [
 
     # --- has_all_items ---
     rule("has_all_items",
-         rf"^(?:has|have)\s+(?:not\s+)?all\s+(?:the\s+)?(?:required\s+)?(?:items|materials|components|ingredients|parts|pieces)(?:\s+.*)?$",
+         rf"^(?:has|have)\s+(?:not\s+)?all\s+(?:the\s+)?(?:required\s+)?"
+         rf"(?:items|materials|components|ingredients|parts|pieces)(?:\s+.*)?$",
          lambda m: make_atom("has_all_items", neg="not " in m.string[:20])),
     rule("has_all_items",
-         rf"^(?:does not |do not )?have\s+all\s+(?:the\s+)?(?:required\s+)?(?:items|materials|components|ingredients|parts|pieces)(?:\s+.*)?$",
-         lambda m: make_atom("has_all_items", neg="does not" in m.string[:15] or "do not" in m.string[:10])),
+         rf"^(?:does not |do not )?have\s+all\s+(?:the\s+)?(?:required\s+)?"
+         rf"(?:items|materials|components|ingredients|parts|pieces)(?:\s+.*)?$",
+         lambda m: make_atom(
+             "has_all_items",
+             neg="does not" in m.string[:15] or "do not" in m.string[:10],
+         )),
 
     # --- showing_item ---
     rule("showing_item",
@@ -166,19 +202,44 @@ RULES: list[FrameRule] = [
          rf"\{{currency\}}(?:\s+.*)?$",
          lambda m: make_atom(
              "has_currency",
-             amount=parse_count(m.groupdict().get("count")) if m.groupdict().get("count") and m.groupdict().get("count") != "no" else None,
+             amount=(
+                 parse_count(m.groupdict().get("count"))
+                 if m.groupdict().get("count") and m.groupdict().get("count") != "no"
+                 else None
+             ),
              cmp=(m.groupdict().get("cmp") or "ge").strip(),
-             neg=bool(m.groupdict().get("neg")) or m.groupdict().get("count") == "no")),
+             neg=bool(m.groupdict().get("neg")) or m.groupdict().get("count") == "no",
+         )),
     # "less/fewer than N {currency} in inventory" — must be before general
     pre_rule("has_currency",
-             rf"^(?:if\s+)?(?:there\s+(?:are|is)\s+)?(?:less|fewer)\s+than\s+{CUR_COUNT}\s*\{{currency\}}\s+in\s+{CONTAINER}(?:\s+.*)?$",
-             lambda m: make_atom("has_currency", amount=parse_count(m.groupdict().get("count")) if m.groupdict().get("count") else None, cmp="lt", qual=m.groupdict().get("qual") or "inventory", neg=False)),
+             rf"^(?:if\s+)?(?:there\s+(?:are|is)\s+)?(?:less|fewer)\s+than\s+"
+             rf"{CUR_COUNT}\s*\{{currency\}}\s+in\s+{CONTAINER}(?:\s+.*)?$",
+             lambda m: make_atom(
+                 "has_currency",
+                 amount=parse_count(m.groupdict().get("count")) if m.groupdict().get("count") else None,
+                 cmp="lt",
+                 qual=m.groupdict().get("qual") or "inventory",
+                 neg=False,
+             )),
     pre_rule("has_currency",
-             rf"^(?:if\s+)?(?:there\s+(?:are|is)\s+){CUR_CMP}{CUR_COUNT}?\s*(?:\(or more\)\s*)?\{{currency\}}\s+in\s+{CONTAINER}(?:\s+.*)?$",
-             lambda m: make_atom("has_currency", amount=parse_count(m.groupdict().get("count")) if m.groupdict().get("count") else None, cmp="ge", qual=m.groupdict().get("qual") or "inventory", neg=False)),
+             rf"^(?:if\s+)?(?:there\s+(?:are|is)\s+){CUR_CMP}{CUR_COUNT}?\s*"
+             rf"(?:\(or more\)\s*)?\{{currency\}}\s+in\s+{CONTAINER}(?:\s+.*)?$",
+             lambda m: make_atom(
+                 "has_currency",
+                 amount=parse_count(m.groupdict().get("count")) if m.groupdict().get("count") else None,
+                 cmp="ge",
+                 qual=m.groupdict().get("qual") or "inventory",
+                 neg=False,
+             )),
     pre_rule("has_currency",
              rf"^with\s+{CUR_CMP}{CUR_COUNT}\s*\{{currency\}}\s+in\s+{CONTAINER}(?:\s+.*)?$",
-             lambda m: make_atom("has_currency", amount=parse_count(m.groupdict().get("count")) if m.groupdict().get("count") else None, cmp="ge", qual=m.groupdict().get("qual") or "inventory", neg=False)),
+             lambda m: make_atom(
+                 "has_currency",
+                 amount=parse_count(m.groupdict().get("count")) if m.groupdict().get("count") else None,
+                 cmp="ge",
+                 qual=m.groupdict().get("qual") or "inventory",
+                 neg=False,
+             )),
 
     # --- currency_cap ---
     pre_rule("currency_cap",

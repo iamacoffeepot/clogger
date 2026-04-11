@@ -244,14 +244,19 @@ def main() -> None:
 
             if existing:
                 conn.execute(
-                    "UPDATE game_vars SET wiki_name = ?, wiki_content = ?, var_class = ?, description = COALESCE(description, ?) WHERE var_id = ? AND var_type = ?",
+                    "UPDATE game_vars SET wiki_name = ?, wiki_content = ?, var_class = ?,"
+                    " description = COALESCE(description, ?) WHERE var_id = ? AND var_type = ?",
                     (wiki_name, wiki_content, var_class, description, var_id, var_type),
                 )
                 updated += 1
             else:
                 conn.execute(
-                    "INSERT INTO game_vars (name, var_id, var_type, wiki_name, wiki_content, var_class, description) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    (wiki_name or f"UNKNOWN_{var_type.upper()}_{var_id}", var_id, var_type, wiki_name, wiki_content, var_class, description),
+                    "INSERT INTO game_vars (name, var_id, var_type, wiki_name, wiki_content,"
+                    " var_class, description) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        wiki_name or f"UNKNOWN_{var_type.upper()}_{var_id}",
+                        var_id, var_type, wiki_name, wiki_content, var_class, description,
+                    ),
                 )
                 new_vars += 1
 
@@ -266,7 +271,10 @@ def main() -> None:
 
         conn.commit()
         done = min(i + 50, len(all_pages))
-        print(f"  {done}/{len(all_pages)} pages processed ({updated} updated, {new_vars} new, {inserted_values} values)")
+        print(
+            f"  {done}/{len(all_pages)} pages processed"
+            f" ({updated} updated, {new_vars} new, {inserted_values} values)"
+        )
 
     conn.close()
     print(f"\nDone. Updated {updated} vars, inserted {new_vars} new vars, {inserted_values} value annotations.")

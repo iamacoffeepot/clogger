@@ -100,7 +100,8 @@ class Location:
     ) -> Location | None:
         """Find the location with coordinates closest to the given point."""
         rows = conn.execute(
-            "SELECT id, name, region, type, members, x, y, facilities FROM locations WHERE x IS NOT NULL AND y IS NOT NULL",
+            "SELECT id, name, region, type, members, x, y, facilities"
+            " FROM locations WHERE x IS NOT NULL AND y IS NOT NULL",
         ).fetchall()
         best: Location | None = None
         best_dist = float("inf")
@@ -144,7 +145,8 @@ class Location:
 
     def adjacencies(self, conn: sqlite3.Connection) -> list[Adjacency]:
         rows = conn.execute(
-            "SELECT id, location_id, direction, neighbor FROM location_adjacencies WHERE location_id = ? ORDER BY direction",
+            "SELECT id, location_id, direction, neighbor FROM location_adjacencies"
+            " WHERE location_id = ? ORDER BY direction",
             (self.id,),
         ).fetchall()
         return [Adjacency(*row) for row in rows]

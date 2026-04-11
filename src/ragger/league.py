@@ -124,7 +124,10 @@ class LeagueTask:
             """,
             (self.id,),
         ).fetchall()
-        return [GroupSkillRequirement(r[0], r[1], Skill(r[2]), r[3], bool(r[4]), ComparisonOperator(r[5])) for r in rows]
+        return [
+            GroupSkillRequirement(r[0], r[1], Skill(r[2]), r[3], bool(r[4]), ComparisonOperator(r[5]))
+            for r in rows
+        ]
 
     def quest_requirements(self, conn: sqlite3.Connection) -> list[GroupQuestRequirement]:
         rows = conn.execute(
@@ -424,7 +427,8 @@ class Account:
             return []
         placeholders = ",".join("?" * len(self.completed_task_ids))
         rows = self.conn.execute(
-            f"SELECT id, name, description, difficulty, region FROM league_tasks WHERE id IN ({placeholders}) ORDER BY id",
+            f"SELECT id, name, description, difficulty, region"
+            f" FROM league_tasks WHERE id IN ({placeholders}) ORDER BY id",
             list(self.completed_task_ids),
         ).fetchall()
         return [LeagueTask._from_row(row) for row in rows]

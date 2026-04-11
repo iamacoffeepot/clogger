@@ -185,7 +185,8 @@ class Monster:
 
     def locations(self, conn: sqlite3.Connection) -> list[MonsterLocation]:
         rows = conn.execute(
-            "SELECT id, monster_id, location, x, y, region FROM monster_locations WHERE monster_id = ? ORDER BY location",
+            "SELECT id, monster_id, location, x, y, region"
+            " FROM monster_locations WHERE monster_id = ? ORDER BY location",
             (self.id,),
         ).fetchall()
         return [MonsterLocation(
@@ -203,7 +204,8 @@ class Monster:
 
     def drops_by_name(self, conn: sqlite3.Connection, item_name: str) -> list[MonsterDrop]:
         rows = conn.execute(
-            "SELECT id, monster_id, item_name, quantity, rarity FROM monster_drops WHERE monster_id = ? AND item_name = ?",
+            "SELECT id, monster_id, item_name, quantity, rarity"
+            " FROM monster_drops WHERE monster_id = ? AND item_name = ?",
             (self.id, item_name),
         ).fetchall()
         return [MonsterDrop(*r) for r in rows]
@@ -222,7 +224,10 @@ class Monster:
             """,
             (self.id,),
         ).fetchall()
-        return [GroupSkillRequirement(r[0], r[1], Skill(r[2]), r[3], bool(r[4]), ComparisonOperator(r[5])) for r in rows]
+        return [
+            GroupSkillRequirement(r[0], r[1], Skill(r[2]), r[3], bool(r[4]), ComparisonOperator(r[5]))
+            for r in rows
+        ]
 
     def quest_requirements(self, conn: sqlite3.Connection) -> list[GroupQuestRequirement]:
         rows = conn.execute(

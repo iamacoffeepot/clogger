@@ -47,9 +47,21 @@ _ENTITY_SOURCES: list[tuple[str, str]] = [
 _ALIAS_SOURCES: list[tuple[str, str]] = [
     # (alias_query returning (alias, entity_id), entity_type)
     ("SELECT alias, item_id FROM item_aliases", "item"),
-    ("SELECT ea.alias, MIN(e.id) FROM equipment_aliases ea JOIN equipment e ON e.name = ea.equipment_name GROUP BY ea.alias", "equipment"),
-    ("SELECT na.alias, MIN(n.id) FROM npc_aliases na JOIN npcs n ON n.name = na.npc_name GROUP BY na.alias", "npc"),
-    ("SELECT ma.alias, MIN(m.id) FROM monster_aliases ma JOIN monsters m ON m.name = ma.monster_name GROUP BY ma.alias", "monster"),
+    (
+        "SELECT ea.alias, MIN(e.id) FROM equipment_aliases ea"
+        " JOIN equipment e ON e.name = ea.equipment_name GROUP BY ea.alias",
+        "equipment",
+    ),
+    (
+        "SELECT na.alias, MIN(n.id) FROM npc_aliases na"
+        " JOIN npcs n ON n.name = na.npc_name GROUP BY na.alias",
+        "npc",
+    ),
+    (
+        "SELECT ma.alias, MIN(m.id) FROM monster_aliases ma"
+        " JOIN monsters m ON m.name = ma.monster_name GROUP BY ma.alias",
+        "monster",
+    ),
     ("SELECT alias, quest_id FROM quest_aliases", "quest"),
     ("SELECT alias, location_id FROM location_aliases", "location"),
 ]

@@ -118,7 +118,10 @@ def parse_spell(name: str, wikitext: str) -> dict | None:
             spell["dst_y"] = None
         # Extract destination name
         dest_raw = parse_template_param(block, "description") or ""
-        dest_match = re.search(r"[Tt]eleports?\s+(?:the\s+)?(?:caster|player|you)\s+to\s+(?:the\s+)?(?:[\w\s]*?)?\[\[([^\]|]+)", dest_raw)
+        dest_match = re.search(
+            r"[Tt]eleports?\s+(?:the\s+)?(?:caster|player|you)\s+to\s+(?:the\s+)?(?:[\w\s]*?)?\[\[([^\]|]+)",
+            dest_raw,
+        )
         if dest_match:
             spell["destination"] = dest_match.group(1).strip()
         else:

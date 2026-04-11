@@ -130,7 +130,11 @@ def release(version: str, notes: str) -> None:
         ))
         page_count = conn.execute("SELECT COUNT(DISTINCT wiki_page) FROM attributions").fetchone()[0]
         conn.close()
-        full_notes += f"\n\nData sourced from {page_count} [OSRS Wiki](https://oldschool.runescape.wiki/) pages by {author_count} contributors. See CREDITS.md for full attribution."
+        full_notes += (
+            f"\n\nData sourced from {page_count}"
+            f" [OSRS Wiki](https://oldschool.runescape.wiki/) pages"
+            f" by {author_count} contributors. See CREDITS.md for full attribution."
+        )
 
     # Create the release
     cmd = [
@@ -146,7 +150,10 @@ def release(version: str, notes: str) -> None:
 if __name__ == "__main__":
     default_version = "v" + VERSION_PATH.read_text().strip() if VERSION_PATH.exists() else None
     parser = argparse.ArgumentParser(description="Create a GitHub release with the database")
-    parser.add_argument("version", nargs="?", default=default_version, help="Version tag (e.g. v0.1.0, defaults to VERSION file)")
+    parser.add_argument(
+        "version", nargs="?", default=default_version,
+        help="Version tag (e.g. v0.1.0, defaults to VERSION file)",
+    )
     parser.add_argument(
         "--notes",
         default="Database release",

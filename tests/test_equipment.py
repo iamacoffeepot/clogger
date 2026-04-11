@@ -24,7 +24,6 @@ def _seed(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
-# ── Prose parsing tests ──────────────────────────────────────────────────
 
 
 def test_parse_single_skill(conn: sqlite3.Connection) -> None:
@@ -137,7 +136,6 @@ def test_parse_dedup_quest(conn: sqlite3.Connection) -> None:
     assert quests == ["Roving Elves"]
 
 
-# ── DB integration tests ─────────────────────────────────────────────────
 
 
 def test_equipment_skill_requirements(conn: sqlite3.Connection) -> None:

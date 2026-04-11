@@ -80,7 +80,10 @@ def extract_level(wikitext: str) -> int | None:
 
 
 def extract_destination(wikitext: str, spell_name: str) -> str:
-    match = re.search(r"[Tt]eleports?\s+(?:the\s+)?(?:caster|player)\s+to\s+(?:the\s+)?(?:[\w\s]*?)?\[\[([^\]|]+)", wikitext)
+    match = re.search(
+        r"[Tt]eleports?\s+(?:the\s+)?(?:caster|player)\s+to\s+(?:the\s+)?(?:[\w\s]*?)?\[\[([^\]|]+)",
+        wikitext,
+    )
     if match:
         return match.group(1).strip()
     return spell_name.replace(" Teleport", "")

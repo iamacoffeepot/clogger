@@ -19,7 +19,8 @@ class ObjectLocation:
     @classmethod
     def by_game_id(cls, conn: sqlite3.Connection, game_id: int) -> list[ObjectLocation]:
         rows = conn.execute(
-            "SELECT id, game_id, x, y, plane, type, orientation FROM object_locations WHERE game_id = ? ORDER BY plane, x, y",
+            "SELECT id, game_id, x, y, plane, type, orientation"
+            " FROM object_locations WHERE game_id = ? ORDER BY plane, x, y",
             (game_id,),
         ).fetchall()
         return [cls._from_row(r) for r in rows]

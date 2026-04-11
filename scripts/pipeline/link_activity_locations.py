@@ -54,7 +54,11 @@ def ingest(db_path: Path) -> None:
 
     conn.commit()
     total_matched = matched_name + matched_coords
-    print(f"Linked {total_matched} activities to locations ({matched_name} by name, {matched_coords} by coords, {unmatched} unmatched) in {db_path}")
+    print(
+        f"Linked {total_matched} activities to locations"
+        f" ({matched_name} by name, {matched_coords} by coords, {unmatched} unmatched)"
+        f" in {db_path}"
+    )
     conn.close()
 
 
