@@ -89,6 +89,7 @@ public class LuaActor {
         uiApi = new UiApi(client, lua);
         uiApi.register(lua);
         new VarApi(client).register(lua);
+        new TextApi(client).register(lua);
         new JsonApi().register(lua);
         new Base64Api().register(lua);
 
