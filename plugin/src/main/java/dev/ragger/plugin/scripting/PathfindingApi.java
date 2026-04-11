@@ -116,13 +116,13 @@ public class PathfindingApi {
         final int toX = (int) lua.toInteger(4);
         final int toY = (int) lua.toInteger(5);
 
-        final List<int[]> path = astar(fromX, fromY, toX, toY);
+        List<int[]> path = astar(fromX, fromY, toX, toY);
         if (path == null) {
             lua.pushNil();
             return 1;
         }
 
-        return pushPath(lua, path);
+        return pushPath(lua, straighten(path));
     }
 
     /**
@@ -417,6 +417,122 @@ public class PathfindingApi {
         }
 
         return path;
+    }
+
+    /**
+     * Straighten a path using current collision data.
+     */
+    private List<int[]> straighten(final List<int[]> path) {
+        final CollisionData[] collisionData = client.getCollisionMaps();
+        if (collisionData == null) {
+            return path;
+        }
+        final int[][] flags = collisionData[client.getPlane()].getFlags();
+        return straightenPath(path, flags, client.getBaseX(), client.getBaseY());
+    }
+
+    /**
+     * Straighten a path by skipping intermediate waypoints where line-of-sight
+     * walking is possible. Greedy: from each anchor, find the furthest visible
+     * point and jump there.
+     */
+    private List<int[]> straightenPath(final List<int[]> path, final int[][] flags, final int baseX, final int baseY) {
+        if (path.size() <= 2) {
+            return path;
+        }
+
+        final List<int[]> result = new ArrayList<>();
+        result.add(path.get(0));
+
+        int anchor = 0;
+        while (anchor < path.size() - 1) {
+            int furthest = anchor + 1;
+            for (int candidate = path.size() - 1; candidate > anchor + 1; candidate--) {
+                if (canWalkLine(
+                    path.get(anchor)[0] - baseX, path.get(anchor)[1] - baseY,
+                    path.get(candidate)[0] - baseX, path.get(candidate)[1] - baseY,
+                    flags
+                )) {
+                    furthest = candidate;
+                    break;
+                }
+            }
+            result.add(path.get(furthest));
+            anchor = furthest;
+        }
+
+        return result;
+    }
+
+    /**
+     * Check if a straight-line walk between two scene-local tiles is possible.
+     * Steps tile by tile using Bresenham and checks movement flags at each step.
+     */
+    private boolean canWalkLine(final int x0, final int y0, final int x1, final int y1, final int[][] flags) {
+        int cx = x0;
+        int cy = y0;
+
+        while (cx != x1 || cy != y1) {
+            final int dx = Integer.signum(x1 - cx);
+            final int dy = Integer.signum(y1 - cy);
+
+            // Try diagonal first if both axes need movement
+            if (dx != 0 && dy != 0) {
+                if (!canStep(cx, cy, dx, dy, flags)) {
+                    return false;
+                }
+            } else if (dx != 0) {
+                if (!canStep(cx, cy, dx, 0, flags)) {
+                    return false;
+                }
+            } else {
+                if (!canStep(cx, cy, 0, dy, flags)) {
+                    return false;
+                }
+            }
+
+            cx += dx;
+            cy += dy;
+        }
+
+        return true;
+    }
+
+    /**
+     * Check if a single step from (cx, cy) in direction (dx, dy) is allowed.
+     */
+    private boolean canStep(final int cx, final int cy, final int dx, final int dy, final int[][] flags) {
+        final int nx = cx + dx;
+        final int ny = cy + dy;
+
+        if (!inBounds(nx, ny) || (flags[nx][ny] & BLOCK_FULL) != 0) {
+            return false;
+        }
+
+        // Find the matching direction entry
+        for (final int[] dir : DIRS) {
+            if (dir[0] == dx && dir[1] == dy) {
+                if ((flags[cx][cy] & dir[2]) != 0) {
+                    return false;
+                }
+                if (dx != 0 && dy != 0) {
+                    if ((flags[cx][cy] & dir[3]) != 0 || (flags[cx][cy] & dir[4]) != 0) {
+                        return false;
+                    }
+                    final int hx = cx + dx;
+                    final int vy = cy + dy;
+                    if ((flags[hx][cy] & BLOCK_FULL) != 0 || (flags[cx][vy] & BLOCK_FULL) != 0) {
+                        return false;
+                    }
+                    if ((flags[hx][cy] & dir[4]) != 0 || (flags[cx][vy] & dir[3]) != 0) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static boolean inBounds(final int x, final int y) {

@@ -17,7 +17,7 @@ local requester = nil
 local pending = false
 local trail = {}
 local ARRIVE_DIST = 5
-local TRAIL_REFRESH = 10
+local TRAIL_REFRESH = 5
 local trail_tick = 0
 
 local function clear()
@@ -41,6 +41,20 @@ local function recompute_trail()
     local path = pathfinding:find_path_toward(px, py, leg.dst_x, leg.dst_y)
     if path then
         trail = path
+        -- append next leg's trail for smooth transitions
+        local next_leg = nil
+        if leg_idx + 1 <= #legs then
+            next_leg = legs[leg_idx + 1]
+        end
+        if next_leg then
+            local last = path[#path]
+            local next_path = pathfinding:find_path_toward(last.x, last.y, next_leg.dst_x, next_leg.dst_y)
+            if next_path then
+                for i = 2, #next_path do
+                    trail[#trail + 1] = next_path[i]
+                end
+            end
+        end
     end
 end
 
