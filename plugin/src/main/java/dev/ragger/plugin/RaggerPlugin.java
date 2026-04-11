@@ -22,6 +22,7 @@ import net.runelite.api.events.GameObjectSpawned;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.MenuOpened;
 import net.runelite.api.events.ClientTick;
+import net.runelite.api.events.PostClientTick;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.events.GraphicChanged;
 import net.runelite.api.events.HitsplatApplied;
@@ -248,6 +249,11 @@ public class RaggerPlugin extends Plugin {
     @Subscribe
     public void onClientTick(final ClientTick event) {
         actorManager.frame();
+    }
+
+    @Subscribe
+    public void onPostClientTick(final PostClientTick event) {
+        actorManager.postFrame();
     }
 
     @Subscribe

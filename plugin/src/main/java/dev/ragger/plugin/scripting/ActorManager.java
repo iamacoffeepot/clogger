@@ -491,6 +491,27 @@ public class ActorManager {
     }
 
     /**
+     * Post-frame heartbeat — called every client tick after clientscripts finish.
+     * Dispatches on_post_frame to all actors.
+     */
+    public void postFrame() {
+        final var it = scripts.entrySet().iterator();
+
+        while (it.hasNext()) {
+            final var entry = it.next();
+            final LuaActor script = entry.getValue();
+            script.postFrame();
+
+            if (script.shouldStop()) {
+                script.stop();
+                it.remove();
+                log.info("Script self-stopped: {}", entry.getKey());
+                fireChange();
+            }
+        }
+    }
+
+    /**
      * Buffer a game event for delivery to actors on the next drainEvents() call.
      */
     public void bufferEvent(final LuaEvent event) {

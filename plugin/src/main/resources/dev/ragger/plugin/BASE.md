@@ -958,19 +958,20 @@ return {
 
 - `on_start` — called once when the actor is loaded
 - `on_frame` — called every client tick (~20ms, ~50 FPS) — primary logic hook
+- `on_post_frame` — called every client tick after game clientscripts finish — use for widget text modifications that would otherwise be overwritten by the game
 - `on_tick` — called on game tick frames only (~600ms) — server-synced logic
 - `on_render(g)` — called every render frame (draws on game viewport)
 - `on_render_minimap(g)` — called every render frame on the minimap layer (use `coords:world_to_minimap()` for positions)
 - `on_mail(from, data)` — called when another actor sends mail to this actor
 - `on_stop` — called when the actor is unloaded
 
-`on_frame` is the main heartbeat. `on_tick` is a sub-event that fires inline during the frame where a server game tick occurred — use it for things that only need to run once per 600ms tick.
+`on_frame` is the main heartbeat. `on_post_frame` fires after the game engine's clientscripts have finished recalculating widget text — use it when you need to modify widget text without the game overwriting your changes. `on_tick` is a sub-event that fires inline during the frame where a server game tick occurred — use it for things that only need to run once per 600ms tick.
 
 #### Event Hooks
 
 Event hooks fire after `on_tick` on game tick frames, delivering buffered game events. Each receives a single table with the event data. Return `false` to self-stop the actor.
 
-**Frame dispatch order:** `on_frame` → (on game tick frames: `on_mail` → `on_tick` → event hooks) → `on_render`
+**Frame dispatch order:** `on_frame` → (on game tick frames: `on_mail` → `on_tick` → event hooks) → `on_post_frame` → `on_render`
 
 **Combat & damage:**
 - `on_hitsplat(data)` — `{amount, type, is_mine, target_type, target_name, target_id?}`
@@ -1207,7 +1208,8 @@ scratch/
 - Persistent actors return a hooks table and run until unloaded.
 - Keep actors focused on a single task.
 - Do not use infinite loops — use `on_frame` for recurring work.
-- Return `false` from `on_frame` or `on_tick` to self-terminate the actor.
+- Return `false` from `on_frame`, `on_post_frame`, or `on_tick` to self-terminate the actor.
 - Put responsive logic in `on_frame` (~20ms). Use `on_tick` only for server-tick-rate work (600ms).
+- Use `on_post_frame` for widget text modifications — it runs after the game's clientscripts, so your changes won't be overwritten.
 - Only draw in `on_render` — it runs every frame so keep it lightweight.
 - Use stable, descriptive kebab-case names (e.g. "npc-highlighter", "tick-counter"). Do NOT append random hashes or suffixes — the plugin replaces actors with the same name automatically. Use `ActorSource` to read an actor's source before modifying it.

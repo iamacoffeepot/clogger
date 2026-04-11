@@ -149,6 +149,16 @@ public class LuaActor {
         }
     }
 
+    public void postFrame() {
+        if (!running || !hasHooks) {
+            return;
+        }
+
+        if (!callHook("on_post_frame")) {
+            requestStop = true;
+        }
+    }
+
     public void render(final Graphics2D graphics) {
         if (!running || !hasHooks) {
             return;
