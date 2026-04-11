@@ -34,6 +34,7 @@ BLOCK_N = 0x2
 BLOCK_E = 0x4
 BLOCK_S = 0x8
 BLOCK_FULL = 0x10
+DATA_PRESENT = 0x20
 
 # Direction table: (dx, dy, flag on source blocking this direction)
 # Cardinals
@@ -87,12 +88,14 @@ def build_flags_grid(collision: np.ndarray, water: np.ndarray, x_min: int, x_max
     """
     height, width = collision.shape[:2]
 
-    # Decode flags from pixel RGB: flags = R | (G << 8) | (B << 16)
-    flags_grid = (
-        collision[:, :, 0].astype(np.int32)
-        | (collision[:, :, 1].astype(np.int32) << 8)
-        | (collision[:, :, 2].astype(np.int32) << 16)
-    )
+    # Decode flags from pixel blue channel. Java packs as 0xAARRGGBB —
+    # our flag values (0x00-0x3F) fit entirely in the low byte (blue channel).
+    raw = collision[:, :, 2].astype(np.int32)
+
+    # Void tiles have no DATA_PRESENT bit — mark as fully blocked
+    void_mask = (raw & DATA_PRESENT) == 0
+    flags_grid = raw & ~DATA_PRESENT  # strip presence bit
+    flags_grid[void_mask] = BLOCK_FULL
 
     # Mark water tiles as fully blocked
     water_mask = (
@@ -101,10 +104,6 @@ def build_flags_grid(collision: np.ndarray, water: np.ndarray, x_min: int, x_max
         & (water[:, :, 2] == WATER_BLUE[2])
     )
     flags_grid[water_mask] |= BLOCK_FULL
-
-    # Mark void tiles (where collision pixel is all zero = no data) as fully blocked
-    void_mask = (collision[:, :, 0] == 0) & (collision[:, :, 1] == 0) & (collision[:, :, 2] == 0)
-    flags_grid[void_mask] |= BLOCK_FULL
 
     return flags_grid
 

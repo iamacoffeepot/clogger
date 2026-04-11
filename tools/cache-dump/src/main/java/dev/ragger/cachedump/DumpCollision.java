@@ -38,6 +38,9 @@ public class DumpCollision {
     private static final int BLOCK_S = 0x8;
     private static final int BLOCK_FULL = 0x10;
 
+    /** Marker bit to distinguish data-present tiles from void (all zeros). */
+    private static final int DATA_PRESENT = 0x20;
+
     public static void main(String[] args) throws Exception {
         String cachePath = null;
         Path outputDir = Path.of("../../data/cache-dump/collision");
@@ -156,7 +159,7 @@ public class DumpCollision {
         BufferedImage img = new BufferedImage(REGION_SIZE, REGION_SIZE, BufferedImage.TYPE_INT_ARGB);
         for (int x = 0; x < REGION_SIZE; x++) {
             for (int y = 0; y < REGION_SIZE; y++) {
-                img.setRGB(x, REGION_SIZE - 1 - y, 0xFF000000 | flags[x][y]);
+                img.setRGB(x, REGION_SIZE - 1 - y, 0xFF000000 | DATA_PRESENT | flags[x][y]);
             }
         }
 
