@@ -32,6 +32,17 @@ public interface RaggerConfig extends Config {
     }
 
     @ConfigItem(
+        keyName = "bridgeTokenOverride",
+        name = "Bridge Token Override",
+        description = "Static auth token for the HTTP bridge. WARNING: anyone with this token can execute arbitrary code in the client. Leave blank for a random per-session token.",
+        position = 2,
+        section = "shared"
+    )
+    default String bridgeTokenOverride() {
+        return "";
+    }
+
+    @ConfigItem(
         keyName = "actorMaxDepth",
         name = "Actor Max Depth",
         description = "Maximum nesting depth for child actors",

@@ -137,7 +137,7 @@ public class RaggerPlugin extends Plugin {
         overlayManager.add(actorOverlay);
         overlayManager.add(minimapOverlay);
 
-        bridgeServer = new BridgeServer(actorManager);
+        bridgeServer = new BridgeServer(actorManager, config.bridgeTokenOverride());
         try {
             bridgeServer.start(config.bridgePort());
         } catch (final IOException e) {

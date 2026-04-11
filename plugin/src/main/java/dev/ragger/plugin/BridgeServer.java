@@ -58,9 +58,11 @@ public class BridgeServer {
 
     private HttpServer server;
 
-    public BridgeServer(final ActorManager actorManager) {
+    public BridgeServer(final ActorManager actorManager, final String tokenOverride) {
         this.actorManager = actorManager;
-        this.token = UUID.randomUUID().toString();
+        this.token = (tokenOverride != null && !tokenOverride.isEmpty())
+            ? tokenOverride
+            : UUID.randomUUID().toString();
     }
 
     public String getToken() {
