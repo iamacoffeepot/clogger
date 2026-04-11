@@ -9,6 +9,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
@@ -87,7 +88,7 @@ public class ActorManager {
 
     // --- Game tick flag (set by onGameTick, consumed by frame) ---
 
-    private volatile boolean gameTickPending;
+    private final AtomicBoolean gameTickPending = new AtomicBoolean();
 
     private record PendingSpawn(String name, String source, Map<String, Object> args) {}
 
@@ -443,7 +444,7 @@ public class ActorManager {
      * The next frame() call will dispatch on_tick and drain events.
      */
     public void markGameTick() {
-        gameTickPending = true;
+        gameTickPending.set(true);
     }
 
     /**
@@ -464,9 +465,8 @@ public class ActorManager {
         }
 
         // Consume game tick flag
-        final boolean gameTick = gameTickPending;
+        final boolean gameTick = gameTickPending.compareAndSet(true, false);
         if (gameTick) {
-            gameTickPending = false;
             drainMail();
         }
 

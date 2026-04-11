@@ -14,6 +14,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Manages communication with the Claude CLI with persistent sessions.
@@ -37,8 +39,8 @@ public class ClaudeClient {
     private final boolean devMode;
     private final String extraTools;
     private String sessionId;
-    private volatile Process currentProcess;
-    private volatile boolean cancelled;
+    private final AtomicReference<Process> currentProcess = new AtomicReference<>();
+    private final AtomicBoolean cancelled = new AtomicBoolean();
 
     public ClaudeClient(
         final String claudePath,
@@ -73,9 +75,9 @@ public class ClaudeClient {
      * Cancel the current request, killing the Claude CLI process.
      */
     public void cancel() {
-        cancelled = true;
+        cancelled.set(true);
 
-        final Process p = currentProcess;
+        final Process p = currentProcess.get();
         if (p != null) {
             // Kill entire process tree (Claude CLI + MCP server subprocess)
             p.descendants().forEach(ProcessHandle::destroyForcibly);
@@ -85,7 +87,7 @@ public class ClaudeClient {
     }
 
     public boolean isBusy() {
-        return currentProcess != null;
+        return currentProcess.get() != null;
     }
 
     /**
@@ -162,10 +164,10 @@ public class ClaudeClient {
         pb.environment().put("RAGGER_CHANNEL", channel);
         pb.redirectErrorStream(true);
         pb.redirectInput(ProcessBuilder.Redirect.from(new File("/dev/null")));
-        cancelled = false;
+        cancelled.set(false);
 
         final Process process = pb.start();
-        currentProcess = process;
+        currentProcess.set(process);
 
         // Track the last text we've seen to detect new content
         final StringBuilder lastSeenText = new StringBuilder();
@@ -178,7 +180,7 @@ public class ClaudeClient {
             ))
         ) {
             String line;
-            while (!cancelled && (line = reader.readLine()) != null) {
+            while (!cancelled.get() && (line = reader.readLine()) != null) {
                 if (line.isBlank()) {
                     continue;
                 }
@@ -220,9 +222,9 @@ public class ClaudeClient {
             }
         }
 
-        currentProcess = null;
+        currentProcess.set(null);
 
-        if (cancelled) {
+        if (cancelled.get()) {
             listener.onCancelled();
             return;
         }

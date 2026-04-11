@@ -209,6 +209,36 @@ private final ItemManager itemManager;
 private LuaActor activeActor;
 ```
 
+## Concurrency — Atomic* over volatile
+
+Prefer `AtomicBoolean`, `AtomicReference`, `AtomicInteger`, etc. over `volatile` fields. Atomics make thread-safety explicit, support compound operations (`compareAndSet`, `getAndSet`), and read more clearly than bare field access on a volatile.
+
+```java
+// WRONG — volatile flag
+private volatile boolean cancelled;
+// ...
+cancelled = true;
+if (cancelled) { ... }
+
+// RIGHT — AtomicBoolean
+private final AtomicBoolean cancelled = new AtomicBoolean();
+// ...
+cancelled.set(true);
+if (cancelled.get()) { ... }
+
+// WRONG — volatile reference used as a flag
+private volatile Process currentProcess;
+// ...
+currentProcess = process;
+if (currentProcess != null) { ... }
+
+// RIGHT — AtomicReference
+private final AtomicReference<Process> currentProcess = new AtomicReference<>();
+// ...
+currentProcess.set(process);
+if (currentProcess.get() != null) { ... }
+```
+
 ## Comments — only when non-obvious
 
 Don't narrate what code does. Comment only when the *why* isn't clear from the code itself.
