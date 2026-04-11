@@ -15,6 +15,10 @@ def _make_config() -> LeagueConfig:
         max_region_unlocks=3,
         starting_skills={Skill.HERBLORE: 3, Skill.RUNECRAFT: 5},
         autocompleted_quests=["Quest A"],
+        relic_thresholds=[0, 750, 1500, 2500, 5000, 8000, 16000, 25000],
+        xp_multipliers=[5, 8, 8, 8, 12, 12, 16, 16],
+        drop_multipliers=[2, 2, 2, 5, 5, 5, 5, 5],
+        minigame_multipliers=[4, 4, 4, 8, 8, 8, 8, 8],
     )
 
 

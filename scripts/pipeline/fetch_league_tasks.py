@@ -1,6 +1,6 @@
 """Fetch league tasks from the OSRS wiki and insert into the league_tasks table.
 
-Currently targets Raging Echoes League as a prototype.
+Supports both Raging Echoes (RELTaskRow) and Demonic Pacts (DPLTaskRow) templates.
 Requires: fetch_items.py and fetch_quests.py to have been run first.
 """
 
@@ -22,7 +22,7 @@ from ragger.wiki import (
 )
 
 QUEST_REQ_PATTERN = re.compile(r"\[\[([^]|]+?)(?:\|[^]]+)?\]\]")
-REGION_REQ_PATTERN = re.compile(r"\{\{RE\|(\w+)\}\}")
+REGION_REQ_PATTERN = re.compile(r"\{\{(?:RE|DPL)\|(\w+)\}\}")
 
 DIFFICULTY_MAP = {
     "easy": TaskDifficulty.EASY,
@@ -62,13 +62,21 @@ DIARY_TASK_PATTERN = re.compile(
 )
 
 
+TASK_TEMPLATES = ("RELTaskRow", "DPLTaskRow")
+
+
 def parse_template_fields(text: str) -> dict[str, str] | None:
-    """Parse a RELTaskRow template handling nested [[ ]] and {{ }}."""
-    if not text.startswith("{{RELTaskRow|"):
+    """Parse a RELTaskRow or DPLTaskRow template handling nested [[ ]] and {{ }}."""
+    prefix = None
+    for name in TASK_TEMPLATES:
+        if text.startswith("{{" + name + "|"):
+            prefix = name
+            break
+    if prefix is None:
         return None
 
     inner = text[2:-2]
-    inner = inner[len("RELTaskRow|"):]
+    inner = inner[len(prefix) + 1:]
 
     fields: list[str] = []
     current: list[str] = []
@@ -179,11 +187,13 @@ def parse_other_reqs(
 
 
 def extract_templates(wikitext: str) -> list[str]:
-    """Extract all {{RELTaskRow|...}} templates from wikitext."""
+    """Extract all {{RELTaskRow|...}} or {{DPLTaskRow|...}} templates from wikitext."""
     templates: list[str] = []
+    markers = [("{{" + name, len("{{" + name)) for name in TASK_TEMPLATES]
     i = 0
     while i < len(wikitext):
-        if wikitext[i:i + 12] == "{{RELTaskRow":
+        matched = any(wikitext[i:i + length] == marker for marker, length in markers)
+        if matched:
             depth = 0
             start = i
             while i < len(wikitext):
@@ -207,7 +217,7 @@ def parse_league_tasks(wikitext: str) -> list[LeagueTaskData]:
     tasks: list[LeagueTaskData] = []
     for template in extract_templates(wikitext):
         fields = parse_template_fields(template)
-        if fields is None or "id" not in fields or "tier" not in fields:
+        if fields is None or "tier" not in fields:
             continue
 
         name = fields["name"].strip()
@@ -216,7 +226,7 @@ def parse_league_tasks(wikitext: str) -> list[LeagueTaskData]:
         other_field = fields.get("other", "")
         tier = fields["tier"].lower()
         region_str = fields.get("region", "general").strip().lower()
-        task_id = int(fields["id"])
+        task_id = int(fields["id"]) if "id" in fields and fields["id"] != "0" else 0
 
         difficulty = DIFFICULTY_MAP.get(tier)
         if difficulty is None:
@@ -340,7 +350,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--page",
-        default="Raging_Echoes_League/Tasks",
+        default="Demonic_Pacts_League/Tasks",
         help="Wiki page to fetch tasks from",
     )
     args = parser.parse_args()

@@ -21,6 +21,18 @@ starting-skills:
   Herblore: 3
   Runecraft: 5
 
+# Relic tier point thresholds (tier 3 = area unlock, no relic)
+relic-thresholds: [0, 750, 1500, 2500, 5000, 8000, 16000, 25000]
+
+# XP multiplier at each relic tier
+xp-multipliers: [5, 8, 8, 8, 12, 12, 16, 16]
+
+# Drop rate multiplier at each relic tier
+drop-multipliers: [2, 2, 2, 5, 5, 5, 5, 5]
+
+# Minigame point multiplier at each relic tier
+minigame-multipliers: [4, 4, 4, 8, 8, 8, 8, 8]
+
 autocompleted-quests:
   - Dragon Slayer I
   - Learning the Ropes

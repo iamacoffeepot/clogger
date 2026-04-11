@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
@@ -187,6 +187,10 @@ class LeagueConfig:
     max_region_unlocks: int
     starting_skills: dict[Skill, int]
     autocompleted_quests: list[str]
+    relic_thresholds: list[int] = field(default_factory=list)
+    xp_multipliers: list[int] = field(default_factory=list)
+    drop_multipliers: list[int] = field(default_factory=list)
+    minigame_multipliers: list[int] = field(default_factory=list)
 
     @staticmethod
     def from_yaml(path: Path) -> LeagueConfig:
@@ -205,6 +209,10 @@ class LeagueConfig:
             max_region_unlocks=data["max-region-unlocks"],
             starting_skills=starting_skills,
             autocompleted_quests=data["autocompleted-quests"],
+            relic_thresholds=data.get("relic-thresholds", []),
+            xp_multipliers=data.get("xp-multipliers", []),
+            drop_multipliers=data.get("drop-multipliers", []),
+            minigame_multipliers=data.get("minigame-multipliers", []),
         )
 
     def completed_quests(self, conn: sqlite3.Connection, resolve_chains: bool = True) -> list[Quest]:
@@ -275,6 +283,39 @@ class Account:
     @property
     def regions(self) -> list[Region]:
         return list(self.unlocked_regions)
+
+    @property
+    def relic_tier(self) -> int:
+        """Current relic tier based on league points earned."""
+        tier = 0
+        for i, threshold in enumerate(self.config.relic_thresholds):
+            if self.league_points >= threshold:
+                tier = i + 1
+        return tier
+
+    @property
+    def xp_multiplier(self) -> int:
+        """Active XP multiplier for the current relic tier."""
+        tier = self.relic_tier
+        if tier == 0 or not self.config.xp_multipliers:
+            return 1
+        return self.config.xp_multipliers[min(tier - 1, len(self.config.xp_multipliers) - 1)]
+
+    @property
+    def drop_multiplier(self) -> int:
+        """Active drop rate multiplier for the current relic tier."""
+        tier = self.relic_tier
+        if tier == 0 or not self.config.drop_multipliers:
+            return 1
+        return self.config.drop_multipliers[min(tier - 1, len(self.config.drop_multipliers) - 1)]
+
+    @property
+    def minigame_multiplier(self) -> int:
+        """Active minigame point multiplier for the current relic tier."""
+        tier = self.relic_tier
+        if tier == 0 or not self.config.minigame_multipliers:
+            return 1
+        return self.config.minigame_multipliers[min(tier - 1, len(self.config.minigame_multipliers) - 1)]
 
     def complete_quest(
         self,
