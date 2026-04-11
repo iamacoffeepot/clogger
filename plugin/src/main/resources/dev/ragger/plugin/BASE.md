@@ -584,7 +584,7 @@ local w = widget:component(componentId)
 -- Quick text read (returns string or nil)
 local txt = widget:text(widget.DIALOG_NPC, 4)
 
--- Get all children of a widget
+-- Get all children of a widget (dynamic + static + nested)
 local kids = widget:children(widget.BANK, 0)
 for i = 1, #kids do
     local child = kids[i]
@@ -593,7 +593,36 @@ end
 
 -- Root widgets (all currently loaded interfaces)
 local roots = widget:roots()
+
+-- Get parent widget (traverse up the tree)
+local p = widget:parent(componentId)
+
+-- Get a specific child by widget index (works for dynamic children)
+local c = widget:child(componentId, childIndex)
+
+-- Deep traversal — flat array of ALL descendants (recursive)
+local all = widget:descendants(componentId)
+for i = 1, #all do
+    -- every widget in the subtree, depth-first
+end
+
+-- Search descendants with filters
+local results = widget:find(componentId, {
+    text = "attack",            -- text contains (case-insensitive)
+    name = "close",             -- name/tooltip contains (case-insensitive)
+    type = widget.TYPE_TEXT,    -- exact widget type
+    item_id = 4151,             -- exact item ID
+    has_text = true,            -- has any non-empty text
+    has_item = true,            -- has item_id > 0
+    has_action = "Withdraw",    -- has an action containing this string
+    limit = 10                  -- max results (default unlimited)
+})
+
+-- Set text on a dynamic child by widget index
+widget:set_text(componentId, "new text", childIndex)
 ```
+
+All methods accepting a component ID also accept `(groupId, childId)` form.
 
 #### Widget table shape
 
@@ -625,7 +654,10 @@ local roots = widget:roots()
     scroll_y      = 120,
     scroll_width  = 200,
     scroll_height = 800,
+    child_count   = 12,         -- omitted if 0 (dynamic + static + nested)
     text_color    = 0xFF981F,   -- omitted if 0 (RGB24)
+    font_id       = 495,        -- omitted if <= 0
+    text_shadowed = true,        -- omitted if false
     opacity       = 0,          -- 0=opaque, 255=transparent
     actions       = {"Withdraw-1", "Withdraw-5", "Withdraw-All"}  -- omitted if none
 }

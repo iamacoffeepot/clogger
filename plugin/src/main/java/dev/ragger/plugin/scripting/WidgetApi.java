@@ -29,7 +29,7 @@ public class WidgetApi {
     }
 
     public void register(final Lua lua) {
-        lua.createTable(0, 8);
+        lua.createTable(0, 16);
 
         lua.push(this::get);
         lua.setField(-2, "get");
@@ -42,6 +42,18 @@ public class WidgetApi {
 
         lua.push(this::children);
         lua.setField(-2, "children");
+
+        lua.push(this::parent);
+        lua.setField(-2, "parent");
+
+        lua.push(this::child);
+        lua.setField(-2, "child");
+
+        lua.push(this::descendants);
+        lua.setField(-2, "descendants");
+
+        lua.push(this::find);
+        lua.setField(-2, "find");
 
         lua.push(this::text);
         lua.setField(-2, "text");
@@ -148,6 +160,318 @@ public class WidgetApi {
     }
 
     /**
+     * widget:parent(componentId) -> widget table or nil
+     * widget:parent(groupId, childId) -> widget table or nil
+     * Returns the parent widget, or nil if it's a root.
+     */
+    private int parent(final Lua lua) {
+        final Widget w = resolveWidget(lua);
+        if (w == null) {
+            lua.pushNil();
+            return 1;
+        }
+
+        final Widget p = w.getParent();
+        if (p == null) {
+            lua.pushNil();
+        } else {
+            pushWidget(lua, p);
+        }
+
+        return 1;
+    }
+
+    /**
+     * widget:child(componentId, childIndex) -> widget table or nil
+     * widget:child(groupId, childId, childIndex) -> widget table or nil
+     * Returns a specific child by its widget index. Works for dynamic,
+     * static, and nested children.
+     */
+    private int child(final Lua lua) {
+        final int top = lua.getTop();
+        final Widget parent;
+        final int childIndex;
+        if (top >= 4) {
+            final int groupId = (int) lua.toInteger(2);
+            final int childId = (int) lua.toInteger(3);
+            parent = client.getWidget(groupId, childId);
+            childIndex = (int) lua.toInteger(4);
+        } else {
+            final int componentId = (int) lua.toInteger(2);
+            parent = client.getWidget(componentId);
+            childIndex = (int) lua.toInteger(3);
+        }
+
+        if (parent == null) {
+            lua.pushNil();
+            return 1;
+        }
+
+        final Widget found = findChildByWidgetIndex(parent, childIndex);
+        if (found == null || found.isHidden()) {
+            lua.pushNil();
+        } else {
+            pushWidget(lua, found);
+        }
+
+        return 1;
+    }
+
+    /**
+     * widget:descendants(componentId) -> array of widget tables
+     * widget:descendants(groupId, childId) -> array of widget tables
+     * Recursively collects all descendant widgets into a flat array.
+     * Includes dynamic, static, and nested children at every level.
+     */
+    private int descendants(final Lua lua) {
+        final Widget root = resolveWidget(lua);
+        lua.createTable(0, 0);
+        if (root == null || root.isHidden()) {
+            return 1;
+        }
+
+        final int[] index = {1};
+        collectDescendants(lua, root, index, 0);
+
+        return 1;
+    }
+
+    private static final int MAX_DESCENDANT_DEPTH = 16;
+
+    private void collectDescendants(final Lua lua, final Widget parent, final int[] index, final int depth) {
+        if (depth > MAX_DESCENDANT_DEPTH) {
+            return;
+        }
+
+        final Widget[][] groups = {
+            parent.getDynamicChildren(),
+            parent.getStaticChildren(),
+            parent.getNestedChildren()
+        };
+
+        for (final Widget[] group : groups) {
+            if (group == null) {
+                continue;
+            }
+            for (final Widget child : group) {
+                if (child == null || child.isHidden()) {
+                    continue;
+                }
+                pushWidget(lua, child);
+                lua.rawSetI(-2, index[0]++);
+                collectDescendants(lua, child, index, depth + 1);
+            }
+        }
+    }
+
+    /**
+     * widget:find(componentId, opts) -> array of widget tables
+     * widget:find(groupId, childId, opts) -> array of widget tables
+     * Searches descendants matching filter criteria. opts is a table:
+     *   text     = "substring"   -- text contains (case-insensitive)
+     *   name     = "substring"   -- name contains (case-insensitive)
+     *   type     = 4             -- exact widget type match
+     *   item_id  = 4151          -- exact item ID match
+     *   has_text = true           -- has any non-empty text
+     *   has_item = true           -- has any item (item_id > 0)
+     *   has_action = "Withdraw"   -- has an action containing this string
+     *   limit    = 10            -- max results (default unlimited)
+     */
+    private int find(final Lua lua) {
+        final int top = lua.getTop();
+        final Widget root;
+        final int optsIdx;
+        if (top >= 4) {
+            final int groupId = (int) lua.toInteger(2);
+            final int childId = (int) lua.toInteger(3);
+            root = client.getWidget(groupId, childId);
+            optsIdx = 4;
+        } else {
+            final int componentId = (int) lua.toInteger(2);
+            root = client.getWidget(componentId);
+            optsIdx = 3;
+        }
+
+        lua.createTable(0, 0);
+        if (root == null || root.isHidden()) {
+            return 1;
+        }
+
+        // Parse filter options
+        String textFilter = null;
+        String nameFilter = null;
+        String actionFilter = null;
+        int typeFilter = -1;
+        int itemIdFilter = -1;
+        boolean hasText = false;
+        boolean hasItem = false;
+        int limit = Integer.MAX_VALUE;
+
+        if (lua.type(optsIdx) == Lua.LuaType.TABLE) {
+            lua.getField(optsIdx, "text");
+            if (lua.type(-1) == Lua.LuaType.STRING) {
+                textFilter = lua.toString(-1).toLowerCase();
+            }
+            lua.pop(1);
+
+            lua.getField(optsIdx, "name");
+            if (lua.type(-1) == Lua.LuaType.STRING) {
+                nameFilter = lua.toString(-1).toLowerCase();
+            }
+            lua.pop(1);
+
+            lua.getField(optsIdx, "has_action");
+            if (lua.type(-1) == Lua.LuaType.STRING) {
+                actionFilter = lua.toString(-1).toLowerCase();
+            }
+            lua.pop(1);
+
+            lua.getField(optsIdx, "type");
+            if (lua.type(-1) == Lua.LuaType.NUMBER) {
+                typeFilter = (int) lua.toInteger(-1);
+            }
+            lua.pop(1);
+
+            lua.getField(optsIdx, "item_id");
+            if (lua.type(-1) == Lua.LuaType.NUMBER) {
+                itemIdFilter = (int) lua.toInteger(-1);
+            }
+            lua.pop(1);
+
+            lua.getField(optsIdx, "has_text");
+            if (lua.type(-1) == Lua.LuaType.BOOLEAN) {
+                hasText = lua.toBoolean(-1);
+            }
+            lua.pop(1);
+
+            lua.getField(optsIdx, "has_item");
+            if (lua.type(-1) == Lua.LuaType.BOOLEAN) {
+                hasItem = lua.toBoolean(-1);
+            }
+            lua.pop(1);
+
+            lua.getField(optsIdx, "limit");
+            if (lua.type(-1) == Lua.LuaType.NUMBER) {
+                limit = (int) lua.toInteger(-1);
+            }
+            lua.pop(1);
+        }
+
+        final int[] index = {1};
+        findDescendants(lua, root, textFilter, nameFilter, actionFilter,
+                typeFilter, itemIdFilter, hasText, hasItem, limit, index, 0);
+
+        return 1;
+    }
+
+    private void findDescendants(final Lua lua, final Widget parent,
+            final String textFilter, final String nameFilter, final String actionFilter,
+            final int typeFilter, final int itemIdFilter,
+            final boolean hasText, final boolean hasItem,
+            final int limit, final int[] index, final int depth) {
+        if (depth > MAX_DESCENDANT_DEPTH || index[0] > limit) {
+            return;
+        }
+
+        final Widget[][] groups = {
+            parent.getDynamicChildren(),
+            parent.getStaticChildren(),
+            parent.getNestedChildren()
+        };
+
+        for (final Widget[] group : groups) {
+            if (group == null) {
+                continue;
+            }
+            for (final Widget child : group) {
+                if (child == null || child.isHidden() || index[0] > limit) {
+                    continue;
+                }
+
+                if (matchesFilters(child, textFilter, nameFilter, actionFilter,
+                        typeFilter, itemIdFilter, hasText, hasItem)) {
+                    pushWidget(lua, child);
+                    lua.rawSetI(-2, index[0]++);
+                }
+
+                findDescendants(lua, child, textFilter, nameFilter, actionFilter,
+                        typeFilter, itemIdFilter, hasText, hasItem, limit, index, depth + 1);
+            }
+        }
+    }
+
+    private boolean matchesFilters(final Widget w, final String textFilter,
+            final String nameFilter, final String actionFilter,
+            final int typeFilter, final int itemIdFilter,
+            final boolean hasText, final boolean hasItem) {
+
+        if (typeFilter >= 0 && w.getType() != typeFilter) {
+            return false;
+        }
+
+        if (itemIdFilter >= 0 && w.getItemId() != itemIdFilter) {
+            return false;
+        }
+
+        if (hasText) {
+            final String t = w.getText();
+            if (t == null || t.isEmpty()) {
+                return false;
+            }
+        }
+
+        if (hasItem && w.getItemId() <= 0) {
+            return false;
+        }
+
+        if (textFilter != null) {
+            final String t = w.getText();
+            if (t == null || !t.toLowerCase().contains(textFilter)) {
+                return false;
+            }
+        }
+
+        if (nameFilter != null) {
+            final String n = w.getName();
+            if (n == null || !n.toLowerCase().contains(nameFilter)) {
+                return false;
+            }
+        }
+
+        if (actionFilter != null) {
+            final String[] actions = w.getActions();
+            if (actions == null) {
+                return false;
+            }
+            boolean found = false;
+            for (final String a : actions) {
+                if (a != null && a.toLowerCase().contains(actionFilter)) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Resolve a widget from Lua args — supports (componentId) or (groupId, childId).
+     */
+    private Widget resolveWidget(final Lua lua) {
+        if (lua.getTop() >= 3 && lua.type(3) == Lua.LuaType.NUMBER) {
+            final int groupId = (int) lua.toInteger(2);
+            final int childId = (int) lua.toInteger(3);
+            return client.getWidget(groupId, childId);
+        }
+        final int componentId = (int) lua.toInteger(2);
+        return client.getWidget(componentId);
+    }
+
+    /**
      * widget:text(groupId, childId) -> string or nil
      * widget:text(componentId) -> string or nil
      * Shortcut to get just the text content of a widget.
@@ -180,27 +504,71 @@ public class WidgetApi {
     /**
      * widget:set_text(groupId, childId, text)
      * widget:set_text(componentId, text)
-     * Sets the text content of a widget.
+     * widget:set_text(componentId, text, childIndex)
+     * Sets the text content of a widget. When childIndex is provided,
+     * addresses a dynamic/static/nested child by its merged index
+     * (same ordering as widget:children()).
      */
     private int set_text(final Lua lua) {
-        final Widget w;
-        final String text;
-        if (lua.getTop() >= 4) {
+        final int top = lua.getTop();
+
+        if (top >= 4 && lua.type(4) != Lua.LuaType.NUMBER) {
+            // widget:set_text(groupId, childId, text)
             final int groupId = (int) lua.toInteger(2);
             final int childId = (int) lua.toInteger(3);
-            w = client.getWidget(groupId, childId);
-            text = lua.toString(4);
-        } else {
+            final Widget w = client.getWidget(groupId, childId);
+            final String text = lua.toString(4);
+            if (w != null && text != null) {
+                w.setText(text);
+            }
+        } else if (top >= 4) {
+            // widget:set_text(componentId, text, childIndex)
             final int componentId = (int) lua.toInteger(2);
-            w = client.getWidget(componentId);
-            text = lua.toString(3);
-        }
-
-        if (w != null && text != null) {
-            w.setText(text);
+            final String text = lua.toString(3);
+            final int childIndex = (int) lua.toInteger(4);
+            final Widget parent = client.getWidget(componentId);
+            if (parent != null && text != null) {
+                final Widget child = findChildByWidgetIndex(parent, childIndex);
+                if (child != null) {
+                    child.setText(text);
+                }
+            }
+        } else {
+            // widget:set_text(componentId, text)
+            final int componentId = (int) lua.toInteger(2);
+            final Widget w = client.getWidget(componentId);
+            final String text = lua.toString(3);
+            if (w != null && text != null) {
+                w.setText(text);
+            }
         }
 
         return 0;
+    }
+
+    /**
+     * Find a child widget by its Widget.getIndex() value, searching
+     * dynamic, static, and nested children (same order as widget:children()).
+     */
+    private Widget findChildByWidgetIndex(final Widget parent, final int targetIndex) {
+        final Widget[][] groups = {
+            parent.getDynamicChildren(),
+            parent.getStaticChildren(),
+            parent.getNestedChildren()
+        };
+
+        for (final Widget[] group : groups) {
+            if (group == null) {
+                continue;
+            }
+            for (final Widget child : group) {
+                if (child != null && child.getIndex() == targetIndex) {
+                    return child;
+                }
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -313,11 +681,35 @@ public class WidgetApi {
             lua.setField(-2, "scroll_height");
         }
 
+        // Child count (dynamic + static + nested, including hidden)
+        int childCount = 0;
+        final Widget[] dc = w.getDynamicChildren();
+        final Widget[] sc = w.getStaticChildren();
+        final Widget[] nc = w.getNestedChildren();
+        if (dc != null) { childCount += dc.length; }
+        if (sc != null) { childCount += sc.length; }
+        if (nc != null) { childCount += nc.length; }
+        if (childCount > 0) {
+            lua.push(childCount);
+            lua.setField(-2, "child_count");
+        }
+
         // Text styling
         final int textColor = w.getTextColor();
         if (textColor != 0) {
             lua.push(textColor);
             lua.setField(-2, "text_color");
+        }
+
+        final int fontId = w.getFontId();
+        if (fontId > 0) {
+            lua.push(fontId);
+            lua.setField(-2, "font_id");
+        }
+
+        if (w.getTextShadowed()) {
+            lua.push(true);
+            lua.setField(-2, "text_shadowed");
         }
 
         lua.push(w.getOpacity());
