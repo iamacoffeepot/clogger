@@ -142,6 +142,7 @@ public class RaggerPlugin extends Plugin {
             config.claudeModel(),
             config.bridgePort(),
             bridgeServer.getToken(),
+            "console",
             config.devMode(),
             config.extraTools()
         );
@@ -429,6 +430,7 @@ public class RaggerPlugin extends Plugin {
                 config.claudeModel(),
                 config.bridgePort(),
                 bridgeServer.getToken(),
+                "console",
                 config.devMode(),
                 config.extraTools()
             );
@@ -439,6 +441,7 @@ public class RaggerPlugin extends Plugin {
                 config.claudeModel(),
                 config.bridgePort(),
                 bridgeServer.getToken(),
+                "console",
                 config.devMode(),
                 config.extraTools()
             );

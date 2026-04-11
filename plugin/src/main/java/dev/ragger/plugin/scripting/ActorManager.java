@@ -78,7 +78,9 @@ public class ActorManager {
     // --- Mail and event queues ---
 
     private final ConcurrentLinkedQueue<MailMessage> mailQueue = new ConcurrentLinkedQueue<>();
-    private final ConcurrentLinkedQueue<MailMessage> claudeMailbox = new ConcurrentLinkedQueue<>();
+    /** Per-channel mailboxes for Claude instances (e.g. "console", "agent"). */
+    private final ConcurrentHashMap<String, ConcurrentLinkedQueue<MailMessage>> claudeMailboxes =
+        new ConcurrentHashMap<>();
     private final ConcurrentLinkedQueue<LuaEvent> eventQueue = new ConcurrentLinkedQueue<>();
     private final ConcurrentLinkedQueue<PendingSpawn> spawnQueue = new ConcurrentLinkedQueue<>();
     private final ConcurrentLinkedQueue<String> unloadQueue = new ConcurrentLinkedQueue<>();
@@ -302,8 +304,9 @@ public class ActorManager {
         }
 
         for (final MailMessage m : batch) {
-            if ("claude".equals(m.to())) {
-                claudeMailbox.add(m);
+            final String channel = parseClaudeChannel(m.to());
+            if (channel != null) {
+                claudeMailboxes.computeIfAbsent(channel, k -> new ConcurrentLinkedQueue<>()).add(m);
                 continue;
             }
 
@@ -323,29 +326,43 @@ public class ActorManager {
     }
 
     /**
-     * Drain all messages addressed to "claude" and return them.
+     * Drain all messages from the given Claude channel mailbox.
      */
-    public List<MailMessage> drainClaudeMailbox() {
+    public List<MailMessage> drainClaudeMailbox(final String channel) {
+        final ConcurrentLinkedQueue<MailMessage> mailbox = claudeMailboxes.get(channel);
+        if (mailbox == null) {
+            return List.of();
+        }
+
         final List<MailMessage> messages = new ArrayList<>();
         MailMessage msg;
-        while ((msg = claudeMailbox.poll()) != null) {
+        while ((msg = mailbox.poll()) != null) {
             messages.add(msg);
         }
         return messages;
     }
 
     /**
-     * Drain up to {@code limit} messages from the claude mailbox, optionally filtered by sender.
-     * If limit <= 0, drains all matching messages. The fromFilter is a regex pattern
-     * (e.g. "loot-.*", "quest-guide/.*", or an exact name like "ping").
+     * Drain up to {@code limit} messages from the given Claude channel mailbox, optionally
+     * filtered by sender. If limit <= 0, drains all matching messages. The fromFilter is a
+     * regex pattern (e.g. "loot-.*", "quest-guide/.*", or an exact name like "ping").
      */
-    public List<MailMessage> drainClaudeMailbox(final int limit, final String fromFilter) {
+    public List<MailMessage> drainClaudeMailbox(
+        final String channel,
+        final int limit,
+        final String fromFilter
+    ) {
+        final ConcurrentLinkedQueue<MailMessage> mailbox = claudeMailboxes.get(channel);
+        if (mailbox == null) {
+            return List.of();
+        }
+
         final Pattern pattern = compileFromFilter(fromFilter);
         final List<MailMessage> matched = new ArrayList<>();
         final List<MailMessage> skipped = new ArrayList<>();
 
         MailMessage msg;
-        while ((msg = claudeMailbox.poll()) != null) {
+        while ((msg = mailbox.poll()) != null) {
             final boolean matches = (pattern == null || pattern.matcher(msg.from()).matches());
             final boolean underLimit = (limit <= 0 || matched.size() < limit);
 
@@ -358,26 +375,47 @@ public class ActorManager {
 
         // Put non-matching messages back
         for (final MailMessage s : skipped) {
-            claudeMailbox.add(s);
+            mailbox.add(s);
         }
 
         return matched;
     }
 
     /**
-     * Count how many claude mailbox messages match the given filter, without consuming them.
+     * Count how many messages in the given Claude channel mailbox match the filter,
+     * without consuming them.
      */
-    public int countClaudeMailbox(final String fromFilter) {
+    public int countClaudeMailbox(final String channel, final String fromFilter) {
+        final ConcurrentLinkedQueue<MailMessage> mailbox = claudeMailboxes.get(channel);
+        if (mailbox == null) {
+            return 0;
+        }
+
         final Pattern pattern = compileFromFilter(fromFilter);
         int count = 0;
 
-        for (final MailMessage msg : claudeMailbox) {
+        for (final MailMessage msg : mailbox) {
             if (pattern == null || pattern.matcher(msg.from()).matches()) {
                 count++;
             }
         }
 
         return count;
+    }
+
+    /**
+     * Parse a Claude channel from a mail target. Returns the channel name (e.g. "console",
+     * "agent") or null if the target is not addressed to Claude.
+     * Bare "claude" maps to "console" for backwards compatibility.
+     */
+    static String parseClaudeChannel(final String to) {
+        if ("claude".equals(to)) {
+            return "console";
+        }
+        if (to.startsWith("claude:")) {
+            return to.substring(7);
+        }
+        return null;
     }
 
     private static Pattern compileFromFilter(final String fromFilter) {

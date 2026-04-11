@@ -202,7 +202,7 @@ public class BridgeServer {
             }
 
             final List<MailMessage> messages = actorManager.drainClaudeMailbox(
-                pending.remaining(), pending.fromFilter);
+                pending.channel, pending.remaining(), pending.fromFilter);
             pending.collected.addAll(messages);
 
             if (pending.remaining() <= 0) {
@@ -382,7 +382,8 @@ public class BridgeServer {
             limit = 0;
         }
 
-        final List<MailMessage> messages = actorManager.drainClaudeMailbox(limit, fromFilter);
+        final String channel = params.getOrDefault("channel", "console");
+        final List<MailMessage> messages = actorManager.drainClaudeMailbox(channel, limit, fromFilter);
         respond(exchange, 200, formatMailMessages(messages));
     }
 
@@ -425,9 +426,10 @@ public class BridgeServer {
             timeoutSec = MAIL_RECV_DEFAULT_TIMEOUT;
         }
 
+        final String channel = params.getOrDefault("channel", "console");
         final CompletableFuture<String> future = new CompletableFuture<>();
         final long deadlineMs = System.currentTimeMillis() + (timeoutSec * 1000L);
-        pendingMailRecvs.add(new PendingMailRecv(count, fromFilter, deadlineMs, future));
+        pendingMailRecvs.add(new PendingMailRecv(channel, count, fromFilter, deadlineMs, future));
 
         try {
             final long futureTimeout = timeoutSec + MAIL_RECV_BUFFER_SECONDS;
@@ -553,6 +555,9 @@ public class BridgeServer {
             exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
 
         try {
+            final Map<String, String> params = parseQueryParams(exchange);
+            final String channel = params.getOrDefault("channel", "console");
+            final String sender = "claude:" + channel;
             final JsonElement parsed = new JsonParser().parse(body);
 
             // Batch mode: array of {target, data} messages
@@ -572,7 +577,7 @@ public class BridgeServer {
                     @SuppressWarnings("unchecked")
                     final Map<String, Object> map =
                         (Map<String, Object>) fromJsonElement(data);
-                    actorManager.enqueueMail("claude", target, map);
+                    actorManager.enqueueMail(sender, target, map);
                     queued++;
                 }
 
@@ -594,7 +599,7 @@ public class BridgeServer {
             @SuppressWarnings("unchecked")
             final Map<String, Object> map = (Map<String, Object>) fromJsonElement(data);
 
-            actorManager.enqueueMail("claude", target, map);
+            actorManager.enqueueMail(sender, target, map);
             respond(exchange, 200,
                 "{\"status\":\"queued\",\"target\":\"" + target + "\"}");
         } catch (final Exception e) {
@@ -623,6 +628,7 @@ public class BridgeServer {
 
     private static class PendingMailRecv {
 
+        final String channel;
         final int count;
         final String fromFilter;
         final long deadlineMs;
@@ -630,11 +636,13 @@ public class BridgeServer {
         final List<MailMessage> collected = new ArrayList<>();
 
         PendingMailRecv(
+            final String channel,
             final int count,
             final String fromFilter,
             final long deadlineMs,
             final CompletableFuture<String> future
         ) {
+            this.channel = channel;
             this.count = count;
             this.fromFilter = fromFilter;
             this.deadlineMs = deadlineMs;

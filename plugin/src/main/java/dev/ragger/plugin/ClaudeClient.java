@@ -33,6 +33,7 @@ public class ClaudeClient {
     private final String model;
     private final int bridgePort;
     private final String bridgeToken;
+    private final String channel;
     private final boolean devMode;
     private final String extraTools;
     private String sessionId;
@@ -44,6 +45,7 @@ public class ClaudeClient {
         final String model,
         final int bridgePort,
         final String bridgeToken,
+        final String channel,
         final boolean devMode,
         final String extraTools
     ) {
@@ -51,6 +53,7 @@ public class ClaudeClient {
         this.model = model;
         this.bridgePort = bridgePort;
         this.bridgeToken = bridgeToken;
+        this.channel = channel;
         this.devMode = devMode;
         this.extraTools = extraTools;
     }
@@ -156,6 +159,7 @@ public class ClaudeClient {
         }
         pb.environment().put("RAGGER_BRIDGE_PORT", String.valueOf(bridgePort));
         pb.environment().put("RAGGER_BRIDGE_TOKEN", bridgeToken);
+        pb.environment().put("RAGGER_CHANNEL", channel);
         pb.redirectErrorStream(true);
         pb.redirectInput(ProcessBuilder.Redirect.from(new File("/dev/null")));
         cancelled = false;

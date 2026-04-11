@@ -14,12 +14,15 @@ mcp = FastMCP("ragger")
 BRIDGE_URL = f"http://127.0.0.1:{os.environ.get('RAGGER_BRIDGE_PORT', '7919')}"
 BRIDGE_TOKEN = os.environ.get("RAGGER_BRIDGE_TOKEN", "")
 BRIDGE_HEADERS: dict[str, str] = {"Authorization": f"Bearer {BRIDGE_TOKEN}"}
+BRIDGE_CHANNEL = os.environ.get("RAGGER_CHANNEL", "console")
 
 
-def _bridge_post(path: str, body: dict | list) -> str:
+def _bridge_post(
+    path: str, body: dict | list, params: dict[str, str] | None = None
+) -> str:
     try:
         resp = requests.post(
-            f"{BRIDGE_URL}{path}", json=body, headers=BRIDGE_HEADERS, timeout=10
+            f"{BRIDGE_URL}{path}", json=body, params=params, headers=BRIDGE_HEADERS, timeout=10
         )
         return resp.text
     except requests.ConnectionError:
@@ -104,7 +107,7 @@ def ragger_mail_recv_async(limit: int = 0, from_actor: str = "") -> str:
         from_actor: Regex pattern to match sender actor names
             (e.g. "loot-.*", "quest-guide/.*"). Empty string = any actor.
     """
-    params: dict[str, int | str] = {}
+    params: dict[str, int | str] = {"channel": BRIDGE_CHANNEL}
     if limit > 0:
         params["limit"] = limit
     if from_actor:
@@ -126,7 +129,9 @@ def ragger_mail_recv_sync(count: int = 1, from_actor: str = "", timeout: int = 3
             (e.g. "loot-.*", "quest-guide/.*"). Empty string = any actor.
         timeout: Max seconds to wait (1-300, default 30).
     """
-    params: dict[str, int | str] = {"count": max(1, count), "timeout": min(300, max(1, timeout))}
+    params: dict[str, int | str] = {
+        "channel": BRIDGE_CHANNEL, "count": max(1, count), "timeout": min(300, max(1, timeout)),
+    }
     if from_actor:
         params["from"] = from_actor
     return _bridge_get("/mail-recv-block", params, timeout=timeout + 10)
@@ -147,7 +152,9 @@ def ragger_mail_send(name: str, messages: list[dict]) -> str:
         name: Target actor name (e.g. "tile-marker", "npc-highlighter")
         messages: List of data dicts to deliver
     """
-    return _bridge_post("/mail", [{"target": name, "data": m} for m in messages])
+    return _bridge_post(
+        "/mail", [{"target": name, "data": m} for m in messages], params={"channel": BRIDGE_CHANNEL}
+    )
 
 
 @mcp.tool(name="MailSendBatch")
@@ -159,7 +166,9 @@ def ragger_mail_send_batch(messages: list[BatchMailMessage]) -> str:
     Args:
         messages: List of {target: str, data: dict} messages to deliver
     """
-    return _bridge_post("/mail", [m.model_dump() for m in messages])
+    return _bridge_post(
+        "/mail", [m.model_dump() for m in messages], params={"channel": BRIDGE_CHANNEL}
+    )
 
 
 if __name__ == "__main__":
