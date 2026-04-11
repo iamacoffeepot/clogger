@@ -65,6 +65,33 @@ return result
 return [cls(*r) for r in rows]
 ```
 
+## Line width — ~120 chars, prefer unsplit
+
+Keep lines unsplit when they fit in ~120 characters. When wrapping is needed, put each element on its own line with the closing delimiter at the original indent level:
+
+```python
+# WRONG — inconsistent wrapping
+def fetch_monsters(conn: sqlite3.Connection, category: str,
+                   include_drops: bool = True) -> list[Monster]:
+
+# WRONG — too aggressive, these fit on one line
+def search(
+    conn: sqlite3.Connection,
+    name: str,
+) -> list[Item]:
+
+# RIGHT — each param on its own line, closing paren at original indent
+def fetch_monsters(
+    conn: sqlite3.Connection,
+    category: str,
+    include_drops: bool = True,
+    include_locations: bool = True,
+) -> list[Monster]:
+
+# RIGHT — fits on one line, keep it there
+def search(conn: sqlite3.Connection, name: str) -> list[Item]:
+```
+
 ## Blank lines — group by purpose
 
 Same principle as Java. Separate guards, setup, and return with blank lines.
