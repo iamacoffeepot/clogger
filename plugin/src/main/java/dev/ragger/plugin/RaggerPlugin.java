@@ -111,6 +111,7 @@ public class RaggerPlugin extends Plugin {
     private ConsoleOverlay consoleOverlay;
     private BridgeServer bridgeServer;
     private ClaudeClient claude;
+    private ClaudeClient agentClaude;
     private KeyListener consoleKeyListener;
     private net.runelite.client.input.MouseWheelListener consoleMouseWheelListener;
     private MouseListener actorMouseListener;
@@ -138,6 +139,8 @@ public class RaggerPlugin extends Plugin {
         }
 
         claude = rebuildConsole();
+        startAgent();
+
         chatPanel = new ChatPanel();
         chatPanel.setActorManager(actorManager);
 
@@ -232,6 +235,7 @@ public class RaggerPlugin extends Plugin {
         keyManager.unregisterKeyListener(consoleKeyListener);
         mouseManager.unregisterMouseWheelListener(consoleMouseWheelListener);
         mouseManager.unregisterMouseListener(actorMouseListener);
+        stopAgent();
         bridgeServer.stop();
         serviceManager.shutdown();
         actorManager.shutdown();
@@ -416,11 +420,24 @@ public class RaggerPlugin extends Plugin {
                     log.error("Failed to restart bridge server on new port", e);
                 }
                 claude = rebuildConsole();
+                stopAgent();
+                startAgent();
                 log.info("Bridge server restarted on port {}", config.bridgePort());
             }
-            case "claudePath", "consoleModel", "consoleDevMode", "consoleExtraTools" -> {
+            case "claudePath" -> {
+                claude = rebuildConsole();
+                stopAgent();
+                startAgent();
+                log.info("Claude clients recreated with updated CLI path");
+            }
+            case "consoleModel", "consoleDevMode", "consoleExtraTools" -> {
                 claude = rebuildConsole();
                 log.info("Console Claude recreated with updated config");
+            }
+            case "agentEnabled", "agentModel", "agentDevMode", "agentExtraTools" -> {
+                stopAgent();
+                startAgent();
+                log.info("Agent Claude restarted with updated config");
             }
         }
     }
@@ -435,6 +452,64 @@ public class RaggerPlugin extends Plugin {
             config.consoleDevMode(),
             config.consoleExtraTools()
         );
+    }
+
+    private ClaudeClient rebuildAgent() {
+        return new ClaudeClient(
+            config.claudePath(),
+            config.agentModel(),
+            config.bridgePort(),
+            bridgeServer.getToken(),
+            "agent",
+            config.agentDevMode(),
+            config.agentExtraTools()
+        );
+    }
+
+    private void startAgent() {
+        if (!config.agentEnabled()) {
+            return;
+        }
+
+        agentClaude = rebuildAgent();
+        agentClaude.send(
+            "You are now running. Begin your mail receive loop.",
+            new ClaudeClient.StreamListener() {
+                @Override
+                public void onText(final String text) {}
+
+                @Override
+                public void onToolUse(final String toolLog) {
+                    log.debug("Agent tool: {}", toolLog);
+                }
+
+                @Override
+                public void onComplete(final String finalText) {
+                    log.info("Agent session completed");
+                }
+
+                @Override
+                public void onError(final String error) {
+                    log.error("Agent error: {}", error);
+                }
+
+                @Override
+                public void onCancelled() {
+                    log.info("Agent cancelled");
+                }
+            },
+            "BASE", "AGENT"
+        );
+
+        log.info("Agent Claude started");
+    }
+
+    private void stopAgent() {
+        if (agentClaude != null) {
+            agentClaude.cancel();
+            agentClaude = null;
+            log.info("Agent Claude stopped");
+        }
     }
 
     private void onUserMessage(final String message) {
