@@ -201,6 +201,13 @@ class LeagueConfig:
         for skill_name, level in data.get("starting-skills", {}).items():
             starting_skills[Skill.from_label(skill_name)] = level
 
+        def _parse_tier_list(raw: dict | list | None) -> list[int]:
+            if raw is None:
+                return []
+            if isinstance(raw, list):
+                return raw
+            return [raw[k] for k in sorted(raw)]
+
         return LeagueConfig(
             starting_region=Region.from_label(data["starting-region"]),
             starting_location=data.get("starting-location", ""),
@@ -209,10 +216,10 @@ class LeagueConfig:
             max_region_unlocks=data["max-region-unlocks"],
             starting_skills=starting_skills,
             autocompleted_quests=data["autocompleted-quests"],
-            relic_thresholds=data.get("relic-thresholds", []),
-            xp_multipliers=data.get("xp-multipliers", []),
-            drop_multipliers=data.get("drop-multipliers", []),
-            minigame_multipliers=data.get("minigame-multipliers", []),
+            relic_thresholds=_parse_tier_list(data.get("relic-thresholds")),
+            xp_multipliers=_parse_tier_list(data.get("xp-multipliers")),
+            drop_multipliers=_parse_tier_list(data.get("drop-multipliers")),
+            minigame_multipliers=_parse_tier_list(data.get("minigame-multipliers")),
         )
 
     def completed_quests(self, conn: sqlite3.Connection, resolve_chains: bool = True) -> list[Quest]:
