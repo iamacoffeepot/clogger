@@ -137,15 +137,7 @@ public class RaggerPlugin extends Plugin {
             log.error("Failed to start bridge server", e);
         }
 
-        claude = new ClaudeClient(
-            config.claudePath(),
-            config.claudeModel(),
-            config.bridgePort(),
-            bridgeServer.getToken(),
-            "console",
-            config.devMode(),
-            config.extraTools()
-        );
+        claude = rebuildConsole();
         chatPanel = new ChatPanel();
         chatPanel.setActorManager(actorManager);
 
@@ -415,38 +407,34 @@ public class RaggerPlugin extends Plugin {
             return;
         }
 
-        final String key = event.getKey();
-
-        if ("bridgePort".equals(key)) {
-            bridgeServer.stop();
-            try {
-                bridgeServer.start(config.bridgePort());
-            } catch (final IOException e) {
-                log.error("Failed to restart bridge server on new port", e);
+        switch (event.getKey()) {
+            case "bridgePort" -> {
+                bridgeServer.stop();
+                try {
+                    bridgeServer.start(config.bridgePort());
+                } catch (final IOException e) {
+                    log.error("Failed to restart bridge server on new port", e);
+                }
+                claude = rebuildConsole();
+                log.info("Bridge server restarted on port {}", config.bridgePort());
             }
-
-            claude = new ClaudeClient(
-                config.claudePath(),
-                config.claudeModel(),
-                config.bridgePort(),
-                bridgeServer.getToken(),
-                "console",
-                config.devMode(),
-                config.extraTools()
-            );
-            log.info("Bridge server restarted on port {}", config.bridgePort());
-        } else if ("claudePath".equals(key) || "claudeModel".equals(key) || "devMode".equals(key) || "extraTools".equals(key)) {
-            claude = new ClaudeClient(
-                config.claudePath(),
-                config.claudeModel(),
-                config.bridgePort(),
-                bridgeServer.getToken(),
-                "console",
-                config.devMode(),
-                config.extraTools()
-            );
-            log.info("Claude client recreated with updated config");
+            case "claudePath", "consoleModel", "consoleDevMode", "consoleExtraTools" -> {
+                claude = rebuildConsole();
+                log.info("Console Claude recreated with updated config");
+            }
         }
+    }
+
+    private ClaudeClient rebuildConsole() {
+        return new ClaudeClient(
+            config.claudePath(),
+            config.consoleModel(),
+            config.bridgePort(),
+            bridgeServer.getToken(),
+            "console",
+            config.consoleDevMode(),
+            config.consoleExtraTools()
+        );
     }
 
     private void onUserMessage(final String message) {
