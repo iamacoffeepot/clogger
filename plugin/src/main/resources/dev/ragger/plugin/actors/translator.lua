@@ -1,17 +1,27 @@
 -- translator: Scans visible widget text, batches to Claude for translation,
--- applies translations back to widgets. Supports language switching and debug
--- toggle via mail.
+-- applies translations back to widgets. Supports language switching and
+-- log level control via mail.
 --
 -- Mail API:
---   {language="French"}     — switch target language, clears cache
---   {debug=true/false}      — set debug mode
---   {debug="toggle"}        — toggle debug mode
+--   {language="French"}           — switch target language, clears cache
+--   {log_level="info"}            — set log level: "silent", "info", "debug"
 --
 -- Config (via args table when spawned from template):
---   args.language            — initial target language (default "French")
---   args.debug               — initial debug state (default false)
+--   args.language                  — initial target language (default "UwU")
+--   args.log_level                 — initial log level (default "info")
 
-local DEBUG = args and args.debug or false
+local LOG_SILENT = 0
+local LOG_INFO = 1
+local LOG_DEBUG = 2
+local LOG_NAMES = { silent = LOG_SILENT, info = LOG_INFO, debug = LOG_DEBUG }
+
+local function parse_log_level(val)
+    if type(val) == "number" then return val end
+    if type(val) == "string" then return LOG_NAMES[val] or LOG_INFO end
+    return LOG_INFO
+end
+
+local log_level = parse_log_level(args and args.log_level)
 local language = args and args.language or "UwU"
 
 local cache = {}
@@ -38,8 +48,14 @@ local batch_started_frame = 0
 local needs_full_scan = false
 local prev_root_set = {}
 
+local function info(msg)
+    if log_level >= LOG_INFO then
+        chat:game(PREFIX .. " " .. msg)
+    end
+end
+
 local function dbg(msg)
-    if DEBUG then
+    if log_level >= LOG_DEBUG then
         chat:game(PREFIX .. " " .. msg)
     end
 end
@@ -187,7 +203,7 @@ local function send_batch()
     batch_started_frame = 0
 
     dbg("Sending batch #" .. bid .. " (" .. #order .. " texts)")
-    chat:game(PREFIX .. " Translating " .. #order .. " texts (batch " .. bid .. ")...")
+    info("Translating " .. #order .. " texts (batch " .. bid .. ")...")
 
     mail:send("claude:agent", {
         question = "Translate these texts to " .. language .. ". Return ONLY a JSON object: {\"batch_id\":" .. bid .. ",\"translations\":[...]} where translations is an array of translated strings in the same order. Preserve any <col=hex> or <br> tags exactly. Do not add extra tags. Texts:\n" .. json.encode(order)
@@ -198,9 +214,9 @@ end
 
 local function expire_pending()
     local expired = 0
-    for bid, info in pairs(in_flight) do
-        if frame - info.frame > PENDING_TIMEOUT then
-            for _, text in ipairs(info.order) do
+    for bid, flight in pairs(in_flight) do
+        if frame - flight.frame > PENDING_TIMEOUT then
+            for _, text in ipairs(flight.order) do
                 pending[text] = nil
                 pending_frame[text] = nil
             end
@@ -297,7 +313,11 @@ end
 
 return {
     on_start = function()
-        chat:game(PREFIX .. " Active - language: " .. language .. (DEBUG and " [DEBUG]" or ""))
+        local level_name = "info"
+        for name, val in pairs(LOG_NAMES) do
+            if val == log_level then level_name = name end
+        end
+        info("Active - language: " .. language .. " [" .. level_name .. "]")
         for gid = 0, 900 do
             local w = widget:get(gid, 0)
             if w then
@@ -387,13 +407,13 @@ return {
     on_mail = function(from, data)
         dbg("Mail from: " .. tostring(from))
 
-        if data and data.debug ~= nil then
-            if data.debug == "toggle" then
-                DEBUG = not DEBUG
-            else
-                DEBUG = data.debug and true or false
+        if data and data.log_level ~= nil then
+            log_level = parse_log_level(data.log_level)
+            local level_name = "info"
+            for name, val in pairs(LOG_NAMES) do
+                if val == log_level then level_name = name end
             end
-            chat:game(PREFIX .. " Debug " .. (DEBUG and "ON" or "OFF"))
+            chat:game(PREFIX .. " Log level: " .. level_name)
             return
         end
 
@@ -411,7 +431,7 @@ return {
             batch_started_frame = 0
             widget_refs = {}
             needs_full_scan = true
-            chat:game(PREFIX .. " Language changed to: " .. language)
+            info("Language changed to: " .. language)
             return
         end
 
@@ -424,8 +444,8 @@ return {
             else
                 -- Fallback: find oldest in-flight batch
                 local oldest_bid, oldest_frame = nil, math.huge
-                for k, info in pairs(in_flight) do
-                    if info.frame < oldest_frame then
+                for k, flight in pairs(in_flight) do
+                    if flight.frame < oldest_frame then
                         oldest_bid = k
                         oldest_frame = info.frame
                     end
@@ -450,7 +470,7 @@ return {
                         matched = matched + 1
                     end
                 end
-                chat:game(PREFIX .. " " .. matched .. " translated" .. (bid and " (batch " .. bid .. ")" or ""))
+                info(matched .. " translated" .. (bid and " (batch " .. bid .. ")" or ""))
             end
         else
             dbg("Ignoring non-translation mail")
@@ -459,6 +479,6 @@ return {
 
     on_stop = function()
         local restored = restore_all()
-        chat:game(PREFIX .. " Stopped. Restored " .. restored .. " widgets.")
+        info("Stopped. Restored " .. restored .. " widgets.")
     end
 }
