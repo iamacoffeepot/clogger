@@ -46,6 +46,9 @@ public class WidgetApi {
         lua.push(this::text);
         lua.setField(-2, "text");
 
+        lua.push(this::set_text);
+        lua.setField(-2, "set_text");
+
         // Register InterfaceID constants (BANK, INVENTORY, etc.)
         registerInterfaceConstants(lua);
 
@@ -172,6 +175,32 @@ public class WidgetApi {
         }
 
         return 1;
+    }
+
+    /**
+     * widget:set_text(groupId, childId, text)
+     * widget:set_text(componentId, text)
+     * Sets the text content of a widget.
+     */
+    private int set_text(final Lua lua) {
+        final Widget w;
+        final String text;
+        if (lua.getTop() >= 4) {
+            final int groupId = (int) lua.toInteger(2);
+            final int childId = (int) lua.toInteger(3);
+            w = client.getWidget(groupId, childId);
+            text = lua.toString(4);
+        } else {
+            final int componentId = (int) lua.toInteger(2);
+            w = client.getWidget(componentId);
+            text = lua.toString(3);
+        }
+
+        if (w != null && text != null) {
+            w.setText(text);
+        }
+
+        return 0;
     }
 
     /**
