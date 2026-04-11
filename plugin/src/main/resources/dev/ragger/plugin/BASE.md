@@ -1018,6 +1018,32 @@ return {
 - Self-send is allowed (delivered next tick)
 - Data tables support string, number, boolean values and nested tables (maps and arrays up to 8 levels deep).
 
+#### Sending prompts to the background agent
+
+Actors can send questions to the background Claude agent at `claude:agent`. The agent automatically replies to the sender using the `from` field set by the mail system — no need to specify a reply address.
+
+```lua
+mail:send("claude:agent", { question = "What level do I need for Cook's Assistant?" })
+```
+
+The agent processes the message and replies via mail. Handle the response in `on_mail`:
+
+```lua
+return {
+    on_start = function()
+        mail:send("claude:agent", { question = "What items do I need for Cook's Assistant?" })
+    end,
+
+    on_mail = function(from, data)
+        if from == "claude:agent" then
+            chat:game(tostring(data.text or data.result))
+        end
+    end
+}
+```
+
+The agent runs an async loop — responses are not instant. Design actors to continue operating while waiting for a reply.
+
 ### API: `json`
 
 Encode and decode JSON strings.
