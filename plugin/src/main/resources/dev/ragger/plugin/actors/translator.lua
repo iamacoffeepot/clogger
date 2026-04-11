@@ -12,7 +12,7 @@
 --   args.debug               — initial debug state (default false)
 
 local DEBUG = args and args.debug or false
-local language = args and args.language or "French"
+local language = args and args.language or "UwU"
 
 local cache = {}
 local reverse = {}
@@ -20,20 +20,20 @@ local originals = {}
 local applied = {}
 local pending = {}
 local pending_frame = {}
-local sent_order = {}
 local batch = {}
 local widget_refs = {}
 local known_groups = {}
+local in_flight = {}
 
 local PREFIX = "[translator]"
 local MIN_LEN = 4
 local BATCH_MAX = 50
-local BATCH_DELAY = 150
+local BATCH_DELAY = 2
 local PENDING_TIMEOUT = 6000
 local RESCAN_INTERVAL = 150
 local frame = 0
 local last_scan_frame = 0
-local batch_in_flight = false
+local next_batch_id = 1
 local batch_started_frame = 0
 local needs_full_scan = false
 local prev_root_set = {}
@@ -173,21 +173,24 @@ local function apply_scan()
 end
 
 local function send_batch()
-    if #batch == 0 or batch_in_flight then return end
-    sent_order = {}
+    if #batch == 0 then return end
+    local bid = next_batch_id
+    next_batch_id = next_batch_id + 1
+
+    local order = {}
     for i = 1, #batch do
-        sent_order[i] = batch[i]
+        order[i] = batch[i]
         pending[batch[i]] = true
         pending_frame[batch[i]] = frame
     end
-    batch_in_flight = true
+    in_flight[bid] = { order = order, frame = frame }
     batch_started_frame = 0
 
-    dbg("Sending batch of " .. #batch)
-    chat:game(PREFIX .. " Translating " .. #batch .. " texts...")
+    dbg("Sending batch #" .. bid .. " (" .. #order .. " texts)")
+    chat:game(PREFIX .. " Translating " .. #order .. " texts (batch " .. bid .. ")...")
 
     mail:send("claude:agent", {
-        question = "Translate these texts to " .. language .. ". Return ONLY a JSON array of translated strings in the same order. Preserve any <col=hex> or <br> tags exactly. Do not add extra tags. Texts:\n" .. json.encode(sent_order)
+        question = "Translate these texts to " .. language .. ". Return ONLY a JSON object: {\"batch_id\":" .. bid .. ",\"translations\":[...]} where translations is an array of translated strings in the same order. Preserve any <col=hex> or <br> tags exactly. Do not add extra tags. Texts:\n" .. json.encode(order)
     })
 
     batch = {}
@@ -195,15 +198,18 @@ end
 
 local function expire_pending()
     local expired = 0
-    for text, f in pairs(pending_frame) do
-        if frame - f > PENDING_TIMEOUT then
-            pending[text] = nil
-            pending_frame[text] = nil
+    for bid, info in pairs(in_flight) do
+        if frame - info.frame > PENDING_TIMEOUT then
+            for _, text in ipairs(info.order) do
+                pending[text] = nil
+                pending_frame[text] = nil
+            end
+            in_flight[bid] = nil
             expired = expired + 1
         end
     end
     if expired > 0 then
-        batch_in_flight = false
+        dbg("Expired " .. expired .. " batch(es)")
         needs_full_scan = true
     end
 end
@@ -227,22 +233,48 @@ local function check_roots()
 end
 
 local function parse_translations(data)
+    -- Direct table result with batch_id and translations
     if type(data.result) == "table" then
+        if data.result.batch_id and data.result.translations then
+            return data.result.batch_id, data.result.translations
+        end
         if data.result[1] ~= nil and type(data.result[1]) == "string" then
-            return data.result
+            return nil, data.result
         end
     end
 
+    -- Parse from text/string result
     local text = data.text
     if not text and type(data.result) == "string" then
         text = data.result
     end
-    if not text then return nil end
+    if not text then return nil, nil end
 
+    -- Try parsing a JSON object with batch_id and translations
+    local obj_start = text:find("{")
+    if obj_start then
+        local depth = 0
+        local obj_end = nil
+        for i = obj_start, #text do
+            local c = text:sub(i, i)
+            if c == "{" then depth = depth + 1
+            elseif c == "}" then
+                depth = depth - 1
+                if depth == 0 then obj_end = i; break end
+            end
+        end
+        if obj_end then
+            local ok, result = pcall(json.decode, text:sub(obj_start, obj_end))
+            if ok and type(result) == "table" and result.batch_id and result.translations then
+                return result.batch_id, result.translations
+            end
+        end
+    end
+
+    -- Fallback: bare JSON array (no batch_id)
     local depth = 0
     local arr_start = nil
     local arr_end = nil
-
     for i = 1, #text do
         local c = text:sub(i, i)
         if c == "[" then
@@ -250,21 +282,17 @@ local function parse_translations(data)
             depth = depth + 1
         elseif c == "]" then
             depth = depth - 1
-            if depth == 0 then
-                arr_end = i
-                break
-            end
+            if depth == 0 then arr_end = i; break end
         end
     end
-
     if arr_start and arr_end then
         local ok, result = pcall(json.decode, text:sub(arr_start, arr_end))
         if ok and type(result) == "table" then
-            return result
+            return nil, result
         end
     end
 
-    return nil
+    return nil, nil
 end
 
 return {
@@ -291,7 +319,7 @@ return {
             apply_scan()
         end
 
-        if #batch > 0 and not batch_in_flight then
+        if #batch > 0 then
             local elapsed = frame - batch_started_frame
             if #batch >= BATCH_MAX or elapsed >= BATCH_DELAY then
                 send_batch()
@@ -301,7 +329,9 @@ return {
         if frame % 300 == 0 then
             expire_pending()
         end
+    end,
 
+    on_post_frame = function()
         for key, orig in pairs(originals) do
             local translated = cache[orig]
             if not translated then goto continue end
@@ -338,10 +368,8 @@ return {
                     end
                 end
             else
-                if applied[key] ~= text_to_apply then
-                    set_widget_text(ref, text_to_apply)
-                    applied[key] = text_to_apply
-                end
+                set_widget_text(ref, text_to_apply)
+                applied[key] = text_to_apply
             end
             ::continue::
         end
@@ -378,9 +406,8 @@ return {
             originals = {}
             pending = {}
             pending_frame = {}
-            sent_order = {}
+            in_flight = {}
             batch = {}
-            batch_in_flight = false
             batch_started_frame = 0
             widget_refs = {}
             needs_full_scan = true
@@ -388,25 +415,45 @@ return {
             return
         end
 
-        local translations = parse_translations(data)
+        local bid, translations = parse_translations(data)
         if translations then
-            batch_in_flight = false
-            local matched = 0
-            for i = 1, math.min(#translations, #sent_order) do
-                local orig = sent_order[i]
-                if orig and translations[i] and type(translations[i]) == "string" then
-                    local clean = text:ascii(translations[i])
-                    cache[orig] = clean
-                    reverse[clean] = orig
-                    pending[orig] = nil
-                    pending_frame[orig] = nil
-                    matched = matched + 1
+            local order
+            if bid and in_flight[bid] then
+                order = in_flight[bid].order
+                in_flight[bid] = nil
+            else
+                -- Fallback: find oldest in-flight batch
+                local oldest_bid, oldest_frame = nil, math.huge
+                for k, info in pairs(in_flight) do
+                    if info.frame < oldest_frame then
+                        oldest_bid = k
+                        oldest_frame = info.frame
+                    end
+                end
+                if oldest_bid then
+                    order = in_flight[oldest_bid].order
+                    in_flight[oldest_bid] = nil
+                    dbg("No batch_id, matched to oldest batch #" .. oldest_bid)
                 end
             end
-            sent_order = {}
-            chat:game(PREFIX .. " " .. matched .. " translated")
+
+            if order then
+                local matched = 0
+                for i = 1, math.min(#translations, #order) do
+                    local orig = order[i]
+                    if orig and translations[i] and type(translations[i]) == "string" then
+                        local clean = text:ascii(translations[i])
+                        cache[orig] = clean
+                        reverse[clean] = orig
+                        pending[orig] = nil
+                        pending_frame[orig] = nil
+                        matched = matched + 1
+                    end
+                end
+                chat:game(PREFIX .. " " .. matched .. " translated" .. (bid and " (batch " .. bid .. ")" or ""))
+            end
         else
-            dbg("Ignoring non-translation mail, keeping batch in flight")
+            dbg("Ignoring non-translation mail")
         end
     end,
 
