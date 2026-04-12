@@ -12,10 +12,11 @@ from pathlib import Path
 from ragger.db import create_tables, get_connection
 from ragger.enums import DiaryLocation, DiaryTier, League, Region, TaskDifficulty
 
-PAGE_LEAGUE_MAP: dict[str, League] = {
-    "Raging_Echoes_League/Tasks": League.RAGING_ECHOES,
-    "Demonic_Pacts_League/Tasks": League.DEMONIC_PACTS,
+LEAGUE_TASKS_PAGES: dict[League, str] = {
+    League.RAGING_ECHOES: "Raging_Echoes_League/Tasks",
+    League.DEMONIC_PACTS: "Demonic_Pacts_League/Tasks",
 }
+
 from ragger.wiki import (
     add_group_requirement,
     create_requirement_group,
@@ -312,15 +313,11 @@ def _clear_league_tasks(conn, league: League) -> None:
     conn.execute("DELETE FROM league_tasks WHERE league = ?", (league.value,))
 
 
-def ingest(db_path: Path, page: str = "Raging_Echoes_League/Tasks") -> None:
+def ingest(db_path: Path, league: League = League.DEMONIC_PACTS) -> None:
     create_tables(db_path)
     conn = get_connection(db_path)
 
-    league = PAGE_LEAGUE_MAP.get(page)
-    if league is None:
-        raise ValueError(
-            f"Unknown league for page {page!r}; add it to PAGE_LEAGUE_MAP."
-        )
+    page = LEAGUE_TASKS_PAGES[league]
 
     quest_ids = dict(conn.execute("SELECT name, id FROM quests").fetchall())
     item_ids = dict(conn.execute("SELECT name, id FROM items").fetchall())
@@ -410,9 +407,10 @@ if __name__ == "__main__":
         help="Path to the SQLite database",
     )
     parser.add_argument(
-        "--page",
-        default="Demonic_Pacts_League/Tasks",
-        help="Wiki page to fetch tasks from",
+        "--league",
+        default=League.DEMONIC_PACTS.name,
+        choices=[l.name for l in League],
+        help="Which league to ingest (maps to the wiki tasks page).",
     )
     args = parser.parse_args()
-    ingest(args.db, args.page)
+    ingest(args.db, League[args.league])

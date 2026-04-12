@@ -54,7 +54,7 @@ SCRIPTS = [
 ]
 
 
-def run(db_path: Path, league_page: str | None = None) -> None:
+def run(db_path: Path, league: str | None = None) -> None:
     for script in SCRIPTS:
         print(f"\n=== {script} ===")
         result = subprocess.run(
@@ -62,15 +62,18 @@ def run(db_path: Path, league_page: str | None = None) -> None:
             check=True,
         )
 
-    if league_page:
+    if league:
         print(f"\n=== scripts/pipeline/fetch_league_tasks.py ===")
         subprocess.run(
-            [sys.executable, "scripts/pipeline/fetch_league_tasks.py", "--db", str(db_path), "--page", league_page],
+            [sys.executable, "scripts/pipeline/fetch_league_tasks.py",
+             "--db", str(db_path), "--league", league],
             check=True,
         )
 
 
 if __name__ == "__main__":
+    from ragger.enums import League
+
     parser = argparse.ArgumentParser(description="Fetch all OSRS data into the database")
     parser.add_argument(
         "--db",
@@ -81,7 +84,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--league",
         default=None,
-        help="Wiki page for league tasks (e.g. Raging_Echoes_League/Tasks)",
+        choices=[l.name for l in League],
+        help="Which league to ingest tasks for (e.g. DEMONIC_PACTS).",
     )
     args = parser.parse_args()
     run(args.db, args.league)
