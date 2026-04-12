@@ -9,6 +9,7 @@ from ragger.enums import (
     DiaryTier,
     Element,
     EquipmentSlot,
+    League,
     Region,
     ShopType,
     Skill,
@@ -19,6 +20,7 @@ from ragger.enums import (
 _skill_ids = ", ".join(str(s.value) for s in Skill)
 _region_ids = ", ".join(str(r.value) for r in Region)
 _difficulty_ids = ", ".join(str(d.value) for d in TaskDifficulty)
+_league_ids = ", ".join(str(l.value) for l in League)
 _activity_type_values = ", ".join(f"'{t.value}'" for t in ActivityType)
 _diary_location_values = ", ".join(f"'{l.value}'" for l in DiaryLocation)
 _diary_tier_values = ", ".join(f"'{t.value}'" for t in DiaryTier)
@@ -135,7 +137,9 @@ SCHEMAS: list[str] = [
         name TEXT NOT NULL,
         description TEXT NOT NULL,
         difficulty INTEGER NOT NULL CHECK(difficulty IN ({_difficulty_ids})),
-        region INTEGER NOT NULL CHECK(region IN ({_region_ids}))
+        region INTEGER NOT NULL CHECK(region IN ({_region_ids})),
+        league INTEGER NOT NULL CHECK(league IN ({_league_ids})),
+        UNIQUE(name, league)
     )
     """,
     """
@@ -863,5 +867,24 @@ def create_tables(db_path: Path) -> None:
     conn = get_connection(db_path)
     for schema in SCHEMAS:
         conn.execute(schema)
+    _migrate_league_tasks_league_column(conn)
     conn.commit()
     conn.close()
+
+
+def _migrate_league_tasks_league_column(conn: sqlite3.Connection) -> None:
+    """Backfill `league` column on pre-existing league_tasks rows.
+
+    When a DB predates the column, SQLite's CREATE TABLE IF NOT EXISTS is a no-op
+    and the column is missing. Add it with a default stamp so existing rows keep
+    working. Users re-running fetch_league_tasks.py for a specific league will
+    overwrite those rows with the correct league value.
+    """
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(league_tasks)")}
+    if "league" in cols:
+        return
+    conn.execute(
+        f"ALTER TABLE league_tasks ADD COLUMN league INTEGER NOT NULL "
+        f"DEFAULT {League.DEMONIC_PACTS.value} "
+        f"CHECK(league IN ({_league_ids}))"
+    )

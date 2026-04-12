@@ -6,7 +6,7 @@ from pathlib import Path
 
 import yaml
 
-from ragger.enums import ComparisonOperator, DiaryLocation, DiaryTier, Region, Skill, TaskDifficulty
+from ragger.enums import ComparisonOperator, DiaryLocation, DiaryTier, League, Region, Skill, TaskDifficulty
 from ragger.experience import level_for_xp, xp_for_level
 from ragger.quest import Quest
 from ragger.requirements import (
@@ -19,6 +19,9 @@ from ragger.requirements import (
 )
 
 
+_COLUMNS = "id, name, description, difficulty, region, league"
+
+
 @dataclass
 class LeagueTask:
     id: int
@@ -26,6 +29,7 @@ class LeagueTask:
     description: str
     difficulty: TaskDifficulty
     region: Region
+    league: League
 
     @property
     def points(self) -> int:
@@ -37,8 +41,9 @@ class LeagueTask:
         conn: sqlite3.Connection,
         difficulty: TaskDifficulty | None = None,
         region: Region = None,
+        league: League | None = None,
     ) -> list[LeagueTask]:
-        query = "SELECT id, name, description, difficulty, region FROM league_tasks"
+        query = f"SELECT {_COLUMNS} FROM league_tasks"
         params: list[int] = []
         conditions: list[str] = []
 
@@ -48,6 +53,9 @@ class LeagueTask:
         if region is not None:
             conditions.append("region = ?")
             params.append(region.value)
+        if league is not None:
+            conditions.append("league = ?")
+            params.append(league.value)
 
         if conditions:
             query += " WHERE " + " AND ".join(conditions)
@@ -63,9 +71,10 @@ class LeagueTask:
         skill: Skill,
         difficulty: TaskDifficulty | None = None,
         region: Region | None = None,
+        league: League | None = None,
     ) -> list[LeagueTask]:
-        query = """
-            SELECT DISTINCT lt.id, lt.name, lt.description, lt.difficulty, lt.region
+        query = f"""
+            SELECT DISTINCT lt.id, lt.name, lt.description, lt.difficulty, lt.region, lt.league
             FROM league_tasks lt
             JOIN league_task_requirement_groups ltrg ON ltrg.league_task_id = lt.id
             JOIN group_skill_requirements gsr ON gsr.group_id = ltrg.group_id
@@ -79,25 +88,43 @@ class LeagueTask:
         if region is not None:
             query += " AND lt.region = ?"
             params.append(region.value)
+        if league is not None:
+            query += " AND lt.league = ?"
+            params.append(league.value)
 
         query += " ORDER BY gsr.level, lt.difficulty"
         rows = conn.execute(query, params).fetchall()
         return [cls._from_row(row) for row in rows]
 
     @classmethod
-    def by_name(cls, conn: sqlite3.Connection, name: str) -> LeagueTask | None:
-        row = conn.execute(
-            "SELECT id, name, description, difficulty, region FROM league_tasks WHERE name = ?",
-            (name,),
-        ).fetchone()
+    def by_name(
+        cls,
+        conn: sqlite3.Connection,
+        name: str,
+        league: League | None = None,
+    ) -> LeagueTask | None:
+        query = f"SELECT {_COLUMNS} FROM league_tasks WHERE name = ?"
+        params: list = [name]
+        if league is not None:
+            query += " AND league = ?"
+            params.append(league.value)
+        row = conn.execute(query, params).fetchone()
         return cls._from_row(row) if row else None
 
     @classmethod
-    def search(cls, conn: sqlite3.Connection, name: str) -> list[LeagueTask]:
-        rows = conn.execute(
-            "SELECT id, name, description, difficulty, region FROM league_tasks WHERE name LIKE ? ORDER BY name",
-            (f"%{name}%",),
-        ).fetchall()
+    def search(
+        cls,
+        conn: sqlite3.Connection,
+        name: str,
+        league: League | None = None,
+    ) -> list[LeagueTask]:
+        query = f"SELECT {_COLUMNS} FROM league_tasks WHERE name LIKE ?"
+        params: list = [f"%{name}%"]
+        if league is not None:
+            query += " AND league = ?"
+            params.append(league.value)
+        query += " ORDER BY name"
+        rows = conn.execute(query, params).fetchall()
         return [cls._from_row(row) for row in rows]
 
     @classmethod
@@ -108,6 +135,7 @@ class LeagueTask:
             description=row[2],
             difficulty=TaskDifficulty(row[3]),
             region=Region(row[4]),
+            league=League(row[5]),
         )
 
     def requirement_groups(self, conn: sqlite3.Connection) -> list[RequirementGroup]:
@@ -192,6 +220,7 @@ class RelicTier:
 
 @dataclass
 class LeagueConfig:
+    league: League
     starting_region: Region
     starting_location: str
     always_accessible: list[Region]
@@ -233,6 +262,7 @@ class LeagueConfig:
                 relics.append(RelicTier(tier=tier_num, choices=choices))
 
         return LeagueConfig(
+            league=League.from_label(data["league"]),
             starting_region=Region.from_label(data["starting-region"]),
             starting_location=data.get("starting-location", ""),
             always_accessible=[Region.from_label(r) for r in data["always-accessible"]],
@@ -458,7 +488,7 @@ class Account:
         check_regions: bool = True,
         check_quests: bool = True,
     ) -> list[LeagueTask]:
-        tasks = LeagueTask.all(self.conn)
+        tasks = LeagueTask.all(self.conn, league=self.config.league)
         result: list[LeagueTask] = []
         for task in tasks:
             if task.id in self.completed_task_ids:

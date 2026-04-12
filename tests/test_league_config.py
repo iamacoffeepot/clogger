@@ -1,7 +1,7 @@
 import sqlite3
 from pathlib import Path
 
-from ragger.enums import Region
+from ragger.enums import League, Region
 from ragger.league import LeagueConfig
 from ragger.wiki import link_group_requirement
 
@@ -29,6 +29,7 @@ def test_from_yaml(tmp_path: Path) -> None:
     config_path = tmp_path / "test.yaml"
     config_path.write_text(
         """
+league: demonic-pacts
 starting-region: Varlamore
 always-accessible:
   - Varlamore
@@ -42,6 +43,7 @@ autocompleted-quests:
 """
     )
     config = LeagueConfig.from_yaml(config_path)
+    assert config.league == League.DEMONIC_PACTS
     assert config.starting_region == Region.VARLAMORE
     assert config.always_accessible == [Region.VARLAMORE, Region.KARAMJA]
     assert Region.ASGARNIA in config.unlockable_regions
@@ -51,6 +53,7 @@ autocompleted-quests:
 def test_completed_quests_with_chain(conn: sqlite3.Connection) -> None:
     _seed_quests(conn)
     config = LeagueConfig(
+        league=League.DEMONIC_PACTS,
         starting_region=Region.VARLAMORE,
         starting_location="Civitas illa Fortis",
         always_accessible=[],
@@ -69,6 +72,7 @@ def test_completed_quests_with_chain(conn: sqlite3.Connection) -> None:
 def test_starting_quest_points(conn: sqlite3.Connection) -> None:
     _seed_quests(conn)
     config = LeagueConfig(
+        league=League.DEMONIC_PACTS,
         starting_region=Region.VARLAMORE,
         starting_location="Civitas illa Fortis",
         always_accessible=[],
@@ -83,6 +87,7 @@ def test_starting_quest_points(conn: sqlite3.Connection) -> None:
 
 def test_available_regions() -> None:
     config = LeagueConfig(
+        league=League.DEMONIC_PACTS,
         starting_region=Region.VARLAMORE,
         starting_location="Civitas illa Fortis",
         always_accessible=[Region.VARLAMORE, Region.KARAMJA],

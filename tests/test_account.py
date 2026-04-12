@@ -1,6 +1,6 @@
 import sqlite3
 
-from ragger.enums import Region, Skill, TaskDifficulty
+from ragger.enums import League, Region, Skill, TaskDifficulty
 from ragger.league import Account, LeagueConfig, LeagueTask
 from ragger.quest import Quest
 from ragger.wiki import link_group_requirement
@@ -8,6 +8,7 @@ from ragger.wiki import link_group_requirement
 
 def _make_config() -> LeagueConfig:
     return LeagueConfig(
+        league=League.DEMONIC_PACTS,
         starting_region=Region.VARLAMORE,
         starting_location="Civitas illa Fortis",
         always_accessible=[Region.VARLAMORE, Region.KARAMJA],
@@ -36,10 +37,13 @@ def _seed(conn: sqlite3.Connection) -> None:
     )
 
     conn.executemany(
-        "INSERT INTO league_tasks (name, description, difficulty, region) VALUES (?, ?, ?, ?)",
+        "INSERT INTO league_tasks (name, description, difficulty, region, league) "
+        "VALUES (?, ?, ?, ?, ?)",
         [
-            ("Easy Task", "Do something easy", TaskDifficulty.EASY.value, Region.GENERAL.value),
-            ("Hard Task", "Do something hard", TaskDifficulty.HARD.value, Region.KANDARIN.value),
+            ("Easy Task", "Do something easy", TaskDifficulty.EASY.value,
+             Region.GENERAL.value, League.DEMONIC_PACTS.value),
+            ("Hard Task", "Do something hard", TaskDifficulty.HARD.value,
+             Region.KANDARIN.value, League.DEMONIC_PACTS.value),
         ],
     )
     conn.commit()

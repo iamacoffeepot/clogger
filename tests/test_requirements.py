@@ -90,7 +90,7 @@ def test_multiple_and_groups(conn: sqlite3.Connection) -> None:
 def test_or_group(conn: sqlite3.Connection) -> None:
     """One group with two item requirements = OR. Either item satisfies."""
     _seed(conn)
-    conn.execute("INSERT INTO league_tasks (name, description, difficulty, region) VALUES ('Test Task', 'desc', 1, 1)")
+    conn.execute("INSERT INTO league_tasks (name, description, difficulty, region, league) VALUES ('Test Task', 'desc', 1, 1, 1)")
     task_id = conn.execute("SELECT id FROM league_tasks WHERE name = 'Test Task'").fetchone()[0]
     coins_id = conn.execute("SELECT id FROM items WHERE name = 'Coins'").fetchone()[0]
     shield_id = conn.execute("SELECT id FROM items WHERE name = 'Anti-dragon shield'").fetchone()[0]
@@ -111,7 +111,7 @@ def test_or_group(conn: sqlite3.Connection) -> None:
 def test_mixed_types_in_group(conn: sqlite3.Connection) -> None:
     """A group can contain different requirement types (all OR'd)."""
     _seed(conn)
-    conn.execute("INSERT INTO league_tasks (name, description, difficulty, region) VALUES ('Mixed', 'desc', 1, 1)")
+    conn.execute("INSERT INTO league_tasks (name, description, difficulty, region, league) VALUES ('Mixed', 'desc', 1, 1, 1)")
     task_id = conn.execute("SELECT id FROM league_tasks WHERE name = 'Mixed'").fetchone()[0]
     ds_id = conn.execute("SELECT id FROM quests WHERE name = 'Dragon Slayer I'").fetchone()[0]
 
@@ -177,7 +177,7 @@ def test_quest_point_requirement(conn: sqlite3.Connection) -> None:
 
 def test_diary_requirement(conn: sqlite3.Connection) -> None:
     _seed(conn)
-    conn.execute("INSERT INTO league_tasks (name, description, difficulty, region) VALUES ('Diary Task', 'desc', 1, 1)")
+    conn.execute("INSERT INTO league_tasks (name, description, difficulty, region, league) VALUES ('Diary Task', 'desc', 1, 1, 1)")
     task_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
 
     link_group_requirement(
@@ -201,7 +201,7 @@ def test_diary_requirement(conn: sqlite3.Connection) -> None:
 def test_region_requirement(conn: sqlite3.Connection) -> None:
     _seed(conn)
     conn.execute(
-        "INSERT INTO league_tasks (name, description, difficulty, region) VALUES ('Region Task', 'desc', 1, 1)"
+        "INSERT INTO league_tasks (name, description, difficulty, region, league) VALUES ('Region Task', 'desc', 1, 1, 1)"
     )
     task_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
 
@@ -256,7 +256,7 @@ def test_empty_groups(conn: sqlite3.Connection) -> None:
 def test_complex_and_or(conn: sqlite3.Connection) -> None:
     """AND of: (Mining 60) AND (Coins OR Shield) — two groups."""
     _seed(conn)
-    conn.execute("INSERT INTO league_tasks (name, description, difficulty, region) VALUES ('Complex', 'desc', 1, 1)")
+    conn.execute("INSERT INTO league_tasks (name, description, difficulty, region, league) VALUES ('Complex', 'desc', 1, 1, 1)")
     task_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
     coins_id = conn.execute("SELECT id FROM items WHERE name = 'Coins'").fetchone()[0]
     shield_id = conn.execute("SELECT id FROM items WHERE name = 'Anti-dragon shield'").fetchone()[0]

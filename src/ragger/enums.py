@@ -162,6 +162,34 @@ TASK_DIFFICULTY_POINTS: dict["TaskDifficulty", int] = {
 }
 
 
+class League(int, Enum):
+    RAGING_ECHOES = 0
+    DEMONIC_PACTS = 1
+
+    @property
+    def label(self) -> str:
+        return LEAGUE_LABELS[self]
+
+    @classmethod
+    def from_label(cls, label: str) -> "League":
+        return _LEAGUE_LABEL_LOOKUP[label.lower()]
+
+
+LEAGUE_LABELS: dict["League", str] = {
+    League.RAGING_ECHOES: "Raging Echoes",
+    League.DEMONIC_PACTS: "Demonic Pacts",
+}
+
+_LEAGUE_LABEL_LOOKUP: dict[str, League] = {
+    "raging echoes": League.RAGING_ECHOES,
+    "raging-echoes": League.RAGING_ECHOES,
+    "raging_echoes": League.RAGING_ECHOES,
+    "demonic pacts": League.DEMONIC_PACTS,
+    "demonic-pacts": League.DEMONIC_PACTS,
+    "demonic_pacts": League.DEMONIC_PACTS,
+}
+
+
 class DiaryLocation(str, Enum):
     ARDOUGNE = "Ardougne"
     DESERT = "Desert"

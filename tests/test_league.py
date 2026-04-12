@@ -1,6 +1,6 @@
 import sqlite3
 
-from ragger.enums import DiaryLocation, DiaryTier, Region, Skill, TaskDifficulty
+from ragger.enums import DiaryLocation, DiaryTier, League, Region, Skill, TaskDifficulty
 from ragger.league import LeagueTask
 from ragger.requirements import (
     GroupDiaryRequirement,
@@ -11,13 +11,17 @@ from ragger.requirements import (
 from ragger.wiki import link_group_requirement
 
 
-def _seed_tasks(conn: sqlite3.Connection) -> None:
+def _seed_tasks(conn: sqlite3.Connection, league: League = League.DEMONIC_PACTS) -> None:
     conn.executemany(
-        "INSERT INTO league_tasks (name, description, difficulty, region) VALUES (?, ?, ?, ?)",
+        "INSERT INTO league_tasks (name, description, difficulty, region, league) "
+        "VALUES (?, ?, ?, ?, ?)",
         [
-            ("Kill a Goblin", "Kill a goblin", TaskDifficulty.EASY.value, Region.MISTHALIN.value),
-            ("50 Wintertodt Kills", "Kill Wintertodt 50 times", TaskDifficulty.HARD.value, Region.KOUREND.value),
-            ("Achieve Level 99", "Get 99 in any skill", TaskDifficulty.ELITE.value, Region.GENERAL.value),
+            ("Kill a Goblin", "Kill a goblin", TaskDifficulty.EASY.value,
+             Region.MISTHALIN.value, league.value),
+            ("50 Wintertodt Kills", "Kill Wintertodt 50 times", TaskDifficulty.HARD.value,
+             Region.KOUREND.value, league.value),
+            ("Achieve Level 99", "Get 99 in any skill", TaskDifficulty.ELITE.value,
+             Region.GENERAL.value, league.value),
         ],
     )
     conn.commit()
@@ -173,3 +177,20 @@ def test_diary_requirements(conn: sqlite3.Connection) -> None:
     assert isinstance(reqs[0], GroupDiaryRequirement)
     assert reqs[0].location == DiaryLocation.KOUREND_KEBOS
     assert reqs[0].tier == DiaryTier.EASY
+
+
+def test_league_filter_isolates_catalogs(conn: sqlite3.Connection) -> None:
+    # Raging Echoes catalog
+    _seed_tasks(conn, League.RAGING_ECHOES)
+    # Demonic Pacts catalog (same task names — must coexist under UNIQUE(name, league))
+    _seed_tasks(conn, League.DEMONIC_PACTS)
+
+    assert len(LeagueTask.all(conn)) == 6
+    assert len(LeagueTask.all(conn, league=League.RAGING_ECHOES)) == 3
+    assert len(LeagueTask.all(conn, league=League.DEMONIC_PACTS)) == 3
+
+    dpl_task = LeagueTask.by_name(conn, "Kill a Goblin", league=League.DEMONIC_PACTS)
+    rel_task = LeagueTask.by_name(conn, "Kill a Goblin", league=League.RAGING_ECHOES)
+    assert dpl_task.id != rel_task.id
+    assert dpl_task.league == League.DEMONIC_PACTS
+    assert rel_task.league == League.RAGING_ECHOES
