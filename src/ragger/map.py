@@ -672,3 +672,143 @@ def render_path(
     plt.tight_layout()
     plt.savefig(output_path, dpi=dpi, bbox_inches="tight")
     plt.close()
+
+
+def blob_at(conn: sqlite3.Connection, x: int, y: int, plane: int = 0) -> int:
+    """Return the blob id at a game coordinate, or 0 if blocked / no blob.
+
+    Reads a single BLOB map square (not the full stitched grid), so this is
+    cheap enough to call repeatedly from a pathfinder.
+    """
+    import io
+
+    import numpy as np
+    from PIL import Image
+
+    region_x = x // GAME_TILES_PER_REGION
+    region_y = y // GAME_TILES_PER_REGION
+    ms = MapSquare.get(conn, plane, region_x, region_y, MapSquareType.BLOB)
+    if ms is None:
+        return 0
+
+    tile_x = x - region_x * GAME_TILES_PER_REGION
+    tile_y = y - region_y * GAME_TILES_PER_REGION
+    arr = np.asarray(Image.open(io.BytesIO(ms.image)), dtype=np.uint16)
+    py = GAME_TILES_PER_REGION - 1 - tile_y
+    px = tile_x
+    return int(arr[py, px])
+
+
+def find_walking_path(
+    conn: sqlite3.Connection,
+    src_x: int, src_y: int,
+    dst_x: int, dst_y: int,
+) -> list[tuple[int, int]] | None:
+    """A* through the port graph from a source tile to a destination tile.
+
+    Uses the walkable edges only (port_transits + port_crossings). Does not
+    consider portals (fairy rings, teleports, entrances) — walking only.
+
+    Returns a list of (x, y) waypoints from source to destination including
+    the source and destination tiles, or None if no walking path exists.
+    """
+    src_blob = blob_at(conn, src_x, src_y)
+    dst_blob = blob_at(conn, dst_x, dst_y)
+    if src_blob == 0 or dst_blob == 0:
+        return None
+
+    # Same blob — direct walk, no ports needed
+    if src_blob == dst_blob:
+        return [(src_x, src_y), (dst_x, dst_y)]
+
+    # Load ports keyed by id; group by blob for source/goal enumeration
+    port_rows = conn.execute(
+        "SELECT id, blob_id, rep_x, rep_y FROM ports"
+    ).fetchall()
+    if not port_rows:
+        return None
+    port_coords: dict[int, tuple[int, int]] = {r[0]: (r[2], r[3]) for r in port_rows}
+    ports_by_blob: dict[int, list[int]] = defaultdict(list)
+    for pid, bid, _rx, _ry in port_rows:
+        ports_by_blob[bid].append(pid)
+
+    start_ports = ports_by_blob.get(src_blob, [])
+    goal_ports = set(ports_by_blob.get(dst_blob, []))
+    if not start_ports or not goal_ports:
+        return None
+
+    # Load edges
+    adj: dict[int, list[tuple[int, int]]] = defaultdict(list)
+    for src_p, dst_p, d in conn.execute(
+        "SELECT src_port_id, dst_port_id, distance FROM port_transits"
+    ).fetchall():
+        adj[src_p].append((dst_p, d))
+    for src_p, dst_p, d in conn.execute(
+        "SELECT src_port_id, dst_port_id, distance FROM port_crossings"
+    ).fetchall():
+        adj[src_p].append((dst_p, d))
+
+    def chebyshev(ax: int, ay: int, bx: int, by: int) -> int:
+        return max(abs(ax - bx), abs(ay - by))
+
+    # A*: nodes are port ids. Initial g-scores = cost from source tile to the
+    # port's rep (Chebyshev through the source blob). Heuristic = Chebyshev to
+    # dst tile.
+    g: dict[int, int] = {}
+    came_from: dict[int, int | None] = {}
+    counter = 0
+    heap: list[tuple[int, int, int]] = []
+
+    for pid in start_ports:
+        px, py = port_coords[pid]
+        gx = chebyshev(src_x, src_y, px, py)
+        g[pid] = gx
+        came_from[pid] = None
+        h = chebyshev(px, py, dst_x, dst_y)
+        counter += 1
+        heapq.heappush(heap, (gx + h, counter, pid))
+
+    final_port: int | None = None
+    final_cost = float("inf")
+
+    while heap:
+        f, _, pid = heapq.heappop(heap)
+        if f >= final_cost:
+            break
+        if g[pid] > f:  # stale entry
+            continue
+
+        px, py = port_coords[pid]
+        if pid in goal_ports:
+            tail = g[pid] + chebyshev(px, py, dst_x, dst_y)
+            if tail < final_cost:
+                final_cost = tail
+                final_port = pid
+            continue
+
+        for npid, cost in adj.get(pid, ()):
+            new_g = g[pid] + cost
+            if new_g < g.get(npid, float("inf")):
+                g[npid] = new_g
+                came_from[npid] = pid
+                nx, ny = port_coords[npid]
+                h = chebyshev(nx, ny, dst_x, dst_y)
+                counter += 1
+                heapq.heappush(heap, (new_g + h, counter, npid))
+
+    if final_port is None:
+        return None
+
+    # Reconstruct port chain, then render as (x, y) waypoints
+    chain: list[int] = []
+    cur: int | None = final_port
+    while cur is not None:
+        chain.append(cur)
+        cur = came_from.get(cur)
+    chain.reverse()
+
+    waypoints: list[tuple[int, int]] = [(src_x, src_y)]
+    for pid in chain:
+        waypoints.append(port_coords[pid])
+    waypoints.append((dst_x, dst_y))
+    return waypoints
