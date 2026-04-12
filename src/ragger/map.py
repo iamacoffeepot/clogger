@@ -467,17 +467,21 @@ def find_path(
 
     g_score: dict[tuple, int] = {SRC: 0}
     came_from: dict[tuple, tuple[tuple, MapLink | None]] = {}
+    closed: set[tuple] = set()
     counter = 0
     heap: list[tuple[int, int, tuple]] = [(0, 0, SRC)]
 
     while heap:
-        f, _, node = heapq.heappop(heap)
-        if f > g_score.get(node, float("inf")):
+        _, _, node = heapq.heappop(heap)
+        if node in closed:
             continue
+        closed.add(node)
         if node == DST:
             break
         current_g = g_score[node]
         for neighbor, cost, via_link in adj.get(node, []):
+            if neighbor in closed:
+                continue
             new_g = current_g + cost
             if new_g < g_score.get(neighbor, float("inf")):
                 g_score[neighbor] = new_g
@@ -713,6 +717,106 @@ def render_path(
         else f"({path[0].src_x}, {path[0].src_y}) → ({path[-1].dst_x}, {path[-1].dst_y})"
     )
     fig.suptitle(title, fontsize=14)
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=dpi, bbox_inches="tight")
+    plt.close()
+
+
+def render_path_tiles(
+    conn: sqlite3.Connection,
+    path: list[PathStep],
+    output_path: str,
+    padding: int = 80,
+    dpi: int = 200,
+) -> None:
+    """Debug: expand each walking step into its tile-by-tile BFS route and
+    plot every tile as a dot. Slow; use only for visual verification."""
+    import io
+    from collections import deque
+
+    import matplotlib.pyplot as plt
+    import numpy as np
+    from PIL import Image
+
+    from ragger.collision import BLOCK_FULL, build_flags_grid, can_move
+
+    if not path:
+        return
+
+    xs = [s.src_x for s in path] + [s.dst_x for s in path]
+    ys = [s.src_y for s in path] + [s.dst_y for s in path]
+    x_min, x_max = min(xs) - padding, max(xs) + padding
+    y_min, y_max = min(ys) - padding, max(ys) + padding
+
+    collision, _ = MapSquare.stitch(conn, x_min, x_max, y_min, y_max, type=MapSquareType.COLLISION, region_padding=0)
+    water, _ = MapSquare.stitch(conn, x_min, x_max, y_min, y_max, type=MapSquareType.WATER, region_padding=0)
+    flags = build_flags_grid(collision, water)
+    H, W = flags.shape
+
+    rx_min = x_min // GAME_TILES_PER_REGION
+    ry_max = (y_max - 1) // GAME_TILES_PER_REGION
+    sx_origin = rx_min * GAME_TILES_PER_REGION
+    sy_top = (ry_max + 1) * GAME_TILES_PER_REGION
+
+    def to_array(gx: int, gy: int) -> tuple[int, int]:
+        return sy_top - 1 - gy, gx - sx_origin
+
+    def bfs_tiles(sx: int, sy: int, dx: int, dy: int) -> list[tuple[int, int]]:
+        spy, spx = to_array(sx, sy)
+        dpy, dpx = to_array(dx, dy)
+        if not (0 <= spy < H and 0 <= spx < W and 0 <= dpy < H and 0 <= dpx < W):
+            return [(sx, sy), (dx, dy)]
+        if (flags[spy, spx] & BLOCK_FULL) or (flags[dpy, dpx] & BLOCK_FULL):
+            return [(sx, sy), (dx, dy)]
+        parent: dict[tuple[int, int], tuple[int, int] | None] = {(spy, spx): None}
+        queue = deque([(spy, spx)])
+        while queue:
+            cy, cx = queue.popleft()
+            if (cy, cx) == (dpy, dpx):
+                break
+            for ddy in (-1, 0, 1):
+                for ddx in (-1, 0, 1):
+                    if ddy == 0 and ddx == 0:
+                        continue
+                    ny, nx = cy + ddy, cx + ddx
+                    if (ny, nx) in parent:
+                        continue
+                    if can_move(flags, cy, cx, ddy, ddx, H, W):
+                        parent[(ny, nx)] = (cy, cx)
+                        queue.append((ny, nx))
+        if (dpy, dpx) not in parent:
+            return [(sx, sy), (dx, dy)]
+        chain: list[tuple[int, int]] = []
+        cur: tuple[int, int] | None = (dpy, dpx)
+        while cur is not None:
+            py, px = cur
+            chain.append((sx_origin + px, sy_top - 1 - py))
+            cur = parent[cur]
+        chain.reverse()
+        return chain
+
+    fig, ax = plt.subplots(figsize=(12, 12 * (y_max - y_min) / max(x_max - x_min, 1)))
+    basemap, extent = MapSquare.stitch(conn, x_min, x_max, y_min, y_max, region_padding=0)
+    ax.imshow(basemap, extent=extent, aspect="equal")
+
+    for step in path:
+        if step.link is None:
+            tiles = bfs_tiles(step.src_x, step.src_y, step.dst_x, step.dst_y)
+            txs = [t[0] for t in tiles]
+            tys = [t[1] for t in tiles]
+            ax.plot(txs, tys, "o", color="lime", markersize=1.5, zorder=10)
+        else:
+            ax.annotate(
+                "", xy=(step.dst_x, step.dst_y), xytext=(step.src_x, step.src_y),
+                arrowprops=dict(arrowstyle="->", color="magenta", linestyle="--", lw=2),
+                zorder=11,
+            )
+
+    ax.plot(path[0].src_x, path[0].src_y, "o", color="yellow", markersize=10, markeredgecolor="black", zorder=20)
+    ax.plot(path[-1].dst_x, path[-1].dst_y, "*", color="red", markersize=14, markeredgecolor="black", zorder=20)
+    ax.set_xlim(x_min, x_max)
+    ax.set_ylim(y_min, y_max)
+    ax.axis("off")
     plt.tight_layout()
     plt.savefig(output_path, dpi=dpi, bbox_inches="tight")
     plt.close()
