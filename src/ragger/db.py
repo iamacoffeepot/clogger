@@ -418,9 +418,13 @@ SCHEMAS: list[str] = [
         dst_x INTEGER,
         dst_y INTEGER,
         type TEXT,
-        description TEXT
+        description TEXT,
+        src_blob_id INTEGER REFERENCES blobs(id),
+        dst_blob_id INTEGER REFERENCES blobs(id)
     )
     """,
+    "CREATE INDEX IF NOT EXISTS idx_map_links_src_blob ON map_links(src_blob_id)",
+    "CREATE INDEX IF NOT EXISTS idx_map_links_dst_blob ON map_links(dst_blob_id)",
     """
     CREATE TABLE IF NOT EXISTS monsters (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
