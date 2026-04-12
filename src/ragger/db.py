@@ -367,6 +367,26 @@ SCHEMAS: list[str] = [
     """,
     "CREATE INDEX IF NOT EXISTS idx_blobs_location_id ON blobs(location_id)",
     """
+    CREATE TABLE IF NOT EXISTS ports (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ridge_location_a_id INTEGER NOT NULL,
+        ridge_location_b_id INTEGER NOT NULL,
+        side_location_id INTEGER NOT NULL,
+        blob_id INTEGER NOT NULL,
+        sample_start INTEGER NOT NULL,
+        sample_end INTEGER NOT NULL,
+        rep_x INTEGER NOT NULL,
+        rep_y INTEGER NOT NULL,
+        FOREIGN KEY (ridge_location_a_id) REFERENCES locations(id),
+        FOREIGN KEY (ridge_location_b_id) REFERENCES locations(id),
+        FOREIGN KEY (side_location_id) REFERENCES locations(id),
+        FOREIGN KEY (blob_id) REFERENCES blobs(id)
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_ports_blob ON ports(blob_id)",
+    "CREATE INDEX IF NOT EXISTS idx_ports_ridge ON ports(ridge_location_a_id, ridge_location_b_id)",
+    "CREATE INDEX IF NOT EXISTS idx_ports_side ON ports(side_location_id)",
+    """
     CREATE TABLE IF NOT EXISTS map_links (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         src_location TEXT NOT NULL,

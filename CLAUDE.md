@@ -67,6 +67,7 @@ Pipeline order (managed by `fetch_all.py`):
 36. `link_quest_dialogues.py` — Links quests to dialogue pages by exact name match on quest-type transcripts
 37. `compute_walkability.py` — Computes walkable connections via Voronoi edge flood fill and map tile collision data. Supports `--area-threshold`, `--edge-samples`, `--resolution`, `--debug` flags.
 38. `compute_blobs.py` — Flood fills each Voronoi cell under the full directional collision model (walls, water, void, diagonal corner rules) and assigns each maximal walkable region a global blob ID. Writes per-tile blob labels as 16-bit PNG map squares of `MapSquareType.BLOB` and records per-blob owner + tile count in the `blobs` table.
+39. `compute_ports.py` — Samples each Voronoi ridge and looks up the walkable blob on each side (offsetting normal to the ridge). Contiguous samples sharing the same `(blob_a, blob_b)` pair collapse into a port pair (one row per side) in the `ports` table, linking the ridge to the blob it touches on each side.
 
 ### Import scripts (`scripts/import/`)
 

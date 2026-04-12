@@ -142,6 +142,52 @@ class MapSquare:
         ]
         return canvas, extent
 
+    @classmethod
+    def stitch_blobs(
+        cls, conn: sqlite3.Connection,
+        x_min: int, x_max: int, y_min: int, y_max: int,
+        plane: int = 0,
+    ) -> tuple:
+        """Stitch BLOB map squares into a uint16 grid at 1 px per tile.
+
+        Unlike `stitch`, this preserves the 16-bit blob IDs instead of
+        converting to RGB. Returns (grid, extent) where `grid[py, px]` is the
+        blob ID at `px = gx - extent[0]`, `py = extent[3] - 1 - gy`. 0 = blocked.
+        """
+        import io
+
+        import numpy as np
+        from PIL import Image
+
+        rx_min = max(0, x_min // GAME_TILES_PER_REGION)
+        rx_max = (x_max - 1) // GAME_TILES_PER_REGION
+        ry_min = max(0, y_min // GAME_TILES_PER_REGION)
+        ry_max = (y_max - 1) // GAME_TILES_PER_REGION
+
+        W = (rx_max - rx_min + 1) * GAME_TILES_PER_REGION
+        H = (ry_max - ry_min + 1) * GAME_TILES_PER_REGION
+        grid = np.zeros((H, W), dtype=np.uint16)
+
+        rows = conn.execute(
+            "SELECT region_x, region_y, image FROM map_squares "
+            "WHERE plane = ? AND type = ? "
+            "AND region_x >= ? AND region_x <= ? AND region_y >= ? AND region_y <= ?",
+            (plane, MapSquareType.BLOB.value, rx_min, rx_max, ry_min, ry_max),
+        ).fetchall()
+        for rx, ry, img_data in rows:
+            tile = np.asarray(Image.open(io.BytesIO(img_data)), dtype=np.uint16)
+            px = (rx - rx_min) * GAME_TILES_PER_REGION
+            py = (ry_max - ry) * GAME_TILES_PER_REGION
+            grid[py:py + GAME_TILES_PER_REGION, px:px + GAME_TILES_PER_REGION] = tile
+
+        extent = [
+            rx_min * GAME_TILES_PER_REGION,
+            (rx_max + 1) * GAME_TILES_PER_REGION,
+            ry_min * GAME_TILES_PER_REGION,
+            (ry_max + 1) * GAME_TILES_PER_REGION,
+        ]
+        return grid, extent
+
 
 @dataclass
 class MapLink:

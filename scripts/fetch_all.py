@@ -54,6 +54,7 @@ SCRIPTS = [
     "scripts/pipeline/link_quest_dialogues.py",
     "scripts/pipeline/compute_walkability.py",
     "scripts/pipeline/compute_blobs.py",
+    "scripts/pipeline/compute_ports.py",
 ]
 
 
