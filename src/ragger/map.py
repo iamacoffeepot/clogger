@@ -299,155 +299,230 @@ _ZERO_COST_TYPES = {
 }
 
 
-def _build_adjacency(
-    conn: sqlite3.Connection, allowed_types: set[MapLinkType] | None = None,
-) -> dict[str, list[MapLink]]:
-    """Build adjacency dict from all non-ANYWHERE map links."""
-    adj: dict[str, list[MapLink]] = defaultdict(list)
-    rows = conn.execute(
-        "SELECT id, src_location, dst_location, src_x, src_y, dst_x, dst_y, type, description "
-        "FROM map_links WHERE src_location != ?",
-        (MAP_LINK_ANYWHERE,),
-    ).fetchall()
-    for row in rows:
-        link = MapLink._from_row(row)
-        if allowed_types is not None and link.link_type not in allowed_types:
-            continue
-        adj[link.src_location].append(link)
-    return adj
+@dataclass
+class PathStep:
+    """One segment of a computed path. `link is None` means a walking segment
+    between two tile coords; otherwise it's the traversal of that portal."""
+    src_x: int
+    src_y: int
+    dst_x: int
+    dst_y: int
+    link: MapLink | None = None
+
+    @property
+    def link_type(self) -> MapLinkType:
+        return self.link.link_type if self.link is not None else MapLinkType.WALKABLE
+
+    @property
+    def description(self) -> str | None:
+        return self.link.description if self.link is not None else None
+
+    @property
+    def src_location(self) -> str:
+        return self.link.src_location if self.link is not None else ""
+
+    @property
+    def dst_location(self) -> str:
+        return self.link.dst_location if self.link is not None else ""
 
 
-def _edge_cost(link: MapLink) -> float:
-    """Compute traversal cost for a map link."""
-    if link.link_type in _ZERO_COST_TYPES:
-        return 0
-    # Walkable: Chebyshev distance between endpoints
-    dx = abs(link.src_x - link.dst_x)
-    dy = abs(link.src_y - link.dst_y)
-    return DistanceMetric.CHEBYSHEV.compute(dx, dy)
-
-
-def _heuristic(
-    loc_coords: dict[str, tuple[int, int]], current: str, goal: str,
-    admissible: bool = False,
-) -> float:
-    """A* heuristic. When zero-cost links are present (admissible=False),
-    returns 0 (Dijkstra's). When walking only (admissible=True), uses
-    Chebyshev distance."""
-    if not admissible:
-        return 0
-    c = loc_coords.get(current)
-    g = loc_coords.get(goal)
-    if c is None or g is None:
-        return 0
-    if c[1] > 5000 or g[1] > 5000:
-        return 0
-    dx = abs(c[0] - g[0])
-    dy = abs(c[1] - g[1])
-    return DistanceMetric.CHEBYSHEV.compute(dx, dy)
-
-
-def _has_zero_cost_links(adj: dict[str, list[MapLink]]) -> bool:
-    """Check if the adjacency graph contains any zero-cost link types."""
-    for links in adj.values():
-        for link in links:
-            if link.link_type in _ZERO_COST_TYPES:
-                return True
-    return False
-
-
-def _astar(
-    adj: dict[str, list[MapLink]],
-    loc_coords: dict[str, tuple[int, int]],
-    start: str,
-    goal: str,
-) -> list[MapLink] | None:
-    """Run A* from start to goal. Falls back to Dijkstra's when zero-cost
-    links are present (Chebyshev heuristic is inadmissible with instant travel)."""
-    if start == goal:
-        return []
-
-    admissible = not _has_zero_cost_links(adj)
-
-    # Priority queue: (f_score, counter, node, path)
-    counter = 0
-    open_set: list[tuple[float, int, str, list[MapLink]]] = []
-    heapq.heappush(open_set, (0, counter, start, []))
-    g_scores: dict[str, float] = {start: 0}
-
-    while open_set:
-        f, _, current, path = heapq.heappop(open_set)
-
-        if current == goal:
-            return path
-
-        current_g = g_scores.get(current, float("inf"))
-
-        for link in adj.get(current, []):
-            cost = _edge_cost(link)
-            new_g = current_g + cost
-
-            if new_g < g_scores.get(link.dst_location, float("inf")):
-                g_scores[link.dst_location] = new_g
-                h = _heuristic(loc_coords, link.dst_location, goal, admissible)
-                counter += 1
-                heapq.heappush(open_set, (new_g + h, counter, link.dst_location, path + [link]))
-
-    return None
+def _chebyshev(x1: int, y1: int, x2: int, y2: int) -> int:
+    return max(abs(x1 - x2), abs(y1 - y2))
 
 
 def find_path(
     conn: sqlite3.Connection,
-    src: str,
-    dst: str,
+    src_x: int, src_y: int,
+    dst_x: int, dst_y: int,
     allowed_types: set[MapLinkType] | None = None,
-) -> list[MapLink] | None:
-    """Find the shortest path between two locations.
+) -> list[PathStep] | None:
+    """A* from (src_x, src_y) to (dst_x, dst_y) through the port graph.
 
-    Considers all ANYWHERE teleports as potential starting points and
-    picks the overall shortest path. Returns a list of MapLinks to
-    traverse in order, or None if no path exists.
+    Nodes are ports, portal endpoints, and explicit start/goal markers.
+    Walking edges come from port_transits (intra-blob BFS distances) and
+    port_crossings (paired ports across a ridge). Portals come from
+    `map_links` filtered by `allowed_types` — non-ANYWHERE links are
+    reachable from/to any port in their src_blob_id / dst_blob_id; ANYWHERE
+    teleports are seeded directly from the source with their activation cost.
 
-    allowed_types: if set, only use these link types. Teleports from
-    ANYWHERE are only considered if MapLinkType.TELEPORT is allowed.
+    Returns a list of PathStep entries, or None if no path exists. Walking
+    segments have `link is None`; portal traversals carry the `MapLink` used.
     """
-    adj = _build_adjacency(conn, allowed_types)
+    src_blob = blob_at(conn, src_x, src_y)
+    dst_blob = blob_at(conn, dst_x, dst_y)
+    if src_blob == 0 or dst_blob == 0:
+        return None
 
-    # Build location coordinate lookup
-    loc_coords: dict[str, tuple[int, int]] = {}
-    for row in conn.execute("SELECT name, x, y FROM locations WHERE x IS NOT NULL").fetchall():
-        loc_coords[row[0]] = (row[1], row[2])
+    if src_blob == dst_blob:
+        return [PathStep(src_x, src_y, dst_x, dst_y, None)]
 
-    # Candidate starts: always include actual source
-    candidates: list[tuple[list[MapLink], str]] = [([], src)]
+    port_rows = conn.execute(
+        "SELECT id, blob_id, rep_x, rep_y FROM ports"
+    ).fetchall()
+    port_coords: dict[int, tuple[int, int]] = {r[0]: (r[2], r[3]) for r in port_rows}
+    ports_by_blob: dict[int, list[int]] = defaultdict(list)
+    for pid, bid, _rx, _ry in port_rows:
+        ports_by_blob[bid].append(pid)
 
-    # Collect ANYWHERE teleport links if teleports are allowed
+    # Portal rows, filtered
+    type_params: list = []
+    type_clause = ""
+    if allowed_types is not None:
+        type_params = [t.value for t in allowed_types]
+        type_clause = f" AND type IN ({','.join('?' * len(type_params))})"
+
+    coord_rows = conn.execute(
+        f"""SELECT id, src_location, dst_location, src_x, src_y, dst_x, dst_y, type, description,
+                   src_blob_id, dst_blob_id
+            FROM map_links
+            WHERE src_location != ?
+              AND src_x IS NOT NULL AND src_y IS NOT NULL
+              AND dst_x IS NOT NULL AND dst_y IS NOT NULL
+              {type_clause}""",
+        [MAP_LINK_ANYWHERE, *type_params],
+    ).fetchall()
+
+    anywhere_rows: list = []
     if allowed_types is None or MapLinkType.TELEPORT in allowed_types:
-        anywhere_links = conn.execute(
-            "SELECT id, src_location, dst_location, src_x, src_y, dst_x, dst_y, type, description "
-            "FROM map_links WHERE src_location = ?",
-            (MAP_LINK_ANYWHERE,),
+        anywhere_rows = conn.execute(
+            """SELECT id, src_location, dst_location, src_x, src_y, dst_x, dst_y, type, description,
+                      src_blob_id, dst_blob_id
+                FROM map_links
+                WHERE src_location = ?
+                  AND dst_x IS NOT NULL AND dst_y IS NOT NULL""",
+            [MAP_LINK_ANYWHERE],
         ).fetchall()
-        for row in anywhere_links:
-            link = MapLink._from_row(row)
-            candidates.append(([link], link.dst_location))
 
-    best_path: list[MapLink] | None = None
-    best_cost = float("inf")
+    links_by_id: dict[int, MapLink] = {}
+    adj: dict[tuple, list[tuple[tuple, int, MapLink | None]]] = defaultdict(list)
 
-    for prefix, start in candidates:
-        prefix_cost = sum(_edge_cost(l) for l in prefix)
-        if prefix_cost >= best_cost:
+    for s, d, dist in conn.execute("SELECT src_port_id, dst_port_id, distance FROM port_transits"):
+        adj[("port", s)].append((("port", d), dist, None))
+    for s, d, dist in conn.execute("SELECT src_port_id, dst_port_id, distance FROM port_crossings"):
+        adj[("port", s)].append((("port", d), dist, None))
+
+    SRC = ("src", 0)
+    DST = ("dst", 0)
+
+    for row in coord_rows:
+        lid, sl, dl, sx, sy, dx, dy, ts, desc, sbid, dbid = row
+        link = MapLink(
+            id=lid, src_location=sl, dst_location=dl, src_x=sx, src_y=sy,
+            dst_x=dx, dst_y=dy, link_type=MapLinkType(ts), description=desc,
+        )
+        links_by_id[lid] = link
+        trav_cost = 0 if link.link_type in _ZERO_COST_TYPES else _chebyshev(sx, sy, dx, dy)
+        adj[("p_src", lid)].append((("p_dst", lid), trav_cost, link))
+
+        if sbid is not None:
+            for pid in ports_by_blob.get(sbid, []):
+                px, py = port_coords[pid]
+                adj[("port", pid)].append((("p_src", lid), _chebyshev(px, py, sx, sy), None))
+            if sbid == src_blob:
+                adj[SRC].append((("p_src", lid), _chebyshev(src_x, src_y, sx, sy), None))
+
+        if dbid is not None:
+            for pid in ports_by_blob.get(dbid, []):
+                px, py = port_coords[pid]
+                adj[("p_dst", lid)].append((("port", pid), _chebyshev(dx, dy, px, py), None))
+            if dbid == dst_blob:
+                adj[("p_dst", lid)].append((DST, _chebyshev(dx, dy, dst_x, dst_y), None))
+
+    for row in anywhere_rows:
+        lid, sl, dl, sx, sy, dx, dy, ts, desc, _sbid, dbid = row
+        link = MapLink(
+            id=lid, src_location=sl, dst_location=dl, src_x=sx, src_y=sy,
+            dst_x=dx, dst_y=dy, link_type=MapLinkType(ts), description=desc,
+        )
+        links_by_id[lid] = link
+        adj[SRC].append((("p_dst", lid), 0, link))
+
+        if dbid is not None:
+            for pid in ports_by_blob.get(dbid, []):
+                px, py = port_coords[pid]
+                adj[("p_dst", lid)].append((("port", pid), _chebyshev(dx, dy, px, py), None))
+            if dbid == dst_blob:
+                adj[("p_dst", lid)].append((DST, _chebyshev(dx, dy, dst_x, dst_y), None))
+
+    for pid in ports_by_blob.get(src_blob, []):
+        px, py = port_coords[pid]
+        adj[SRC].append((("port", pid), _chebyshev(src_x, src_y, px, py), None))
+    for pid in ports_by_blob.get(dst_blob, []):
+        px, py = port_coords[pid]
+        adj[("port", pid)].append((DST, _chebyshev(px, py, dst_x, dst_y), None))
+
+    def node_xy(node: tuple) -> tuple[int, int]:
+        kind, key = node
+        if kind == "src":
+            return (src_x, src_y)
+        if kind == "dst":
+            return (dst_x, dst_y)
+        if kind == "port":
+            return port_coords[key]
+        if kind == "p_src":
+            return (links_by_id[key].src_x, links_by_id[key].src_y)
+        if kind == "p_dst":
+            return (links_by_id[key].dst_x, links_by_id[key].dst_y)
+        raise ValueError(f"unknown node kind: {kind}")
+
+    g_score: dict[tuple, int] = {SRC: 0}
+    came_from: dict[tuple, tuple[tuple, MapLink | None]] = {}
+    counter = 0
+    heap: list[tuple[int, int, tuple]] = [(0, 0, SRC)]
+
+    while heap:
+        f, _, node = heapq.heappop(heap)
+        if f > g_score.get(node, float("inf")):
             continue
+        if node == DST:
+            break
+        current_g = g_score[node]
+        for neighbor, cost, via_link in adj.get(node, []):
+            new_g = current_g + cost
+            if new_g < g_score.get(neighbor, float("inf")):
+                g_score[neighbor] = new_g
+                came_from[neighbor] = (node, via_link)
+                nx, ny = node_xy(neighbor)
+                h = _chebyshev(nx, ny, dst_x, dst_y)
+                counter += 1
+                heapq.heappush(heap, (new_g + h, counter, neighbor))
 
-        result = _astar(adj, loc_coords, start, dst)
-        if result is not None:
-            total_cost = prefix_cost + sum(_edge_cost(l) for l in result)
-            if total_cost < best_cost:
-                best_cost = total_cost
-                best_path = prefix + result
+    if DST not in g_score:
+        return None
 
-    return best_path
+    # Reconstruct: walk back from DST -> SRC, collecting (node, via_link).
+    chain: list[tuple[tuple, MapLink | None]] = []
+    cur: tuple | None = DST
+    while cur is not None and cur != SRC:
+        prev_info = came_from.get(cur)
+        if prev_info is None:
+            break
+        prev, via = prev_info
+        chain.append((cur, via))
+        cur = prev
+    chain.reverse()
+
+    path: list[PathStep] = []
+    prev_xy = (src_x, src_y)
+    for node, via in chain:
+        this_xy = node_xy(node)
+        if via is not None:
+            if via.src_location == MAP_LINK_ANYWHERE:
+                src_portal_xy = prev_xy
+            else:
+                src_portal_xy = (via.src_x, via.src_y)
+            path.append(PathStep(
+                src_portal_xy[0], src_portal_xy[1],
+                via.dst_x, via.dst_y,
+                via,
+            ))
+            prev_xy = (via.dst_x, via.dst_y)
+        else:
+            if this_xy != prev_xy:
+                path.append(PathStep(prev_xy[0], prev_xy[1], this_xy[0], this_xy[1], None))
+            prev_xy = this_xy
+
+    return path
 
 
 def _stitch_canvas(conn: sqlite3.Connection, x_min: int, x_max: int, y_min: int, y_max: int):
@@ -457,7 +532,7 @@ def _stitch_canvas(conn: sqlite3.Connection, x_min: int, x_max: int, y_min: int,
 
 def render_path(
     conn: sqlite3.Connection,
-    path: list[MapLink],
+    path: list[PathStep],
     output_path: str,
     padding: int = 200,
     dpi: int = 200,
@@ -486,44 +561,6 @@ def render_path(
         MapLinkType.TELEPORT: {"color": "white", "linestyle": ":", "label": "Teleport"},
     }
     default_style = {"color": "white", "linestyle": "--", "label": "Other"}
-
-    # Chain links for visual continuity: each link starts where the previous ended.
-    # Insert implicit walk segments when there's a gap between links.
-    chained: list[MapLink] = []
-    for i, link in enumerate(path):
-        if i > 0:
-            prev = chained[-1]
-            # If there's a gap between consecutive links
-            if prev.dst_x != link.src_x or prev.dst_y != link.src_y:
-                if prev.dst_location == link.src_location:
-                    # Same location, different coords — snap the previous link's
-                    # destination to the next link's source (walk directly to it)
-                    chained[-1] = MapLink(
-                        id=prev.id,
-                        src_location=prev.src_location,
-                        dst_location=prev.dst_location,
-                        src_x=prev.src_x,
-                        src_y=prev.src_y,
-                        dst_x=link.src_x,
-                        dst_y=link.src_y,
-                        link_type=prev.link_type,
-                        description=prev.description,
-                    )
-                else:
-                    # Different locations — insert an implicit walk to bridge
-                    chained.append(MapLink(
-                        id=-1,
-                        src_location=prev.dst_location,
-                        dst_location=link.src_location,
-                        src_x=prev.dst_x,
-                        src_y=prev.dst_y,
-                        dst_x=link.src_x,
-                        dst_y=link.src_y,
-                        link_type=MapLinkType.WALKABLE,
-                        description=f"Walk to {link.src_location}",
-                    ))
-        chained.append(link)
-    path = chained
 
     # Cluster path into panels based on coordinate jumps
     # A jump > PANEL_BREAK_THRESHOLD tiles triggers a new panel
@@ -636,22 +673,24 @@ def render_path(
             panel_axes[0].plot([], [], color=style["color"], linestyle=style["linestyle"], lw=2, label=label)
             seen_labels.add(style["label"])
 
-    # Mark locations
-    locations_on_path = []
-    for link in path:
-        if link.src_location != MAP_LINK_ANYWHERE:
-            locations_on_path.append((link.src_location, link.src_x, link.src_y))
-        locations_on_path.append((link.dst_location, link.dst_x, link.dst_y))
+    # Mark named portal endpoints on the panel they live in.
+    locations_on_path: list[tuple[str, int, int]] = []
+    for step in path:
+        if step.link is None:
+            continue
+        if step.src_location and step.src_location != MAP_LINK_ANYWHERE:
+            locations_on_path.append((step.src_location, step.src_x, step.src_y))
+        if step.dst_location:
+            locations_on_path.append((step.dst_location, step.dst_x, step.dst_y))
 
     seen_locs: set[str] = set()
-    unique_locs = []
+    unique_locs: list[tuple[str, int, int]] = []
     for name, x, y in locations_on_path:
         if name not in seen_locs:
             seen_locs.add(name)
             unique_locs.append((name, x, y))
 
     for name, x, y in unique_locs:
-        # Find which panel this coord belongs to
         best_ax = panel_axes[0]
         for pi, panel_coords in enumerate(panels):
             px = [c[0] for c in panel_coords]
@@ -668,7 +707,12 @@ def render_path(
                      bbox=dict(boxstyle="round,pad=0.2", facecolor="black", alpha=0.7))
 
     panel_axes[0].legend(loc="upper left", fontsize=10, framealpha=0.8)
-    fig.suptitle(f"{unique_locs[0][0]} → {unique_locs[-1][0]}", fontsize=14)
+    title = (
+        f"{unique_locs[0][0]} → {unique_locs[-1][0]}"
+        if unique_locs
+        else f"({path[0].src_x}, {path[0].src_y}) → ({path[-1].dst_x}, {path[-1].dst_y})"
+    )
+    fig.suptitle(title, fontsize=14)
     plt.tight_layout()
     plt.savefig(output_path, dpi=dpi, bbox_inches="tight")
     plt.close()
@@ -699,116 +743,3 @@ def blob_at(conn: sqlite3.Connection, x: int, y: int, plane: int = 0) -> int:
     return int(arr[py, px])
 
 
-def find_walking_path(
-    conn: sqlite3.Connection,
-    src_x: int, src_y: int,
-    dst_x: int, dst_y: int,
-) -> list[tuple[int, int]] | None:
-    """A* through the port graph from a source tile to a destination tile.
-
-    Uses the walkable edges only (port_transits + port_crossings). Does not
-    consider portals (fairy rings, teleports, entrances) — walking only.
-
-    Returns a list of (x, y) waypoints from source to destination including
-    the source and destination tiles, or None if no walking path exists.
-    """
-    src_blob = blob_at(conn, src_x, src_y)
-    dst_blob = blob_at(conn, dst_x, dst_y)
-    if src_blob == 0 or dst_blob == 0:
-        return None
-
-    # Same blob — direct walk, no ports needed
-    if src_blob == dst_blob:
-        return [(src_x, src_y), (dst_x, dst_y)]
-
-    # Load ports keyed by id; group by blob for source/goal enumeration
-    port_rows = conn.execute(
-        "SELECT id, blob_id, rep_x, rep_y FROM ports"
-    ).fetchall()
-    if not port_rows:
-        return None
-    port_coords: dict[int, tuple[int, int]] = {r[0]: (r[2], r[3]) for r in port_rows}
-    ports_by_blob: dict[int, list[int]] = defaultdict(list)
-    for pid, bid, _rx, _ry in port_rows:
-        ports_by_blob[bid].append(pid)
-
-    start_ports = ports_by_blob.get(src_blob, [])
-    goal_ports = set(ports_by_blob.get(dst_blob, []))
-    if not start_ports or not goal_ports:
-        return None
-
-    # Load edges
-    adj: dict[int, list[tuple[int, int]]] = defaultdict(list)
-    for src_p, dst_p, d in conn.execute(
-        "SELECT src_port_id, dst_port_id, distance FROM port_transits"
-    ).fetchall():
-        adj[src_p].append((dst_p, d))
-    for src_p, dst_p, d in conn.execute(
-        "SELECT src_port_id, dst_port_id, distance FROM port_crossings"
-    ).fetchall():
-        adj[src_p].append((dst_p, d))
-
-    def chebyshev(ax: int, ay: int, bx: int, by: int) -> int:
-        return max(abs(ax - bx), abs(ay - by))
-
-    # A*: nodes are port ids. Initial g-scores = cost from source tile to the
-    # port's rep (Chebyshev through the source blob). Heuristic = Chebyshev to
-    # dst tile.
-    g: dict[int, int] = {}
-    came_from: dict[int, int | None] = {}
-    counter = 0
-    heap: list[tuple[int, int, int]] = []
-
-    for pid in start_ports:
-        px, py = port_coords[pid]
-        gx = chebyshev(src_x, src_y, px, py)
-        g[pid] = gx
-        came_from[pid] = None
-        h = chebyshev(px, py, dst_x, dst_y)
-        counter += 1
-        heapq.heappush(heap, (gx + h, counter, pid))
-
-    final_port: int | None = None
-    final_cost = float("inf")
-
-    while heap:
-        f, _, pid = heapq.heappop(heap)
-        if f >= final_cost:
-            break
-        if g[pid] > f:  # stale entry
-            continue
-
-        px, py = port_coords[pid]
-        if pid in goal_ports:
-            tail = g[pid] + chebyshev(px, py, dst_x, dst_y)
-            if tail < final_cost:
-                final_cost = tail
-                final_port = pid
-            continue
-
-        for npid, cost in adj.get(pid, ()):
-            new_g = g[pid] + cost
-            if new_g < g.get(npid, float("inf")):
-                g[npid] = new_g
-                came_from[npid] = pid
-                nx, ny = port_coords[npid]
-                h = chebyshev(nx, ny, dst_x, dst_y)
-                counter += 1
-                heapq.heappush(heap, (new_g + h, counter, npid))
-
-    if final_port is None:
-        return None
-
-    # Reconstruct port chain, then render as (x, y) waypoints
-    chain: list[int] = []
-    cur: int | None = final_port
-    while cur is not None:
-        chain.append(cur)
-        cur = came_from.get(cur)
-    chain.reverse()
-
-    waypoints: list[tuple[int, int]] = [(src_x, src_y)]
-    for pid in chain:
-        waypoints.append(port_coords[pid])
-    waypoints.append((dst_x, dst_y))
-    return waypoints

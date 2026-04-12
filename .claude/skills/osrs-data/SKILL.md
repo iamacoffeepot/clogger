@@ -155,8 +155,8 @@ FacilityEntry.nearest(conn, x, y, facility_type=None) -> FacilityEntry | None
 
 ### Navigation (`ragger.map`)
 ```
-from ragger.map import find_path, MapLink
-find_path(conn, src, dst, allowed_types=None) -> list[MapLink] | None  # A* shortest path
+from ragger.map import find_path, PathStep, MapLink
+find_path(conn, src_x, src_y, dst_x, dst_y, allowed_types=None) -> list[PathStep] | None  # A* over port graph + portals
 MapLink.departing(conn, location) -> list[MapLink]  # travel options from a location
 ```
 MapLinkType enum: WALKABLE, ENTRANCE, EXIT, FAIRY_RING, CHARTER_SHIP, TELEPORT, SPIRIT_TREE, GNOME_GLIDER, CANOE, MINECART, SHIP, QUETZAL, NPC_TRANSPORT
@@ -198,10 +198,11 @@ for a in actions:
     print(a.name, a.input_items(conn), a.output_experience(conn))
 ```
 
-Navigate between locations:
+Navigate between tile coordinates:
 ```python
 from ragger.map import find_path
-path = find_path(conn, "Lumbridge", "Falador")
-for link in path:
-    print(f"{link.src_location} -> {link.dst_location} ({link.link_type.value})")
+# Lumbridge centroid -> Falador centroid
+path = find_path(conn, 3188, 3220, 2964, 3378)
+for step in path:
+    print(f"({step.src_x}, {step.src_y}) -> ({step.dst_x}, {step.dst_y}) [{step.link_type.value}]")
 ```

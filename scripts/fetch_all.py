@@ -52,7 +52,6 @@ SCRIPTS = [
     "scripts/pipeline/compute_dialogue_instructions.py",
     "scripts/pipeline/link_npc_dialogues.py",
     "scripts/pipeline/link_quest_dialogues.py",
-    "scripts/pipeline/compute_walkability.py",
     "scripts/pipeline/compute_blobs.py",
     "scripts/pipeline/compute_ports.py",
     "scripts/pipeline/compute_port_transits.py",

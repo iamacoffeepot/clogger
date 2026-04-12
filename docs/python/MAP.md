@@ -38,19 +38,31 @@ square.image -> bytes                                   # PNG image data
 ### Pathfinding (`src/ragger/map.py`)
 
 ```python
-from ragger.map import find_path, render_path
+from ragger.map import find_path, render_path, PathStep, blob_at
 from ragger.enums import MapLinkType
 
-# Find shortest path (considers ANYWHERE teleports as starting candidates)
-find_path(conn, src, dst) -> list[MapLink] | None
-find_path(conn, src, dst, allowed_types={...}) -> list[MapLink] | None
+# Blob at a tile (0 = blocked / no blob)
+blob_at(conn, x, y, plane=0) -> int
 
-# Filter examples:
-find_path(conn, src, dst, allowed_types={MapLinkType.WALKABLE, MapLinkType.ENTRANCE, MapLinkType.EXIT})  # walking only
-find_path(conn, src, dst, allowed_types=set(MapLinkType) - {MapLinkType.TELEPORT})  # no teleports
+# A* from (src_x, src_y) to (dst_x, dst_y) through the port graph.
+# Returns list of PathStep (walk segments + portal traversals), or None.
+find_path(conn, src_x, src_y, dst_x, dst_y) -> list[PathStep] | None
+find_path(conn, src_x, src_y, dst_x, dst_y, allowed_types={...}) -> list[PathStep] | None
+
+# Filter by MapLinkType — disables portals of any excluded type. Walking
+# always works (no type filter applies to port_transits / port_crossings).
+find_path(conn, sx, sy, dx, dy, allowed_types=set())  # walking only
+find_path(conn, sx, sy, dx, dy, allowed_types=set(MapLinkType) - {MapLinkType.TELEPORT})  # no teleports
+
+# PathStep.link is None for walking segments, or the MapLink traversed for portals.
+step.src_x, step.src_y, step.dst_x, step.dst_y
+step.link               # MapLink | None
+step.link_type          # MapLinkType (WALKABLE if link is None)
+step.src_location       # "" for walk segments
+step.dst_location       # "" for walk segments
 
 # Render path as image (surface + underground stacked panels)
 render_path(conn, path, "output.png", padding=200, dpi=200)
 ```
 
-Pathfinding uses A* with Chebyshev heuristic. Zero cost for instant transitions (teleports, fairy rings, entrances). Walkable edges cost Chebyshev distance. Path rendering chains arrows end-to-end, snaps same-location coords, and splits into panels when jumps exceed 384 tiles (6 regions) with departure/arrival markers.
+The pathfinder runs A* over a graph of port nodes (Voronoi-ridge endpoints per blob) plus virtual nodes at portal endpoints. Walking edges come from `port_transits` (exact BFS distances within a blob) and `port_crossings` (ridge crossings, Chebyshev between rep tiles). Portal edges come from `map_links` — each map_link becomes two virtual nodes at its `(src_x, src_y)` and `(dst_x, dst_y)` connected by the link's traversal cost, joined to nearby ports via the precomputed `src_blob_id` / `dst_blob_id` columns. ANYWHERE teleports seed the initial frontier directly with their activation cost. Requires: `compute_blobs` → `compute_ports` → `compute_port_transits` → `compute_port_crossings` → `compute_map_link_blobs`.
