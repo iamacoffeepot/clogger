@@ -55,6 +55,7 @@ SCRIPTS = [
     "scripts/pipeline/compute_walkability.py",
     "scripts/pipeline/compute_blobs.py",
     "scripts/pipeline/compute_ports.py",
+    "scripts/pipeline/compute_port_transits.py",
 ]
 
 
