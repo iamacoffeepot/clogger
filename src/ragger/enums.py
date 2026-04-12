@@ -163,6 +163,7 @@ TASK_DIFFICULTY_POINTS: dict["TaskDifficulty", int] = {
 
 
 class League(int, Enum):
+    TRAILBLAZER_RELOADED = 2
     RAGING_ECHOES = 0
     DEMONIC_PACTS = 1
 
@@ -176,11 +177,15 @@ class League(int, Enum):
 
 
 LEAGUE_LABELS: dict["League", str] = {
+    League.TRAILBLAZER_RELOADED: "Trailblazer Reloaded",
     League.RAGING_ECHOES: "Raging Echoes",
     League.DEMONIC_PACTS: "Demonic Pacts",
 }
 
 _LEAGUE_LABEL_LOOKUP: dict[str, League] = {
+    "trailblazer reloaded": League.TRAILBLAZER_RELOADED,
+    "trailblazer-reloaded": League.TRAILBLAZER_RELOADED,
+    "trailblazer_reloaded": League.TRAILBLAZER_RELOADED,
     "raging echoes": League.RAGING_ECHOES,
     "raging-echoes": League.RAGING_ECHOES,
     "raging_echoes": League.RAGING_ECHOES,

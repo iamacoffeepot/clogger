@@ -13,6 +13,7 @@ from ragger.db import create_tables, get_connection
 from ragger.enums import DiaryLocation, DiaryTier, League, Region, TaskDifficulty
 
 LEAGUE_TASKS_PAGES: dict[League, str] = {
+    League.TRAILBLAZER_RELOADED: "Trailblazer_Reloaded_League/Tasks",
     League.RAGING_ECHOES: "Raging_Echoes_League/Tasks",
     League.DEMONIC_PACTS: "Demonic_Pacts_League/Tasks",
 }
@@ -28,7 +29,7 @@ from ragger.wiki import (
 )
 
 QUEST_REQ_PATTERN = re.compile(r"\[\[([^]|]+?)(?:\|[^]]+)?\]\]")
-REGION_REQ_PATTERN = re.compile(r"\{\{(?:RE|DPL)\|(\w+)\}\}")
+REGION_REQ_PATTERN = re.compile(r"\{\{(?:RE|DPL|TRL)\|(\w+)\}\}")
 
 DIFFICULTY_MAP = {
     "easy": TaskDifficulty.EASY,
@@ -68,7 +69,7 @@ DIARY_TASK_PATTERN = re.compile(
 )
 
 
-TASK_TEMPLATES = ("RELTaskRow", "DPLTaskRow")
+TASK_TEMPLATES = ("RELTaskRow", "DPLTaskRow", "TRLTaskRow")
 
 
 def parse_template_fields(text: str) -> dict[str, str] | None:
