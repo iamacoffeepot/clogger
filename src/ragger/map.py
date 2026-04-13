@@ -851,10 +851,31 @@ def render_path_tiles(
     run_start: tuple[int, int] | None = None
     run_end: tuple[int, int] | None = None
 
+    def snap_to_walkable(gx: int, gy: int, radius: int = 10) -> tuple[int, int]:
+        """Portal endpoint tiles (quetzal roosts, charter docks, etc.) often
+        sit on blocked deco tiles — the game lands the player there but raw
+        collision rejects it. Shift to the nearest walkable neighbor so BFS
+        actually has somewhere to start/end. Mirrors the radial scan used by
+        compute_map_link_blobs for map_link src/dst snapping."""
+        py, px = to_array(gx, gy)
+        if 0 <= py < H and 0 <= px < W and not (flags[py, px] & BLOCK_FULL):
+            return gx, gy
+        for rad in range(1, radius + 1):
+            for dy in range(-rad, rad + 1):
+                for dx in range(-rad, rad + 1):
+                    if max(abs(dx), abs(dy)) != rad:
+                        continue
+                    ny, nx = py + dy, px + dx
+                    if 0 <= ny < H and 0 <= nx < W and not (flags[ny, nx] & BLOCK_FULL):
+                        return gx + dx, gy - dy
+        return gx, gy
+
     def flush_run() -> None:
         nonlocal run_start, run_end
         if run_start is None or run_end is None:
             return
+        run_start = snap_to_walkable(*run_start)
+        run_end = snap_to_walkable(*run_end)
         tiles = bfs_tiles(*run_start, *run_end)
         turns = string_pull(tiles)
         rendered: list[tuple[int, int]] = []
