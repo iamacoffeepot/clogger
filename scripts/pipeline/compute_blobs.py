@@ -338,11 +338,10 @@ def ingest(db_path: Path, debug: bool = False) -> None:
     blob_grid = np.zeros((H, W), dtype=np.uint16)
 
     # Cascade clear all downstream tables that reference blobs.id — ports,
-    # port_transits, port_crossings, blob_adjacencies, and map_link blob
-    # columns — so the FK-protected DELETE FROM blobs below succeeds.
+    # port_transits, port_crossings, and map_link blob columns — so the
+    # FK-protected DELETE FROM blobs below succeeds.
     conn.execute("DELETE FROM port_transits")
     conn.execute("DELETE FROM port_crossings")
-    conn.execute("DELETE FROM blob_adjacencies")
     conn.execute("DELETE FROM ports")
     conn.execute("UPDATE map_links SET src_blob_id = NULL, dst_blob_id = NULL")
     conn.execute("DELETE FROM blobs")
