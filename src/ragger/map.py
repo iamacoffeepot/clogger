@@ -765,12 +765,15 @@ def render_path_tiles(
         return sy_top - 1 - gy, gx - sx_origin
 
     def bfs_tiles(sx: int, sy: int, dx: int, dy: int) -> list[tuple[int, int]]:
+        """Shortest-step tile path from (sx, sy) to (dx, dy) in array coords.
+        Any valid walkable path is fine — string pulling below cleans up the
+        specific route it picked."""
         spy, spx = to_array(sx, sy)
         dpy, dpx = to_array(dx, dy)
         if not (0 <= spy < H and 0 <= spx < W and 0 <= dpy < H and 0 <= dpx < W):
-            return [(sx, sy), (dx, dy)]
+            return [(spy, spx), (dpy, dpx)]
         if (flags[spy, spx] & BLOCK_FULL) or (flags[dpy, dpx] & BLOCK_FULL):
-            return [(sx, sy), (dx, dy)]
+            return [(spy, spx), (dpy, dpx)]
         parent: dict[tuple[int, int], tuple[int, int] | None] = {(spy, spx): None}
         queue = deque([(spy, spx)])
         while queue:
@@ -788,32 +791,97 @@ def render_path_tiles(
                         parent[(ny, nx)] = (cy, cx)
                         queue.append((ny, nx))
         if (dpy, dpx) not in parent:
-            return [(sx, sy), (dx, dy)]
+            return [(spy, spx), (dpy, dpx)]
         chain: list[tuple[int, int]] = []
         cur: tuple[int, int] | None = (dpy, dpx)
         while cur is not None:
-            py, px = cur
-            chain.append((sx_origin + px, sy_top - 1 - py))
+            chain.append(cur)
             cur = parent[cur]
         chain.reverse()
         return chain
+
+    def octile_line(ay: int, ax_: int, by: int, bx: int) -> list[tuple[int, int]] | None:
+        """Walk a straight 8-connected line from (ay, ax) to (by, bx) using
+        greedy octile steps. Returns the tile sequence if every step is
+        walkable, else None. This is the line-of-sight test used by the
+        string-pulling pass and also how we expand final turn-points back
+        into a highlighted tile list."""
+        tiles = [(ay, ax_)]
+        cy, cx = ay, ax_
+        while (cy, cx) != (by, bx):
+            ddy = 0 if by == cy else (1 if by > cy else -1)
+            ddx = 0 if bx == cx else (1 if bx > cx else -1)
+            if not can_move(flags, cy, cx, ddy, ddx, H, W):
+                return None
+            cy, cx = cy + ddy, cx + ddx
+            tiles.append((cy, cx))
+        return tiles
+
+    def string_pull(tiles: list[tuple[int, int]]) -> list[tuple[int, int]]:
+        """Collapse a walkable tile path to a minimal set of turn-points by
+        greedily extending each segment as far as the octile line stays
+        walkable. Between consecutive turn-points the path is a straight
+        cardinal or diagonal run, which is both what a player would walk
+        and what reads cleanly on a map."""
+        if len(tiles) < 3:
+            return list(tiles)
+        result = [tiles[0]]
+        anchor = 0
+        i = 1
+        while i < len(tiles) - 1:
+            if octile_line(*tiles[anchor], *tiles[i + 1]) is None:
+                result.append(tiles[i])
+                anchor = i
+            i += 1
+        result.append(tiles[-1])
+        return result
+
+    from matplotlib.collections import PatchCollection
+    from matplotlib.patches import Rectangle
 
     fig, ax = plt.subplots(figsize=(12, 12 * (y_max - y_min) / max(x_max - x_min, 1)))
     basemap, extent = MapSquare.stitch(conn, x_min, x_max, y_min, y_max, region_padding=0)
     ax.imshow(basemap, extent=extent, aspect="equal")
 
+    # Concatenate consecutive walking segments into a single tile run so the
+    # string-pull pass can collapse port-hop detours across blob boundaries.
+    current_run: list[tuple[int, int]] = []
+
+    def flush_run() -> None:
+        if not current_run:
+            return
+        turns = string_pull(current_run)
+        rendered: list[tuple[int, int]] = []
+        for a, b in zip(turns, turns[1:]):
+            seg = octile_line(*a, *b)
+            if seg is None:
+                seg = [a, b]
+            if rendered:
+                seg = seg[1:]
+            rendered.extend(seg)
+        rects = [
+            Rectangle((sx_origin + px - 0.5, sy_top - 1 - py - 0.5), 1, 1)
+            for (py, px) in rendered
+        ]
+        ax.add_collection(PatchCollection(
+            rects, facecolor="red", edgecolor="none", alpha=0.75, zorder=10,
+        ))
+        current_run.clear()
+
     for step in path:
         if step.link is None:
-            tiles = bfs_tiles(step.src_x, step.src_y, step.dst_x, step.dst_y)
-            txs = [t[0] for t in tiles]
-            tys = [t[1] for t in tiles]
-            ax.plot(txs, tys, "o", color="lime", markersize=1.5, zorder=10)
+            seg = bfs_tiles(step.src_x, step.src_y, step.dst_x, step.dst_y)
+            if current_run and seg and current_run[-1] == seg[0]:
+                seg = seg[1:]
+            current_run.extend(seg)
         else:
+            flush_run()
             ax.annotate(
                 "", xy=(step.dst_x, step.dst_y), xytext=(step.src_x, step.src_y),
                 arrowprops=dict(arrowstyle="->", color="magenta", linestyle="--", lw=2),
                 zorder=11,
             )
+    flush_run()
 
     ax.plot(path[0].src_x, path[0].src_y, "o", color="yellow", markersize=10, markeredgecolor="black", zorder=20)
     ax.plot(path[-1].dst_x, path[-1].dst_y, "*", color="red", markersize=14, markeredgecolor="black", zorder=20)
