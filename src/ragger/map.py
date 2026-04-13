@@ -807,16 +807,12 @@ def render_path_tiles(
             tiles = bfs_tiles(step.src_x, step.src_y, step.dst_x, step.dst_y)
             txs = [t[0] for t in tiles]
             tys = [t[1] for t in tiles]
-            # Connect every consecutive tile with a line, plus dots on each
-            # visited tile so gaps in the BFS chain are obvious.
-            ax.plot(txs, tys, "-", color="lime", linewidth=2, zorder=10, alpha=0.9)
-            ax.plot(txs, tys, "o", color="lime", markersize=3, markeredgecolor="black",
-                    markeredgewidth=0.3, zorder=11)
+            ax.plot(txs, tys, "o", color="lime", markersize=1.5, zorder=10)
         else:
             ax.annotate(
                 "", xy=(step.dst_x, step.dst_y), xytext=(step.src_x, step.src_y),
                 arrowprops=dict(arrowstyle="->", color="magenta", linestyle="--", lw=2),
-                zorder=12,
+                zorder=11,
             )
 
     ax.plot(path[0].src_x, path[0].src_y, "o", color="yellow", markersize=10, markeredgecolor="black", zorder=20)
