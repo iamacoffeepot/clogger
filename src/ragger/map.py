@@ -336,7 +336,7 @@ def find_path(
     dst_x: int, dst_y: int,
     allowed_types: set[MapLinkType] | None = None,
 ) -> list[PathStep] | None:
-    """A* from (src_x, src_y) to (dst_x, dst_y) through the port graph.
+    """Dijkstra from (src_x, src_y) to (dst_x, dst_y) through the port graph.
 
     Nodes are ports, portal endpoints, and explicit start/goal markers.
     Walking edges come from port_transits (intra-blob BFS distances) and
@@ -344,6 +344,12 @@ def find_path(
     `map_links` filtered by `allowed_types` — non-ANYWHERE links are
     reachable from/to any port in their src_blob_id / dst_blob_id; ANYWHERE
     teleports are seeded directly from the source with their activation cost.
+
+    Plain Dijkstra (not A*) because portal shortcuts make any tile-distance
+    heuristic inadmissible — a Chebyshev h can send the quetzal roost's
+    f-score through the roof just because its src tile is far from the goal,
+    burying optimal portal paths under dead-end walks and causing early
+    termination with a suboptimal result.
 
     Returns a list of PathStep entries, or None if no path exists. Walking
     segments have `link is None`; portal traversals carry the `MapLink` used.
@@ -489,10 +495,8 @@ def find_path(
             if new_g < g_score.get(neighbor, float("inf")):
                 g_score[neighbor] = new_g
                 came_from[neighbor] = (node, via_link)
-                nx, ny = node_xy(neighbor)
-                h = _chebyshev(nx, ny, dst_x, dst_y)
                 counter += 1
-                heapq.heappush(heap, (new_g + h, counter, neighbor))
+                heapq.heappush(heap, (new_g, counter, neighbor))
 
     if DST not in g_score:
         return None

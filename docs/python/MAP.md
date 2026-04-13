@@ -44,7 +44,7 @@ from ragger.enums import MapLinkType
 # Blob at a tile (0 = blocked / no blob)
 blob_at(conn, x, y, plane=0) -> int
 
-# A* from (src_x, src_y) to (dst_x, dst_y) through the port graph.
+# Dijkstra from (src_x, src_y) to (dst_x, dst_y) through the port graph.
 # Returns list of PathStep (walk segments + portal traversals), or None.
 find_path(conn, src_x, src_y, dst_x, dst_y) -> list[PathStep] | None
 find_path(conn, src_x, src_y, dst_x, dst_y, allowed_types={...}) -> list[PathStep] | None
@@ -71,4 +71,4 @@ render_path(conn, path, "output.png", padding=200, dpi=200)
 render_path_tiles(conn, path, "output.png", padding=80, dpi=200)
 ```
 
-The pathfinder runs A* over a graph of port nodes (Voronoi-ridge endpoints per blob) plus virtual nodes at portal endpoints. Walking edges come from `port_transits` (exact BFS distances within a blob) and `port_crossings` (ridge crossings, Chebyshev between rep tiles). Portal edges come from `map_links` — each map_link becomes two virtual nodes at its `(src_x, src_y)` and `(dst_x, dst_y)` connected by the link's traversal cost, joined to nearby ports via the precomputed `src_blob_id` / `dst_blob_id` columns. ANYWHERE teleports seed the initial frontier directly with their activation cost. Requires: `compute_blobs` → `compute_ports` → `compute_port_transits` → `compute_port_crossings` → `compute_map_link_blobs`.
+The pathfinder runs Dijkstra over a graph of port nodes (Voronoi-ridge endpoints per blob) plus virtual nodes at portal endpoints. Walking edges come from `port_transits` (exact BFS distances within a blob) and `port_crossings` (ridge crossings, Chebyshev between rep tiles). Portal edges come from `map_links` — each map_link becomes two virtual nodes at its `(src_x, src_y)` and `(dst_x, dst_y)` connected by the link's traversal cost, joined to nearby ports via the precomputed `src_blob_id` / `dst_blob_id` columns. ANYWHERE teleports seed the initial frontier directly with their activation cost. Requires: `compute_blobs` → `compute_ports` → `compute_port_transits` → `compute_port_crossings` → `compute_map_link_blobs`.
