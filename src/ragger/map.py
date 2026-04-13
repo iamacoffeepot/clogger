@@ -364,23 +364,26 @@ def find_path(
     for pid, bid, _rx, _ry in port_rows:
         ports_by_blob[bid].append(pid)
 
-    # Portal rows, filtered
-    type_params: list = []
-    type_clause = ""
-    if allowed_types is not None:
-        type_params = [t.value for t in allowed_types]
-        type_clause = f" AND type IN ({','.join('?' * len(type_params))})"
+    # Portal rows, filtered. An empty allowed_types set means walking-only —
+    # skip the portal queries entirely so SQL's `type IN ()` never fires.
+    coord_rows: list = []
+    if allowed_types is None or allowed_types:
+        type_params: list = []
+        type_clause = ""
+        if allowed_types is not None:
+            type_params = [t.value for t in allowed_types]
+            type_clause = f" AND type IN ({','.join('?' * len(type_params))})"
 
-    coord_rows = conn.execute(
-        f"""SELECT id, src_location, dst_location, src_x, src_y, dst_x, dst_y, type, description,
-                   src_blob_id, dst_blob_id
-            FROM map_links
-            WHERE src_location != ?
-              AND src_x IS NOT NULL AND src_y IS NOT NULL
-              AND dst_x IS NOT NULL AND dst_y IS NOT NULL
-              {type_clause}""",
-        [MAP_LINK_ANYWHERE, *type_params],
-    ).fetchall()
+        coord_rows = conn.execute(
+            f"""SELECT id, src_location, dst_location, src_x, src_y, dst_x, dst_y, type, description,
+                       src_blob_id, dst_blob_id
+                FROM map_links
+                WHERE src_location != ?
+                  AND src_x IS NOT NULL AND src_y IS NOT NULL
+                  AND dst_x IS NOT NULL AND dst_y IS NOT NULL
+                  {type_clause}""",
+            [MAP_LINK_ANYWHERE, *type_params],
+        ).fetchall()
 
     anywhere_rows: list = []
     if allowed_types is None or MapLinkType.TELEPORT in allowed_types:
