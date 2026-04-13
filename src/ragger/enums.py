@@ -130,11 +130,11 @@ ALL_REGIONS_MASK = (1 << len(Region)) - 1
 
 
 class TaskDifficulty(IntEnum):
-    EASY = 0
-    MEDIUM = 1
-    HARD = 2
-    ELITE = 3
-    MASTER = 4
+    EASY = 1
+    MEDIUM = 2
+    HARD = 3
+    ELITE = 4
+    MASTER = 5
 
     @property
     def label(self) -> str:
