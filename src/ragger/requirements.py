@@ -67,6 +67,31 @@ class GroupEquipmentRequirement:
 
 
 @dataclass
+class GroupVarbitRequirement:
+    """A varbit (bit-slice of a varp) compared against an integer.
+
+    Stored separately from varp requirements because runtime resolution
+    differs — a varbit read has to mask and shift the parent varp, whereas
+    a varp is read directly.
+    """
+    id: int
+    group_id: int
+    var_id: int
+    value: int
+    operator: ComparisonOperator
+
+
+@dataclass
+class GroupVarpRequirement:
+    """A varp (or varc_int) compared against an integer."""
+    id: int
+    group_id: int
+    var_id: int
+    value: int
+    operator: ComparisonOperator
+
+
+@dataclass
 class RequirementGroup:
     """A requirement group. All requirements within a group are OR'd (any one
     satisfies the group). Groups linked to an entity are AND'd (all must be
@@ -130,6 +155,20 @@ class RequirementGroup:
             for r in rows
         ]
 
+    def varbit_requirements(self, conn: sqlite3.Connection) -> list[GroupVarbitRequirement]:
+        rows = conn.execute(
+            "SELECT id, group_id, var_id, value, operator FROM group_varbit_requirements WHERE group_id = ?",
+            (self.id,),
+        ).fetchall()
+        return [GroupVarbitRequirement(r[0], r[1], r[2], r[3], ComparisonOperator(r[4])) for r in rows]
+
+    def varp_requirements(self, conn: sqlite3.Connection) -> list[GroupVarpRequirement]:
+        rows = conn.execute(
+            "SELECT id, group_id, var_id, value, operator FROM group_varp_requirements WHERE group_id = ?",
+            (self.id,),
+        ).fetchall()
+        return [GroupVarpRequirement(r[0], r[1], r[2], r[3], ComparisonOperator(r[4])) for r in rows]
+
     @staticmethod
     def for_quest(conn: sqlite3.Connection, quest_id: int) -> list[RequirementGroup]:
         rows = conn.execute(
@@ -175,6 +214,14 @@ class RequirementGroup:
         rows = conn.execute(
             "SELECT group_id FROM action_requirement_groups WHERE action_id = ?",
             (action_id,),
+        ).fetchall()
+        return [RequirementGroup(r[0]) for r in rows]
+
+    @staticmethod
+    def for_map_link(conn: sqlite3.Connection, map_link_id: int) -> list[RequirementGroup]:
+        rows = conn.execute(
+            "SELECT group_id FROM map_link_requirement_groups WHERE map_link_id = ?",
+            (map_link_id,),
         ).fetchall()
         return [RequirementGroup(r[0]) for r in rows]
 

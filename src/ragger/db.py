@@ -264,6 +264,37 @@ SCHEMAS: list[str] = [
     )
     """,
     f"""
+    CREATE TABLE IF NOT EXISTS group_varbit_requirements (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        group_id INTEGER NOT NULL,
+        var_id INTEGER NOT NULL,
+        value INTEGER NOT NULL,
+        operator TEXT NOT NULL DEFAULT '==' CHECK(operator IN ({_comparison_operator_values})),
+        FOREIGN KEY (group_id) REFERENCES requirement_groups(id),
+        FOREIGN KEY (var_id) REFERENCES game_vars(id)
+    )
+    """,
+    f"""
+    CREATE TABLE IF NOT EXISTS group_varp_requirements (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        group_id INTEGER NOT NULL,
+        var_id INTEGER NOT NULL,
+        value INTEGER NOT NULL,
+        operator TEXT NOT NULL DEFAULT '==' CHECK(operator IN ({_comparison_operator_values})),
+        FOREIGN KEY (group_id) REFERENCES requirement_groups(id),
+        FOREIGN KEY (var_id) REFERENCES game_vars(id)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS map_link_requirement_groups (
+        map_link_id INTEGER NOT NULL,
+        group_id INTEGER NOT NULL,
+        PRIMARY KEY (map_link_id, group_id),
+        FOREIGN KEY (map_link_id) REFERENCES map_links(id),
+        FOREIGN KEY (group_id) REFERENCES requirement_groups(id)
+    )
+    """,
+    f"""
     CREATE TABLE IF NOT EXISTS experience_rewards (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         eligible_skills INTEGER NOT NULL CHECK(eligible_skills > 0 AND eligible_skills <= {ALL_SKILLS_MASK}),
